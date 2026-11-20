@@ -1,8 +1,1 @@
-LOOPS MARKS PRO — V3
-20/11/2026
-Login: Netlify Identity
-Dados e WAVs: Netlify Blobs/Functions
-Backup: ZIP completo + restauração + histórico de versões
-Modo Live/viradas: motor V2 preservado
-Publicação: somente GitHub/Netlify build (não Netlify Drop estático)
-STATUS: TESTES LOCAIS PASSARAM; BUILD COM DEPENDÊNCIAS E SERVIÇOS REAIS PENDENTES.
+Loops Marks Pro V3.1 — correção de recuperação de senha e aceite do convite Netlify Identity. Preserva integralmente a V3.

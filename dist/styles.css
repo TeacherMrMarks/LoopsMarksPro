@@ -390,3 +390,10 @@ dialog:has(.batch-list) {width:min(calc(100vw - 28px),660px);}
 #backup-history h3 {margin:15px 0 8px;font-size:.96rem;}
 .backup-dialog menu {display:flex;justify-content:flex-end;padding:0;margin:14px 0 0;}
 @media(max-width:600px) {.admin-quick-actions{width:100%;}.admin-quick-actions .button{flex:1;font-size:.78rem;padding:8px}.backup-row{flex-direction:column}.backup-choices{grid-template-columns:1fr}.backup-choices>.button:first-child{grid-column:auto}}
+
+/* V3.1: recuperação e aceite de convite */
+.recovery-help { margin-top: 17px; border-top: 1px solid rgba(170,199,216,.17); padding-top: 14px; }
+.recovery-help summary { cursor: pointer; color: var(--accent, #70dfc1); font-weight: 600; }
+.recovery-help p { margin: 10px 0; }
+.recovery-help form { margin-top: 12px; }
+#recovery-message { font-size: .85rem; min-height: 1.1em; }

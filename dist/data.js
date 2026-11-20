@@ -27,7 +27,7 @@ export const FINALES = PARTS.filter(part => part.group === 'finais');
 export const FILL_IDS = new Set(PARTS.filter(part => part.type === 'virada').map(part => part.id));
 export const DEFAULT_FILLS = { a: 'fillA', b: 'fillB', c: 'fillC', pre: 'fillPre', chorus: 'fillChorus', low: 'fillLow', high: 'fillHigh' };
 export const MAX_FILE_BYTES = 32 * 1024 * 1024;
-import { login as identityLogin, logout as identityLogout, getUser as identityGetUser, handleAuthCallback } from './netlify-client.js';
+import { login as identityLogin, logout as identityLogout, getUser as identityGetUser, handleAuthCallback, acceptInvite as identityAcceptInvite, updateUser as identityUpdateUser, requestPasswordRecovery as identityRequestRecovery } from './netlify-client.js';
 const KEY = 'loops-marks-last-user-v3';
 const STORE = 'dados';
 
@@ -92,10 +92,26 @@ export class CloudError extends Error {
 export class Cloud {
   enabled = true;
   user = null;
+  authFlow = null;
+  authError = '';
   constructor() {}
   session() { return this.user; }
   async initialize() {
-    try { await handleAuthCallback(); } catch (e) { console.warn('Identity callback:', e); }
+    // The Identity links contain short-lived invite/recovery tokens in the URL hash.
+    // Consume on load and *keep the action visible* until the user sets their password.
+    // Never store tokens in localStorage or send them to the server logs.
+    this.authError = '';
+    try {
+      const callback = await handleAuthCallback();
+      if (callback?.type === 'invite' && callback.token) {
+        this.authFlow = { type: 'invite', token: callback.token };
+      } else if (callback?.type === 'recovery') {
+        this.authFlow = { type: 'recovery' };
+      } else this.authFlow = null;
+    } catch (e) {
+      this.authError = 'O link de acesso não pôde ser validado. Solicite um novo e-mail no painel Netlify.';
+      console.warn('Identity callback não concluído:', e?.name || 'falha');
+    }
     try {
       const user = await identityGetUser();
       if (user?.id) {
@@ -115,6 +131,37 @@ export class Cloud {
     } catch {}
     return false;
   }
+  async sendPasswordReset(email) {
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new CloudError('Digite um endereço de e-mail válido.', 400);
+    }
+    await identityRequestRecovery(email);
+  }
+  async finishInvite(password) {
+    if (this.authFlow?.type !== 'invite' || !this.authFlow.token) {
+      throw new CloudError('Convite não disponível. Abra novamente o link recebido por e-mail.', 400);
+    }
+    const user = await identityAcceptInvite(this.authFlow.token, password);
+    if (!user?.id) throw new CloudError('Não foi possível concluir o convite.', 400);
+    this.user = { id: user.id, email: user.email, roles: user.roles || [] };
+    localStorage.setItem(KEY, JSON.stringify(this.user));
+    this.authFlow = null;
+    this.authError = '';
+    return this.user;
+  }
+  async finishRecovery(password) {
+    if (this.authFlow?.type !== 'recovery') {
+      throw new CloudError('Solicite um novo link para alterar sua senha.', 400);
+    }
+    const user = await identityUpdateUser({ password });
+    const current = user?.id ? user : await identityGetUser();
+    if (!current?.id) throw new CloudError('Senha alterada, mas a sessão precisa ser confirmada. Entre com sua nova senha.', 401);
+    this.user = { id: current.id, email: current.email, roles: current.roles || [] };
+    localStorage.setItem(KEY, JSON.stringify(this.user));
+    this.authFlow = null;
+    this.authError = '';
+    return this.user;
+  }
   async signIn(email, password) {
     const user = await identityLogin(email, password);
     if (!user?.id) throw new CloudError('Não foi possível confirmar o login do Netlify Identity.', 401);
@@ -123,6 +170,8 @@ export class Cloud {
     return this.user;
   }
   async signOut() {
+    this.authFlow = null;
+    this.authError = '';
     this.user = null;
     localStorage.removeItem(KEY);
     await identityLogout().catch(e => console.warn('Logout remoto:',e));

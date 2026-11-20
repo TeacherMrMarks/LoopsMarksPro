@@ -112,11 +112,33 @@ function shell() {
 
 function loginView() {
   return '<main class="login"><section class="frame login-card">' + brand() +
-    '<h1>Entrar na central</h1><p>Use a mesma conta no computador e no celular. Ative Netlify Identity e faça o convite do seu e-mail no painel Netlify.</p>' +
+    '<h1>Entrar na central</h1><p>Entre com a mesma conta no computador e no celular. Primeiro acesso? Abra o convite recebido por e-mail.</p>' +
     '<form id="login-form"><label class="field"><span>E-mail</span><input type="email" name="email" required autocomplete="username"></label>' +
     '<label class="field"><span>Senha</span><input type="password" name="password" required autocomplete="current-password"></label>' +
     '<button class="button primary" type="submit">' + icon('user') + 'Entrar</button>' +
-    '<p class="error" id="login-error" role="alert"></p></form></section></main>';
+    '<p class="error" id="login-error" role="alert">' + escape(cloud.authError) + '</p></form>' +
+    '<details class="recovery-help"><summary>Esqueci minha senha</summary>' +
+    '<p>Enviaremos um link para você definir uma nova senha.</p>' +
+    '<form id="request-recovery-form"><label class="field"><span>E-mail da conta</span><input type="email" name="email" required autocomplete="email"></label>' +
+    '<button class="button ghost" type="submit">Enviar link de recuperação</button>' +
+    '<p id="recovery-message" role="status"></p></form></details>' +
+    '</section></main>';
+}
+
+function passwordView() {
+  const isInvite = cloud.authFlow?.type === 'invite';
+  return '<main class="login"><section class="frame login-card">' + brand() +
+    '<h1>' + (isInvite ? 'Criar senha de acesso' : 'Definir nova senha') + '</h1>' +
+    '<p>' + (isInvite ? 'Seu convite foi reconhecido. Escolha a senha para acessar o Loops Marks Pro.' :
+      'Seu link de recuperação foi reconhecido. Digite uma nova senha para concluir.') + '</p>' +
+    '<form id="password-form"><label class="field"><span>Nova senha (mínimo 8 caracteres)</span>' +
+    '<input type="password" name="password" required minlength="8" autocomplete="new-password"></label>' +
+    '<label class="field"><span>Confirmar nova senha</span>' +
+    '<input type="password" name="confirmation" required minlength="8" autocomplete="new-password"></label>' +
+    '<button class="button primary" type="submit">' + icon('user') +
+    (isInvite ? 'Ativar minha conta' : 'Salvar nova senha') + '</button>' +
+    '<p class="error" id="password-error" role="alert"></p></form>' +
+    '</section></main>';
 }
 
 function songsFor(view) {
@@ -294,6 +316,7 @@ function fileRow(part, audio, song = state.admin) {
 }
 
 function render() {
+  if (cloud.enabled && cloud.authFlow) { app.innerHTML = passwordView(); return; }
   if (cloud.enabled && !cloud.session()) { app.innerHTML = loginView(); return; }
   app.innerHTML = shell();
   updateLibrary();
@@ -1112,6 +1135,46 @@ app.addEventListener('change', event => {
 });
 
 app.addEventListener('submit', async event => {
+  if (event.target.id === 'request-recovery-form') {
+    event.preventDefault();
+    const form = event.target;
+    const button = form.querySelector('[type="submit"]');
+    const message = form.querySelector('#recovery-message');
+    button.disabled = true;
+    message.textContent = 'Solicitando link…';
+    try {
+      await cloud.sendPasswordReset(new FormData(form).get('email').trim());
+      message.textContent = 'Se o e-mail estiver cadastrado, confira sua caixa de entrada e spam.';
+    } catch (error) {
+      message.textContent = error.message || 'Não foi possível solicitar o link.';
+    } finally { button.disabled = false; }
+    return;
+  }
+  if (event.target.id === 'password-form') {
+    event.preventDefault();
+    const form = event.target;
+    const data = new FormData(form);
+    const password = String(data.get('password'));
+    const confirmation = String(data.get('confirmation'));
+    const output = form.querySelector('#password-error');
+    const submit = form.querySelector('[type="submit"]');
+    if (password.length < 8 || password !== confirmation) {
+      output.textContent = password !== confirmation ? 'As senhas não coincidem.' : 'Use pelo menos 8 caracteres.';
+      return;
+    }
+    submit.disabled = true;
+    output.textContent = 'Confirmando acesso…';
+    try {
+      if (cloud.authFlow?.type === 'invite') await cloud.finishInvite(password);
+      else await cloud.finishRecovery(password);
+      output.textContent = '';
+      await boot();
+      notice('Senha configurada. Bem-vindo ao Loops Marks Pro.');
+    } catch (error) {
+      output.textContent = error.message || 'Não foi possível concluir. Solicite outro link.';
+    } finally { submit.disabled = false; }
+    return;
+  }
   if (event.target.id !== 'login-form') return;
   event.preventDefault();
   const form = event.target;
