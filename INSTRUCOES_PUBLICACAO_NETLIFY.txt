@@ -1,0 +1,30 @@
+LOOPS MARKS PRO — V2 (PACOTE DE PUBLICACAO REORGANIZADO)
+
+A aplicacao e o motor de audio nao foram alterados.
+Este pacote elimina a pasta externa que havia dentro do ZIP anterior.
+
+GITHUB + NETLIFY
+1. Extraia o ZIP no computador.
+2. Na RAIZ do repositorio GitHub, coloque os arquivos:
+   netlify.toml, package.json, scripts/, dist/, supabase/, tests/, README.md, etc.
+   Nao deixe todos dentro de uma pasta Loops-Marks-Pro-V2.
+3. No Netlify > Project configuration > Build settings:
+   Base directory = vazio (raiz do repositorio)
+   Package directory = vazio (para repositorio de site unico)
+   Build command = node scripts/configure.mjs
+   Publish directory = dist
+4. Execute novo deploy de main pelo Netlify.
+5. Para sincronizacao real configure LOOPS_SUPABASE_URL e
+   LOOPS_SUPABASE_PUBLIC_KEY em Environment variables; sao valores publicos.
+   NUNCA publique uma chave secreta ou service_role do Supabase.
+
+ATENCAO: Se a configuracao 'Base directory' no Netlify apontar para uma
+pasta que nao existe, o deploy pode falhar mesmo com estes arquivos corretos.
+Se persistir, abra o Deploy log completo e copie a frase apos
+'When resolving config file' para diagnostico.
+
+TESTE RAPIDO MANUAL
+O ZIP separado 'Loops-Marks-Pro-V2-Netlify-Manual.zip' contem o site
+estatico para arrastar na interface de deploy manual do Netlify.
+Esta variante, sem configurar o Supabase, e apenas para testes locais,
+nao sincroniza musicas entre aparelhos.
