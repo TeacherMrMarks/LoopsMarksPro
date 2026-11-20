@@ -1,0 +1,5 @@
+LOOPS MARKS PRO — V2
+Pacote criado como versão independente da V1.
+Administração e Modo Live setorizados; novas partes, viradas automáticas/manuais/específicas, mapa de transições, acabamento, final, importação em lote e geração do link do player.
+Necessário configurar GitHub + Netlify + Supabase para sincronização real entre computadores e celulares.
+Veja README.md antes de publicar.
