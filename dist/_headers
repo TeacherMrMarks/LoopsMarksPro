@@ -5,5 +5,5 @@
   Permissions-Policy: microphone=(), camera=(), geolocation=()
 /sw.js
   Cache-Control: no-cache
-/config.js
+/netlify-client.js
   Cache-Control: no-cache

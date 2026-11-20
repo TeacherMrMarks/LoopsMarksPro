@@ -373,3 +373,20 @@ dialog:has(.batch-list) {width:min(calc(100vw - 28px),660px);}
   .heading h1 {font-size:1.65rem;line-height:1.12;letter-spacing:-.043em;}
   #download-btn {padding:7px 9px;min-height:35px;font-size:.74rem;}
 }
+
+/* V3 — área de backup e controle de dados */
+.admin-quick-actions {display:flex;gap:9px;align-items:center;flex-wrap:wrap;}
+.backup-dialog {width:min(560px,calc(100vw - 44px));max-height:min(80dvh,730px);overflow-y:auto;}
+.backup-dialog h2 {font-size:1.5rem;margin:6px 0 8px;letter-spacing:-.04em;}
+.backup-dialog>p {color:var(--muted);line-height:1.5;margin-bottom:15px;}
+.backup-choices {display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0;}
+.backup-choices>.button:first-child {grid-column:span 2;}
+.backup-divider {height:1px;background:var(--line);margin:15px 0;}
+.backup-small {font-size:.80rem;margin:7px 0;}
+.backup-row {display:flex;gap:8px;flex-wrap:wrap;}
+.backup-progress {font-size:.83rem;color:var(--green);min-height:18px;margin-top:10px;}
+.history-row {display:flex;justify-content:space-between;align-items:center;gap:10px;margin:8px 0;border:1px solid var(--line);border-radius:9px;padding:8px;font-size:.79rem;word-break:break-word;}
+.history-row .button {min-width:100px;}
+#backup-history h3 {margin:15px 0 8px;font-size:.96rem;}
+.backup-dialog menu {display:flex;justify-content:flex-end;padding:0;margin:14px 0 0;}
+@media(max-width:600px) {.admin-quick-actions{width:100%;}.admin-quick-actions .button{flex:1;font-size:.78rem;padding:8px}.backup-row{flex-direction:column}.backup-choices{grid-template-columns:1fr}.backup-choices>.button:first-child{grid-column:auto}}

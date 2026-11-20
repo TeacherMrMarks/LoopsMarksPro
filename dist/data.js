@@ -27,8 +27,8 @@ export const FINALES = PARTS.filter(part => part.group === 'finais');
 export const FILL_IDS = new Set(PARTS.filter(part => part.type === 'virada').map(part => part.id));
 export const DEFAULT_FILLS = { a: 'fillA', b: 'fillB', c: 'fillC', pre: 'fillPre', chorus: 'fillChorus', low: 'fillLow', high: 'fillHigh' };
 export const MAX_FILE_BYTES = 32 * 1024 * 1024;
-const BUCKET = 'loops-audio';
-const KEY = 'loops-marks-session';
+import { login as identityLogin, logout as identityLogout, getUser as identityGetUser, handleAuthCallback } from './netlify-client.js';
+const KEY = 'loops-marks-last-user-v3';
 const STORE = 'dados';
 
 export function newSong() {
@@ -87,134 +87,103 @@ export class CloudError extends Error {
   }
 }
 
+// V3: Login do Netlify Identity e armazenamento exclusivamente no Netlify Blobs.
+// Os cookies de sessão são controlados pelo SDK oficial do Identity.
 export class Cloud {
-  constructor({ supabaseUrl = '', supabaseKey = '' } = {}) {
-    this.url = supabaseUrl.trim().replace(/\/$/, '');
-    this.key = supabaseKey.trim();
-    this.enabled = Boolean(this.url && this.key);
-  }
-  session() {
-    if (!this.enabled) return null;
+  enabled = true;
+  user = null;
+  constructor() {}
+  session() { return this.user; }
+  async initialize() {
+    try { await handleAuthCallback(); } catch (e) { console.warn('Identity callback:', e); }
     try {
-      const session = JSON.parse(localStorage.getItem(KEY));
-      return session?.project === this.url ? session : null;
-    } catch {
-      return null;
+      const user = await identityGetUser();
+      if (user?.id) {
+        this.user = { id: user.id, email: user.email, roles: user.roles || [] };
+        localStorage.setItem(KEY, JSON.stringify(this.user));
+      } else if (!navigator.onLine) this.restoreOfflineUser();
+      else { this.user = null; localStorage.removeItem(KEY); }
+    } catch (e) {
+      if (!this.restoreOfflineUser()) throw new CloudError('Não foi possível validar o login. Verifique a conexão.', 0);
     }
+    return this.user;
   }
-  forget() {
-    localStorage.removeItem(KEY);
-  }
-  authResult(data) {
-    const session = {
-      project: this.url, access_token: data.access_token, refresh_token: data.refresh_token,
-      id: data.user.id, email: data.user.email,
-      expires: Date.now() + Number(data.expires_in || 3600) * 1000,
-    };
-    localStorage.setItem(KEY, JSON.stringify(session));
-    return session;
-  }
-  async raw(path, { token, body, headers, signal, ...options } = {}) {
-    const init = { ...options, body, headers: { apikey: this.key, ...headers },
-      signal: signal || AbortSignal.timeout(60000) };
-    if (token) init.headers.Authorization = 'Bearer ' + token;
-    let result;
+  restoreOfflineUser() {
     try {
-      result = await fetch(this.url + path, init);
-    } catch {
-      throw new CloudError('Conexão indisponível. A central tentará novamente.', 0);
-    }
-    if (!result.ok) {
-      const error = await result.json().catch(() => ({}));
-      throw new CloudError(error.msg || error.message || error.error_description ||
-        error.error || 'A central recusou a operação.', result.status);
-    }
-    return result;
+      const saved = JSON.parse(localStorage.getItem(KEY));
+      if (saved?.id && saved?.email) { this.user = saved; return true; }
+    } catch {}
+    return false;
   }
   async signIn(email, password) {
-    const response = await this.raw('/auth/v1/token?grant_type=password', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    return this.authResult(await response.json());
+    const user = await identityLogin(email, password);
+    if (!user?.id) throw new CloudError('Não foi possível confirmar o login do Netlify Identity.', 401);
+    this.user = { id: user.id, email: user.email, roles: user.roles || [] };
+    localStorage.setItem(KEY, JSON.stringify(this.user));
+    return this.user;
   }
   async signOut() {
-    const token = this.session()?.access_token;
-    this.forget();
-    if (token) await this.raw('/auth/v1/logout?scope=local', {
-      token, method: 'POST', signal: AbortSignal.timeout(4000),
-    }).catch(() => {});
+    this.user = null;
+    localStorage.removeItem(KEY);
+    await identityLogout().catch(e => console.warn('Logout remoto:',e));
   }
   async ready() {
-    const session = this.session();
-    if (!session) throw new CloudError('Entre novamente para acessar a central.', 401);
-    if (session.expires > Date.now() + 90000) return session;
-    if (this.refreshing) return this.refreshing;
-    const refresh = async () => {
-      const latest = this.session();
-      if (!latest) throw new CloudError('Entre novamente para acessar a central.', 401);
-      if (latest.expires > Date.now() + 90000) return latest;
-      try {
-        const response = await this.raw('/auth/v1/token?grant_type=refresh_token', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refresh_token: latest.refresh_token }),
-        });
-        const data = await response.json();
-        if (this.session()?.refresh_token !== latest.refresh_token) {
-          const current = this.session();
-          if (current) return current;
-          throw new CloudError('Sessão encerrada.', 401);
-        }
-        return this.authResult(data);
-      } catch (error) {
-        if ([400, 401, 403].includes(error.code) &&
-            this.session()?.refresh_token === latest.refresh_token) this.forget();
-        throw error;
-      }
-    };
-    this.refreshing = navigator.locks?.request(KEY, refresh) || refresh();
-    try { return await this.refreshing; }
-    finally { this.refreshing = null; }
+    if (!this.user) throw new CloudError('Entre para acessar sua biblioteca.', 401);
+    return this.user;
   }
-  async request(path, options) {
-    const session = await this.ready();
-    return this.raw(path, { ...options, token: session.access_token });
-  }
-  async catalog() {
-    const rows = [];
-    for (let offset = 0; ; offset += 250) {
-      const result = await this.request('/rest/v1/loops_songs?select=id,row_version,content&order=id&limit=250&offset=' + offset);
-      const page = await result.json();
-      rows.push(...page);
-      if (page.length < 250) return rows;
+  async request(op, { method = 'GET', body, headers = {}, responseType = 'json' } = {}) {
+    await this.ready();
+    const url = '/.netlify/functions/loops-api' + op;
+    let res;
+    try { res = await fetch(url, { method, body, headers: { ...headers }, cache: 'no-store', credentials: 'same-origin' }); }
+    catch { throw new CloudError('Sem conexão com o Netlify. Dados permanecem no aparelho.', 0); }
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new CloudError(error.message || 'Netlify não concluiu a operação.', res.status);
     }
+    return responseType === 'blob' ? res.blob() : res.json();
   }
+  catalog() { return this.request('?op=catalog'); }
   async save(owner, song) {
     const { id, revision, name, occasion, bpm, beats, parts, transitions, customFills, deleted, edit } = song;
-    const content = deleted ? { deleted: true, edit } : { name, occasion, bpm, beats, parts, transitions: transitions || {}, customFills: customFills || [], edit };
-    const query = revision ? '?id=eq.' + id + '&user_id=eq.' + owner + '&row_version=eq.' + revision : '';
-    const result = await this.request('/rest/v1/loops_songs' + query, {
-      method: revision ? 'PATCH' : 'POST',
-      headers: { Prefer: 'return=representation', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, user_id: owner, row_version: revision + 1,
-        updated_at: new Date().toISOString(), content }),
-    });
-    const [row] = await result.json();
-    if (!row) throw new CloudError('Esta música foi alterada em outro aparelho.', 409);
-    return row.row_version;
+    const content = deleted ? {deleted: true, edit} :
+      {name, occasion, bpm, beats, parts, transitions: transitions || {}, customFills: customFills || [], edit};
+    const data = await this.request('?op=save', { method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({id, revision, content}) });
+    return data.row_version;
   }
   async upload(path, entry) {
-    await this.request('/storage/v1/object/' + BUCKET + '/' + path, {
-      method: 'POST', headers: { 'Content-Type': 'audio/wav', 'x-upsert': 'true' },
-      body: entry.blob, signal: AbortSignal.timeout(180000),
-    });
+    const chunkSize = 1024 * 1024 * 1.5;
+    const blob = entry.blob;
+    if (!blob || blob.size > MAX_FILE_BYTES || blob.size < 44) throw new Error('WAV inválido (máximo 32 MB).');
+    const count = Math.ceil(blob.size / chunkSize);
+    const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer())))
+      .map(x => x.toString(16).padStart(2,'0')).join('');
+    for (let i=0; i<count; i++) {
+      const slice = blob.slice(i*chunkSize, Math.min(blob.size,(i+1)*chunkSize));
+      await this.request('?op=chunk&path='+encodeURIComponent(path)+'&i='+i, {
+        method:'POST', headers:{'Content-Type':'application/octet-stream'}, body:slice });
+    }
+    await this.request('?op=manifest', {method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({path, chunks:count, bytes:blob.size, sha256:hash})});
   }
   async audio(path) {
-    const response = await this.request('/storage/v1/object/authenticated/' + BUCKET + '/' + path, {
-      signal: AbortSignal.timeout(180000),
-    });
-    return response.blob();
+    const q = encodeURIComponent(path);
+    const info = await this.request('?op=audio-info&path='+q);
+    if (!info?.chunks || info.bytes > MAX_FILE_BYTES) throw new Error('Áudio indisponível ou inválido na nuvem.');
+    const pieces = [];
+    for (let i=0; i<info.chunks; i++) pieces.push(await this.request(
+      '?op=audio-chunk&path='+q+'&i='+i, { responseType:'blob' }));
+    const audio = new Blob(pieces, {type:'audio/wav'});
+    if (audio.size !== info.bytes) throw new Error('Download incompleto: tamanho do WAV não confere.');
+    const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await audio.arrayBuffer())))
+      .map(x=>x.toString(16).padStart(2,'0')).join('');
+    if (hash !== info.sha256) throw new Error('Integridade do WAV não confere. Baixe novamente.');
+    return audio;
   }
+  snapshots() { return this.request('?op=snapshots'); }
+  restore(key) { return this.request('?op=restore', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})}); }
 }
 
 export class Repository {
@@ -267,6 +236,27 @@ export class Repository {
       }
     }
     await this.disk.batch(keys);
+  }
+  async importV2Demo() {
+    const rows = await this.disk.list('demo/song/');
+    let count = 0;
+    for (const old of rows.filter(r => !r.deleted && !r.demo)) {
+      const song = { ...structuredClone(old), id: crypto.randomUUID(), revision: 0, dirty: true, edit: crypto.randomUUID() };
+      const files = [];
+      const parts = {};
+      for (const [part, item] of Object.entries(old.parts || {})) {
+        if (!item.path) continue;
+        const source = await this.disk.get('demo/audio/' + item.path);
+        if (!source?.blob) continue;
+        const path = this.owner + '/' + song.id + '/' + crypto.randomUUID() + '.wav';
+        parts[part] = {...item, path};
+        files.push([path, source.blob]);
+      }
+      song.parts = parts;
+      await this.save(song, files);
+      count++;
+    }
+    return count;
   }
   async replaceWithRemote(local, keepLocal) {
     if (!local.conflict) return;

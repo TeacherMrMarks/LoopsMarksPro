@@ -1,6 +1,6 @@
 const VERSION = 'loops-marks-7f556f868bac';
 const SHELL = [
-  './', './index.html', './styles.css', './app.js', './config.js', './data.js',
+  './', './index.html', './styles.css', './app.js', './netlify-client.js', './backup.js', './data.js',
   './audio.js', './stretch.js', './demo.js', './importer.js', './manifest.webmanifest',
   './icon.svg', './icon-192.png', './icon-512.png',
 ];

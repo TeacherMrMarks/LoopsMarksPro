@@ -1,76 +1,68 @@
-# Loops Marks Pro — V2
+# LOOPS MARKS PRO — V3 (Netlify)
 
-Central de loops de bateria e percussão para cerimônias, com **Central Administrativa (computador)** e **Modo Live (celular)**. Projeto web instalável (PWA) para GitHub + Netlify, com catálogo e autenticação opcionais por Supabase. A V2 é um **pacote separado da V1**; não altere o ZIP antigo.
+**V3 construída a partir do pacote da V2.** Preserva o motor de áudio, a interface, as viradas automáticas/manuais, as partes, o mapa de transições e a reprodução local. Substitui o protótipo Supabase por **Netlify Identity + Netlify Blobs + Netlify Functions**.
 
-## O que foi incorporado na V2
+> **Esta versão não é um site estático para Netlify Drop.** O recurso de login, upload e backup em nuvem requer que o Netlify execute o build e publique a pasta `netlify/functions`. Envie os ARQUIVOS extraídos para um repositório GitHub, nunca somente o ZIP. Se usar o Netlify Drop com esse código antes do build, o login não funcionará.
 
-- **Central Administrativa setorizada**: identificação, loops principais, viradas automáticas, viradas manuais, viradas específicas, encerramentos e mapa de transições. Cadastro automático no aparelho; sincronização pelo Supabase quando configurado.
-- **Partes**: Introdução (uma vez), Parte A, Parte B, Parte C, Pré-refrão, Refrão, Parte baixa e Parte alta (loops independentes, quantizados).
-- **Viradas automáticas**: uma por destino, com substituição opcional por regras específicas de origem → destino.
-- **Viradas manuais**: Leve, Forte e Especial; uma virada pode tocar e retornar ao mesmo loop ou ser vinculada à próxima parte antes de a troca começar.
-- **Viradas específicas ilimitadas por música**: adicione novas viradas com o nome escolhido e associe-as às passagens desejadas. As viradas não aparecem como botões extras no Modo Live, preservando a interface compacta.
-- **Final e Acabamento** separados; comando de encerramento tem prioridade sobre pedidos de partes não iniciados. Botão de interrupção imediata permanece disponível.
-- **Fila de trocas**: a transição é calculada em função do BPM e do compasso. Viradas podem ter qualquer número inteiro de tempos; o áudio seguinte começa sempre no tempo 1. O comando de cancelar só fica ativo até a entrada da virada.
-- **Importação em lote**: o app sugere automaticamente a parte pelo nome do WAV, mas apresenta uma confirmação de cada destino antes de salvar. Também é possível importar individualmente.
-- **Gerar link do aplicativo**: na administração, abre o endereço de `?modo=ao-vivo`, com opções de copiar ou compartilhar. O login não é dispensado pelo link.
-- **Modo Live compacto**: só mostra as partes, viradas manuais e finais realmente cadastrados. A sessão de login é lembrada no aparelho, com ressalvas de expiração/revogação.
-- **Offline**: os arquivos são baixados para armazenamento privado do aplicativo no celular (IndexedDB); não vão automaticamente para uma pasta visível no app Arquivos do iPhone. Repetição e transição usam áudio pré-carregado, sem buscar WAV pela rede durante a reprodução.
-- **Compatibilidade V1**: arquivos antigos de Parte A, Parte B, Refrão, Introdução, viradas e Final continuam reconhecidos. Campos novos são opcionais. O banco SQL e as regras de acesso são os mesmos da V1.
+## Novidades V3
 
-## 1. Experimentar antes de publicar
+- **Login real:** e-mail e senha via Netlify Identity. A sessão pode ser retomada após fechar/reabrir; expiração, revogação e limpeza do navegador podem exigir novo login.
+- **Salvamento automático:** primeiramente no IndexedDB do aparelho, com fila de sincronização para o Netlify. Indicadores informam se o dado está efetivamente na nuvem.
+- **Áudios na nuvem:** arquivos WAV de até 32 MB em Netlify Blobs, por usuário. Envio em blocos de 1,5 MB para respeitar o limite de Functions; verificação do manifesto antes de publicar música. Download verifica SHA-256.
+- **Computador ↔ celular:** biblioteca compartilhada usando a mesma conta. O player usa somente os WAVs previamente baixados e preparados na memória.
+- **Modo offline:** os arquivos baixados ficam no armazenamento privado do PWA no aparelho; o navegador pode limpar esses dados em determinadas condições. O modo avião precisa ser ensaiado no dispositivo real.
+- **Central de Backup:** botão **Backup / Restaurar** na Central Administrativa: backup completo (dados+WAVs), configurações (sem WAVs), áudio+índice (WAVs+metadados); ZIP para download, importação com restauração **em novas cópias**, opção de importar cadastros locais da V2.
+- **Histórico automático na nuvem:** a cada alteração publicada, uma cópia da versão anterior da música é armazenada em `loops-v3-history`. As versões referenciam WAVs mantidos no Blob Storage. **Não são backups independentes dos arquivos de áudio** — para segurança real, faça backups completos em ZIP e guarde fora do Netlify.
+- **Gerar link do app:** botão existente na V2 preservado, usando o endereço de produção com `?modo=ao-vivo`.
 
-É possível abrir localmente em um servidor HTTP, com Node ou Python:
+## COMO PUBLICAR (GitHub + Netlify)
 
-```bash
-python3 -m http.server 8080 --directory dist
-```
+1. Extraia `Loops-Marks-Pro-V3.zip`.
+2. No **GitHub**, crie um repositório para esse projeto (ou utilize o repositório conectado ao site correto). Envie todos os arquivos e pastas **da raiz**, incluindo `netlify.toml`, `package.json`, `dist/`, `netlify/functions/`, `scripts/` e `src/`. **Não altere seu projeto de Cifras Studio Marks Pro.**
+3. No **Netlify**, entre no projeto associado ao GitHub, ou crie um novo projeto com **Import from Git**. Para o repositório na raiz, configure:
 
-Abra `http://localhost:8080/?modo=central` (administração) ou `http://localhost:8080/?modo=ao-vivo` (player). Sem configurar o Supabase, abre em **modo demonstração local** com três músicas sintetizadas na hora. Você pode cadastrar e testar WAVs nesse navegador, mas nada será sincronizado com outros aparelhos. O link de `localhost` **não funciona em outro celular**.
+   | Configuração | Valor |
+   |---|---|
+   | Base directory | (vazio) |
+   | Build command | `npm run build` |
+   | Publish directory | `dist` |
+   | Functions directory | `netlify/functions` |
 
-## 2. Publicação real: GitHub + Netlify + Supabase
+   O `netlify.toml` já define os comandos. O Netlify deverá instalar as dependências de `package.json` no build. A build deve gerar `dist/netlify-client.js` (substituindo o stub de desenvolvimento).
+4. Após a publicação, no projeto Netlify, abra **Identity** → **Enable Identity**. Em **Registration preferences**, escolha **Invite only** para evitar contas desconhecidas. Em **Identity → Users**, convide seu próprio e-mail. Conclua o convite e crie a senha. O login é do Identity, não da conta Netlify usada para publicar.
+5. Confira em **Data & Storage → Blobs** depois da primeira sincronização. O app cria automaticamente os stores `loops-v3-songs`, `loops-v3-wavs` e `loops-v3-history` ao usá-los. Não é necessário criar projeto Supabase nem configurar chave pública no navegador.
+6. Abra o endereço `.netlify.app` da **publicação vinculada ao GitHub**. Faça login. Na Central, cadastre uma música, importe um WAV e aguarde o texto **Sincronizado**. No outro aparelho, faça login com a mesma conta, veja a música e toque **Baixar para offline**. Use o botão **Gerar link** para compartilhar a URL do Modo Live.
+7. Na Central, clique em **Backup / Restaurar** e faça o seu primeiro **backup completo ZIP**. Guarde-o também em HD, computador ou outro serviço, independentemente do Netlify.
 
-1. Crie um projeto Supabase para o Loops Marks Pro. No **SQL Editor**, execute `supabase/setup.sql`. Isso cria a tabela de músicas e o bucket privado de áudio com políticas por usuário.
-2. Em **Supabase → Authentication → Users**, crie a conta do administrador com **e-mail e senha**. Você poderá usar a mesma conta em computador e celular. Para uso particular, desative novos cadastros públicos.
-3. Crie um repositório GitHub para esta pasta. No Netlify, importe o repositório. O `netlify.toml` já prepara a publicação da pasta `dist` e a geração da configuração pública.
-4. Em **Netlify → Environment variables**, crie `LOOPS_SUPABASE_URL` e `LOOPS_SUPABASE_PUBLIC_KEY` (chave `publishable` ou `anon` do Supabase, **nunca** chave `service_role` ou `sb_secret_`). Publique novamente.
-5. Entre pelo computador, abra a **Central Administrativa**, cadastre músicas e aguarde **Salvo na central**. Enquanto houver indicação de sincronização pendente, não conte com esse material disponível em outro aparelho.
-6. Na Central Administrativa, use **Gerar link**. Compartilhe a URL gerada para `?modo=ao-vivo`. No iPhone, abra-a no Safari, **Compartilhar → Adicionar à Tela de Início**. Acesse com o mesmo e-mail/senha no primeiro acesso.
-7. Em cada música, toque **Baixar para offline** e aguarde ficar **Pronto para tocar**. Se alterou os WAVs no computador, toque **Atualizar offline** no celular antes de tocar.
+**Importante:** se o projeto estiver marcado como *Private* por proteção de conta do Netlify, isso pode exigir login no painel Netlify também para visitar a URL. Para acesso simples no celular, deixe o site acessível e proteja os dados com o Netlify Identity. A API já exige usuário autenticado e restringe os dados a `user.id`.
 
-A sessão costuma persistir após fechar e abrir o aplicativo, mas pode ser invalidada por revogação, expiração ou limpeza do navegador. A conta e os dados cadastrados na nuvem não são compartilhados apenas por conhecer o link: cada aparelho precisa autenticar-se.
+## TRANSFERIR A V2
 
-## 3. Como exportar WAVs da DAW
+A V3 **não apaga nem altera os arquivos da V2**, pois é um pacote separado. Cadastros da V2 feitos no mesmo navegador em `Demonstração local` podem ser recuperados pela opção **Importar cadastros locais V2** no painel Backup. Se a V2 foi usada em outro dispositivo ou perfil, a opção não encontrará esses dados; é preciso acessar a V2 naquele mesmo perfil. Faça antes uma cópia dos WAVs da DAW.
 
-- Exporte a **mesma música** no mesmo BPM original e compasso. Prefira WAV PCM 16/24 bits; mono ou estéreo. Limite de **32 MB por arquivo**.
-- Recorte cada **loop principal** com um ou mais **compassos completos**, incluindo exatamente as batidas que vão se repetir, sem silêncio extra. Não é necessário renderizar a música inteira.
-- Exporte cada **virada** de forma independente. A V2 reconhece viradas de **1, 2, 3, 4 ou mais tempos inteiros**. Ex.: 4/4 a 80 BPM → 1 tempo = 0,75 segundo; 2 tempos = 1,5 segundo; 1 compasso = 3 segundos.
-- A virada automática termina **no próximo tempo 1** da parte escolhida. Se for de 2 tempos, ela ocupa os tempos 3 e 4 anteriores a esse tempo 1. Se for de 1 compasso, começa no tempo 1 do compasso anterior.
-- Os arquivos **Final** e **Acabamento** podem incluir uma cauda de pratos ou reverberação e são executados uma única vez.
-- Exemplos de nome: `01_Introducao.wav`, `02_Parte_A.wav`, `03_Parte_B.wav`, `04_Pre_Refrao.wav`, `05_Refrao.wav`, `06_Virada_Leve.wav`, `07_Virada_para_Refrao.wav`, `08_Acabamento_Curto.wav`, `09_Final.wav`.
-- Após **Importar vários WAVs**, revise os destinos sugeridos. Nomes ambíguos não são automaticamente assumidos como corretos.
-- **Mapa de transições**: selecione, por exemplo, `De: Parte A`, `Para: Refrão`, `Usar virada: Virada específica X`, e salve. Sem regra, o player procura a virada automática do destino. A opção `Sem virada` desativa a virada naquela passagem.
+## REGRAS DE ÁUDIO MANTIDAS
 
-## 4. Durante a cerimônia
+- Introdução e Final tocam uma vez. Partes A/B/C, Pré-refrão, Refrão, Parte baixa/alta repetem até novo comando.
+- Viradas automáticas são selecionadas pelo destino, ou pela regra personalizada origem→destino.
+- Viradas manuais podem retornar ao loop ou acompanhar uma troca agendada.
+- Acabamento e Final têm prioridade e entram musicalmente no ponto agendado; Parar é a interrupção imediata.
+- BPM original e compasso por música; variação limitada em ±10 BPM, preparada antes do início. Arquivos WAV com duração fora do compasso são rejeitados.
+- O áudio é pré-carregado na memória antes de tocar; não faz requisições ao servidor durante a execução.
 
-- Em **Modo Live**, abra a música, ajuste o BPM **antes de Iniciar**, aguarde **Pronto para tocar** e inicie.
-- Ao tocar em **Refrão**, por exemplo, o app agenda a virada cadastrada e o Refrão no tempo 1.
-- Ao tocar em **Virada leve** sem ter outra parte agendada, ela é executada e o loop atual recomeça alinhado ao compasso. Ao tocar **Parte B** antes do início da virada, ela pode conduzir à Parte B.
-- **Cancelar troca agendada** funciona enquanto a virada ainda não começou. **Acabamento** e **Final** podem substituir um pedido pendente de parte; durante uma virada já iniciada, o encerramento é encaixado no próximo tempo 1 possível.
-- **Parar** interrompe imediatamente (emergência), diferentemente dos finais musicais.
+## BACKUP / RESTAURAÇÃO
 
-## 5. Cuidados importantes antes de tocar ao vivo
+**Backup completo ZIP** inclui `manifest.json` e `audios/<indice>/<parte>.wav`. Nenhum WAV é recomprimido nem convertido. Os backups preservam música, BPM, viradas, transições e as partes existentes no instante da exportação. O ZIP pode ser importado em outra conta, criando novas músicas e novos caminhos de WAV.
 
-A Web Audio API e o pré-carregamento eliminam a necessidade de baixar arquivos durante uma música, mas **nenhum aplicativo web pode prometer zero travamentos em qualquer aparelho**. Faça ensaio completo **em modo avião**, com todos os WAVs já baixados, a mesma interface de áudio/cabo da apresentação e o aplicativo em primeiro plano. Mantenha o aparelho carregado e desative bloqueios ou interrupções capazes de suspender o áudio. Se o sistema limpar o armazenamento local, poderá ser necessário baixar os WAVs outra vez.
+**Backup de configurações** não inclui áudio e cria músicas sem WAV ao ser restaurado, para evitar arquivos inacessíveis. Reimporte os WAVs no editor após restaurá-lo. **Backup de áudios** também leva um índice com os metadados necessários à associação das faixas.
 
-Use os arquivos originais da DAW como backup. O Supabase mantém o catálogo e a cópia sincronizada dos WAVs quando a configuração e a sincronização estiverem completas.
+A geração de ZIP completo no navegador usa memória e possui limite de segurança de 420 MB por operação nesta V3; para grandes bibliotecas, faça backups menores em etapas ou mantenha também os projetos originais na DAW. O backup é iniciado pelo administrador, não é baixado automaticamente para o computador sem interação.
 
-## 6. Diagnóstico e testes
+**Histórico automático** guarda as versões anteriores da ficha na nuvem, mas referencia os mesmos arquivos WAV da biblioteca. É um recurso de recuperação de edição, não substitui a exportação completa independente do Netlify.
 
-```bash
-node --test tests/*.test.mjs
-node scripts/configure.mjs
-```
+## TESTES / LIMITAÇÕES
 
-Os testes automatizados cobrem o modelo V2, a sugestão de nomes, o alinhamento das filas, a substituição de viradas e os encerramentos. Eles não substituem o teste de áudio no iPhone com arquivos e equipamento reais.
+Execute `node --test tests/*.test.mjs` para testar os algoritmos de transição e os contratos simulados da API. Para gerar a versão final do cliente é necessário instalar as dependências de `package.json` e executar `npm run build`. Nesta entrega não foi possível instalar dependências externas na execução local, portanto **o build do Netlify, a autenticação real e os uploads reais ainda não foram verificados na plataforma**.
 
-**Importante:** não existe servidor, usuário Supabase ou domínio Netlify criado automaticamente por este ZIP. A publicação, a configuração das chaves públicas e o primeiro login ainda devem ser feitos por você.
+Faça ensaios no iPhone em modo avião, com o aplicativo instalado na Tela de Início, os WAVs preparados, o aparelho conectado à mesa e a tela ativa. Nenhum PWA garante ausência absoluta de suspensão, problemas de áudio ou limpeza de armazenamento pela plataforma. Mantenha uma alternativa para cerimônias importantes.
+
+Links da documentação oficial: https://docs.netlify.com/manage/security/secure-access-to-sites/identity/get-started/ · https://docs.netlify.com/build/data-and-storage/netlify-blobs/ · https://docs.netlify.com/build/functions/overview/

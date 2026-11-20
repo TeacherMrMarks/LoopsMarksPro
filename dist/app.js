@@ -2,6 +2,7 @@ import { Cloud, Repository, PARTS, PLAY_PARTS, MANUAL_PARTS, FINALES, newSong, M
 import { suggestSlot } from './importer.js';
 import { Player, bpmRange } from './audio.js';
 import { exampleSongs } from './demo.js';
+import { makeBackup, restoreBackup, triggerDownload } from './backup.js';
 
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#dialog');
@@ -91,7 +92,7 @@ function statusText() {
 
 function shell() {
   const live = state.view === 'live';
-  const user = cloud.session()?.email || 'Demonstração local';
+  const user = cloud.session()?.email || 'Conta não conectada';
   const [status, statusIcon] = statusText();
   const locker = cloud.enabled ? button('logout', '', 'exit', 'mobile-only ghost', 'aria-label="Sair"') : '';
   return '<div class="shell"><aside class="sidebar">' + brand() + '<nav aria-label="Seções">' +
@@ -111,7 +112,7 @@ function shell() {
 
 function loginView() {
   return '<main class="login"><section class="frame login-card">' + brand() +
-    '<h1>Entrar na central</h1><p>Use a mesma conta no computador e no celular.</p>' +
+    '<h1>Entrar na central</h1><p>Use a mesma conta no computador e no celular. Ative Netlify Identity e faça o convite do seu e-mail no painel Netlify.</p>' +
     '<form id="login-form"><label class="field"><span>E-mail</span><input type="email" name="email" required autocomplete="username"></label>' +
     '<label class="field"><span>Senha</span><input type="password" name="password" required autocomplete="current-password"></label>' +
     '<button class="button primary" type="submit">' + icon('user') + 'Entrar</button>' +
@@ -181,11 +182,12 @@ function adminView() {
   const amount = state.songs.filter(song => !song.deleted).length;
   return '<div class="heading"><div><p class="eyebrow">STUDIO MARKS / ADMINISTRAÇÃO</p><h1>Central Administrativa</h1>' +
     '<p>Seu repertório, seus loops e as regras de palco no mesmo lugar.</p></div>' +
-    button('new', 'Nova música', 'plus', 'primary') + '</div>' +
+    '<div class="admin-quick-actions">' + button('backup', 'Backup / Restaurar', 'download', 'ghost') +
+    button('new', 'Nova música', 'plus', 'primary') + '</div></div>' +
     '<div class="admin-summary">' +
     '<div class="mini-stat"><small>MÚSICAS</small><strong>' + amount + '</strong><span>Na biblioteca</span></div>' +
     '<div class="mini-stat"><small>SALVAMENTO</small><strong>' + (cloud.enabled ? 'Nuvem' : 'Local') + '</strong><span>' +
-      (cloud.enabled ? 'Supabase + aparelho' : 'Demonstração sem nuvem') + '</span></div>' +
+      (cloud.enabled ? 'Netlify Blobs + aparelho' : 'Demonstração sem nuvem') + '</span></div>' +
     '<div class="access-shortcut"><div><small>ACESSO DO MÚSICO</small><strong>Aplicativo no celular</strong><span>Link direto · Mesmo login · Loops offline</span></div>' +
     button('link', 'Gerar link', 'link', 'primary') + '</div></div>' +
     (state.errors ? '<div class="warning" role="status">' + escape(state.errors) + ' ' +
@@ -380,6 +382,79 @@ async function copyMobile() {
     } else window.open('https://wa.me/?text=' + encodeURIComponent('Loops Marks Pro — Modo Live: ' + url.href), '_blank', 'noopener,noreferrer');
   });
   dialog.showModal();
+}
+
+// Central de Backup V3. O backup completo é independente da nuvem: inclui todos os WAVs.
+async function openBackupCenter() {
+  if (!repo) return;
+  if (player.running) { notice('Pare a reprodução antes de abrir os backups.'); return; }
+  await saveBeforeLeaving();
+  dialog.innerHTML = '<section class="backup-dialog"><p class="eyebrow">PROTEÇÃO DO REPERTÓRIO</p>'+
+    '<h2>Backup e restauração</h2>'+
+    '<p>Escolha uma cópia para guardar fora do Netlify. O backup completo reúne músicas, viradas, regras e áudios WAV.</p>'+
+    '<div class="backup-choices">'+
+    '<button type="button" class="button primary" data-backup="completo">' + icon('download') + 'Backup completo</button>'+
+    '<button type="button" class="button ghost" data-backup="configuracoes">' + icon('cloud') + 'Só configurações</button>'+
+    '<button type="button" class="button ghost" data-backup="audios">' + icon('music') + 'Só áudios + índice</button></div>'+
+    '<div class="backup-divider"></div><label class="field"><span>Importar e restaurar backup ZIP</span>'+
+    '<input id="restore-file" type="file" accept=".zip,application/zip"></label>'+
+    '<p class="subtle backup-small">A restauração adiciona novas cópias das músicas, sem sobrescrever as existentes.</p>'+
+    '<div class="backup-divider"></div><div class="backup-row"><button type="button" class="button ghost" id="list-history">' +
+    icon('layers') + 'Versões automáticas</button><button type="button" class="button ghost" id="migrate-v2">Importar cadastros locais V2</button></div>'+
+    '<div id="backup-history"></div><p class="backup-progress" id="backup-progress" role="status"></p>'+
+    '<menu><button class="button ghost" id="backup-close">Fechar</button></menu></section>';
+  const message=dialog.querySelector('#backup-progress');
+  const lock=async(task)=>{
+    const controls=dialog.querySelectorAll('button,input');
+    controls.forEach(el=>el.disabled=true);
+    try { await task(); }
+    catch(e) {message.textContent='Erro: '+(e.message||'operação não concluída');}
+    finally {controls.forEach(el=>el.disabled=false);}
+  };
+  dialog.querySelector('#backup-close').addEventListener('click',()=>dialog.close());
+  dialog.querySelectorAll('[data-backup]').forEach(button=>button.addEventListener('click',()=>lock(async()=>{
+    const mode=button.dataset.backup;
+    message.textContent='Preparando backup…';
+    const blob=await makeBackup(repo,mode,(n,total)=>{message.textContent='Incluindo WAV '+n+'/'+total;});
+    const stamp=new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+    triggerDownload(blob,'Loops-Marks-Pro-V3-'+mode+'-'+stamp+'.zip');
+    message.textContent='Backup criado: '+(blob.size/1024/1024).toFixed(1)+' MB. Guarde este ZIP em local seguro.';
+  })));
+  dialog.querySelector('#restore-file').addEventListener('change',e=>{
+    const file=e.target.files?.[0]; if(!file)return;
+    lock(async()=>{
+      if(!await confirmBackupRestore(file))return;
+      message.textContent='Restaurando…';
+      const result=await restoreBackup(repo,file,(n,total)=>{message.textContent='Restaurando '+n+'/'+total;});
+      await refreshLocal();requestSync();
+      message.textContent=result.imported+' músicas restauradas. A sincronização será feita com o Netlify.';
+    });
+  });
+  dialog.querySelector('#migrate-v2').addEventListener('click',()=>lock(async()=>{
+    message.textContent='Importando rascunhos locais da versão anterior…';
+    const n=await repo.importV2Demo(); await refreshLocal();requestSync();
+    message.textContent=n ? n+' música(s) importada(s) da V2.' : 'Nenhum cadastro local da V2 encontrado neste aparelho.';
+  }));
+  dialog.querySelector('#list-history').addEventListener('click',()=>lock(async()=>{
+    if(!navigator.onLine)throw new Error('Para recuperar versões da nuvem, conecte-se à internet.');
+    const entries=await cloud.snapshots();
+    const list=dialog.querySelector('#backup-history');
+    list.innerHTML='<h3>Versões anteriores</h3>'+(entries.length ? entries.map((r,i)=>
+      '<div class="history-row"><span>'+escape(r.title)+'</span><button type="button" class="button ghost" data-history="'+i+'">Restaurar</button></div>').join(''):
+      '<p class="subtle backup-small">Nenhuma versão anterior na nuvem.</p>');
+    list.querySelectorAll('[data-history]').forEach(b=>b.addEventListener('click',()=>lock(async()=>{
+      const selected=entries[Number(b.dataset.history)];
+      if(!confirm('Restaurar esta versão da música? A versão atual também ficará guardada.'))return;
+      await cloud.restore(selected.key);
+      await refreshLocal(); await syncCatalog();
+      message.textContent='Versão recuperada na nuvem. Confira o repertório.';
+    })));
+    message.textContent=entries.length+' versões automáticas encontradas.';
+  }));
+  dialog.showModal();
+}
+async function confirmBackupRestore(file) {
+  return confirm('Importar o arquivo "'+file.name+'"? As músicas serão criadas como novas cópias.');
 }
 
 function sortedSignature(song) { return song ? song.id + ':' + (song.edit || song.revision) : ''; }
@@ -870,6 +945,7 @@ async function handleAction(element) {
   const { action, id, part } = element.dataset;
   if (action === 'live' || action === 'admin') { await changeView(action); return; }
   if (action === 'link') { await copyMobile(); return; }
+  if (action === 'backup') { await openBackupCenter(); return; }
   if (action === 'play') { await startPlayer(); return; }
   if (action === 'stop') { stopPlayback(); return; }
   if (action === 'part') { player.go(part); updatePlayback(true); return; }
@@ -896,7 +972,7 @@ async function handleAction(element) {
     stopPlayback();
     currentGeneration++;
     player.cancelPreparation();
-    cloud.signOut();
+    await cloud.signOut();
     repo = null;
     state.songs = [];
     ownEdits.clear();
@@ -1049,7 +1125,7 @@ app.addEventListener('submit', async event => {
   } catch (error) {
     const errorOutput = get('#login-error');
     const message = error.code === 400 || error.code === 401
-      ? 'E-mail ou senha incorretos. Confira os dados e tente novamente.' : error.message;
+      ? 'E-mail ou senha incorretos. Confira os dados e tente novamente.' : (error.message || 'Falha de autenticação. Ative Netlify Identity no painel do projeto.');
     if (errorOutput) errorOutput.textContent = message;
     else notice(message);
   } finally { submit.disabled = false; }
@@ -1059,7 +1135,7 @@ window.addEventListener('resize', () => drawWave(lastProgress));
 window.addEventListener('online', () => { updateTop(); requestSync(); });
 window.addEventListener('offline', updateTop);
 window.addEventListener('storage', event => {
-  if (event.key === 'loops-marks-session' && !cloud.session() && repo && cloud.enabled) {
+  if (event.key === 'loops-marks-last-user-v3' && !event.newValue && repo && cloud.enabled) {
     stopPlayback();
     currentGeneration++;
     player.cancelPreparation();
@@ -1085,6 +1161,7 @@ document.addEventListener('visibilitychange', () => {
 setInterval(() => { if (document.visibilityState === 'visible') requestSync(); }, 20000);
 
 async function boot() {
+  await cloud.initialize();
   if (cloud.enabled && !cloud.session()) { render(); return; }
   repo = new Repository(cloud);
   render();
