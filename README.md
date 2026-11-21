@@ -1,17 +1,45 @@
-# Loops Marks Pro — V9
+# LOOPS MARKS PRO — V10
 
-Correções aplicadas à V8 mantendo o mesmo Netlify Identity, Blobs, música cadastrada e ZIP de backup.
+**Atualização de interface e experiência de palco, baseada na V9.**
 
-1. **Modo Live:** sempre usa metadados atualizados da música. Não substitui a Parte A recém-cadastrada por um índice offline antigo.
-2. **Áudios:** na seleção de uma música com WAV ausente no aparelho, faz download dos arquivos restantes quando online, verifica a integridade e prepara o player. A mensagem indica progresso ou erro real, em vez de apenas “Aguardando áudio”. Para tocar offline, abra a música uma vez conectada e confirme que ficou pronta.
-3. **Central:** cada WAV tem botão **Ouvir / Parar** independente de **Trocar**. Ouvir lê o arquivo local (ou nuvem quando necessário) sem alterar o cadastro.
-4. **Link do músico:** na Central, **Gerar link do app** cria um endereço `?modo=musico`, com opção de abrir, copiar e compartilhar. Esse endereço esconde toda a Central, os menus de edição e os botões de gerenciamento, inclusive se aberto em computador. O ícone de PWA instalado também abre direto no Modo Live.
-5. **Versão V9** em login e aplicativo.
+## Central Administrativa
 
-## Publicar
-Extraia o ZIP e envie o conteúdo para a raiz do repositório GitHub já vinculado ao Netlify. Use o mesmo site, as mesmas Functions (`netlify/functions`) e o mesmo build `npm run build`, publish `dist`. Para recuperar senha no Identity, o site principal precisa estar na versão correta. Faça backup da V8 antes de atualizar.
+- Continua com editor, biblioteca de WAVs, viradas automáticas/manuais, entradas com crash, mapa de transições e salvamento automático.
+- Menu **Configurações** no cabeçalho: **Backup e restauração**, **Gerar link do aplicativo**, conta de e-mail e **Sair da conta**.
+- Foi removida a duplicação de Gerar link do cabeçalho, do cartão de acesso e do fim do editor. Nova música continua acessível.
+- **V10** ao lado de Loops Marks Pro no topo (inclusive no login).
+- O link de músico `?modo=musico` continua escondendo a Central Administrativa.
 
-## Atenção
-O link `?modo=musico` separa **a interface**, mas não cria permissões novas de servidor. O login atual continua sendo o mesmo usuário autorizado do Netlify Identity e dados permanecem isolados por usuário. Para compartilhar biblioteca com músicos usando contas diferentes e impedir edição até via URL, será necessário controle de papéis e biblioteca compartilhada no servidor. Não compartilhe a conta administrativa com pessoas não autorizadas.
+## Modo Live — celular e computador
 
-A reprodução musical e download no iPhone em modo avião ainda exigem testes reais antes de uma cerimônia. A versão não apaga músicas já cadastradas nem muda o formato dos backups.
+- Tela de palco própria, com a marca centralizada, controles de execução e os botões disponíveis por música.
+- **Visor em destaque**: parte em execução, indicação de introdução / crash / loop contínuo / virada e próximo destino agendado.
+- **Repertório** em botão discreto no topo, com gaveta lateral e busca. A gaveta contém o botão **Baixar para offline / Atualizar arquivos offline**.
+- Botões em grades compactas, com adaptação por tamanho da tela e altura disponível. Em iPhones típicos, o painel completo de até sete partes, três viradas e dois finais cabe sem rolar; músicas com maior número de controles ou acessibilidade ampliada podem exigir rolagem.
+- No acesso administrativo ao Modo Live, um ícone discreto permite voltar à Central. No link de músico esse botão não aparece.
+- Mantidos BPM, forma de onda, preparo do áudio, transições adaptativas, crash inicial, final/acabamento e relógio de áudio da V9.
+
+## Link para o iPhone
+
+1. Abra **Central Administrativa → Configurações → Gerar link do aplicativo**.
+2. Dentro de um Permalink de testes, a janela oferece **Copiar link de teste** e **Copiar app oficial**. O app oficial usa o domínio principal `loops-marks-pro.netlify.app` (sem o ID do deploy). Só instale o app oficial depois de publicar a versão aprovada no endereço principal.
+3. Abra o link no **Safari** do iPhone e use **Compartilhar → Adicionar à Tela de Início**.
+4. Faça login pelo Netlify Identity. A instalação no iPhone pode usar armazenamento separado da aba Safari, por isso pode pedir uma autenticação inicial no app instalado.
+5. Abra o repertório pela lista no topo, selecione uma música e use **Baixar para offline**. Confirme o estado **Offline pronto** e teste em modo avião.
+
+**Atenção ao Netlify Private:** se a visibilidade do projeto estiver como `Private`, o Netlify pode exigir login da própria plataforma antes de carregar a interface, inclusive no iPhone. Para abrir diretamente a tela de login do *aplicativo*, altere **Project configuration → General → Visitor access → Project visibility** para `Public`, se estiver de acordo em tornar a interface pública. Essa configuração não torna os dados disponíveis sem autenticação: a API de músicas e WAVs continua exigindo Netlify Identity. Não entregue credenciais administrativas a terceiros.
+
+## Publicação
+
+- Backup e preservação: guarde o ZIP da V9. Não remova seus cadastros do Netlify Blobs nem o cache local do navegador.
+- Extraia este ZIP e envie **o conteúdo da pasta** para a raiz do mesmo repositório GitHub.
+- Configuração Netlify: Base directory vazio, Build command `npm run build`, Publish directory `dist`, Functions directory `netlify/functions`.
+- Pode manter **Auto Publishing Locked** e testar pelo **Permalink** do deploy novo. **Não use Trigger deploy repetidamente**: isso gera novas compilações que podem consumir créditos. Quando aprovada a V10, promova esse mesmo deploy para produção.
+- A V10 não modifica o modelo de dados de músicas/WAVs nem as funções de armazenamento do Netlify.
+
+## Testes e limites
+
+- `npm test` executado: 43 testes locais passaram.
+- Prévia visual testada em 390×844, 375×667 e 1440×900, sem erro JavaScript no ambiente simulado; botões e gaveta conferidos.
+- **Não foi possível rodar `npm run build` neste ambiente** porque o npm registry não estava acessível (`EAI_AGAIN`). O Netlify deverá instalar as dependências no deploy; confira o log.
+- O login real, as permissões do Netlify e o áudio em modo avião ainda precisam de validação no seu iPhone 11 e nos seus WAVs antes de uma cerimônia. Não é possível garantir risco zero de interrupção em PWA.

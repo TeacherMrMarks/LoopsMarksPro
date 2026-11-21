@@ -4,7 +4,7 @@ import { Player, bpmRange } from './audio.js';
 import { exampleSongs } from './demo.js';
 import { makeBackup, restoreBackup, triggerDownload } from './backup.js';
 
-const APP_VERSION = 'V9';
+const APP_VERSION = 'V10';
 // O link do músico carrega exclusivamente o Modo Live.
 const musicianLink = new URL(location.href).searchParams.get('modo') === 'musico';
 const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
@@ -37,6 +37,8 @@ const icons = {
   exit: '<path d="M11 4H4v16h7m-1-8h10m-4-4 4 4-4 4"/>',
   trash: '<path d="M4 6h16M9 6V3h6v3m3 0-1 15H7L6 6m4 4v7m4-7v7"/>',
   refresh: '<path d="M20 10a8 8 0 1 0-.8 6M20 4v6h-6"/>',
+  settings: '<path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="m19.2 15.1.1-.2 1.8-1.4-1.8-3.1-2.1.7a7 7 0 0 0-1.4-.9l-.4-2.2h-3.6l-.5 2.2a7 7 0 0 0-1.4.9l-2.1-.7-1.8 3.1 1.8 1.4a7 7 0 0 0 0 1.7l-1.8 1.4 1.8 3.1 2.1-.7a7 7 0 0 0 1.4.9l.5 2.2h3.6l.4-2.2a7 7 0 0 0 1.4-.9l2.1.7 1.8-3.1-1.8-1.4a7 7 0 0 0 0-1.7" transform="translate(0 -2.5) scale(.9)"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
   x: '<path d="M5 5l14 14M19 5 5 19"/>',
   share: '<path d="M12 16V3m-5 5 5-5 5 5M5 14v6h14v-6"/>',
   link: '<path d="m10 14 4-4m-5 6-2 2a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 0 2-2a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0" transform="translate(1 0) scale(.95 1)"/>',
@@ -52,7 +54,7 @@ const state = {
   view: !musicianLink && new URL(location.href).searchParams.get('modo') === 'central' ? 'admin' : 'live',
   songs: [], offline: new Map(), selected: null, admin: null, bpm: 0, volume: 0.82,
   preparation: '', syncLabel: '', errors: '', searchLive: '', searchAdmin: '',
-  selectedSignature: '', info: idle, download: '', capture: null,
+  selectedSignature: '', info: idle, download: '', capture: null, libraryOpen: false,
 };
 const player = new Player(() => { if (player.running) updatePlayback(); });
 let repo;
@@ -77,7 +79,8 @@ const ownEdits = new Map();
 
 function brand(extra = '') {
   return '<div class="brand ' + extra + '"><span class="mark">' + icon('wave') +
-    '</span><span><strong>Loops Marks Pro</strong><small>Studio Marks</small></span></div>';
+    '</span><span class="brand-titles"><strong>Loops Marks Pro <span class="brand-version">' + APP_VERSION +
+    '</span></strong><small>Studio Marks</small></span></div>';
 }
 
 function button(action, text, sign, classes = '', props = '') {
@@ -97,24 +100,40 @@ function statusText() {
   return ['Central online', 'cloud'];
 }
 
+function settingsMenu(user) {
+  return '<details class="settings-menu" id="settings-menu"><summary aria-label="Abrir configurações">' +
+    icon('settings') + '<span>Configurações</span></summary><div class="settings-panel">' +
+    '<p class="settings-title">PREFERÊNCIAS DA CENTRAL</p><div class="settings-account">' + icon('user') +
+    '<span title="' + escape(user) + '">' + escape(user) + '</span></div>' +
+    button('backup', 'Backup e restauração', 'download', 'settings-action') +
+    button('link', 'Gerar link do aplicativo', 'link', 'settings-action') +
+    button('logout', 'Sair da conta', 'exit', 'settings-action settings-logout') +
+    '</div></details>';
+}
+
 function shell() {
   const live = state.view === 'live';
   const user = cloud.session()?.email || 'Conta não conectada';
   const [status, statusIcon] = statusText();
-  const locker = cloud.enabled ? button('logout', '', 'exit', 'mobile-only ghost', 'aria-label="Sair"') : '';
-  return '<div class="shell' + (musicianLink ? ' musician-shell' : '') + '"><aside class="sidebar">' + brand() + '<nav aria-label="Seções">' +
-    '<button class="nav-link" data-action="live" ' + (live ? 'aria-current="page"' : '') + '>' + icon('current') + 'Modo ao vivo</button>' +
-    (musicianLink ? '' : '<button class="nav-link" data-action="admin" ' + (!live ? 'aria-current="page"' : '') + '>' + icon('grid') + 'Central de loops</button>') +
-    '</nav><div class="sidebar-foot">' +
-    (cloud.enabled ? '<button class="nav-link" data-action="logout">' + icon('exit') + 'Sair da conta</button>' : '') +
-    '<div class="session-line">' + icon('user') + '<span class="account-name" title="' + escape(user) + '">' + escape(user) + '</span>' + versionTag() + '</div></div></aside>' +
+  if (live) {
+    return '<div class="stage-shell' + (musicianLink ? ' musician-shell' : '') + '">' +
+      '<header class="stage-topbar">' +
+      (musicianLink ? '<span class="stage-top-left" aria-hidden="true"></span>' : iconButton('admin', 'Voltar à Central Administrativa', 'grid', 'data-stage-back')) +
+      brand('stage-brand') +
+      '<div class="stage-tools">' +
+      '<span class="stage-connection" title="' + escape(status) + '" id="sync-label">' + icon(statusIcon) + '<span>' + escape(status) + '</span></span>' +
+      iconButton('open-library', 'Escolher música no repertório', 'list', 'id="repertoire-toggle" aria-expanded="false" aria-controls="live-drawer"') +
+      '</div></header><main class="stage-main">' + liveView() + '</main></div>';
+  }
+  return '<div class="shell admin-shell"><aside class="sidebar">' + brand() +
+    '<nav aria-label="Seções"><button class="nav-link" data-action="live">' + icon('current') + 'Modo ao vivo</button>' +
+    '<button class="nav-link" data-action="admin" aria-current="page">' + icon('grid') + 'Central de loops</button></nav>' +
+    '<div class="sidebar-foot"><p class="sidebar-foot-label">STUDIO MARKS · CONTROLE DE PALCO</p></div></aside>' +
     '<div class="workspace"><header class="topbar">' + brand('mobile-only') +
-    '<div class="breadcrumb">' + icon(live ? 'current' : 'grid') + '<span>' + (live ? 'Modo ao vivo' : 'Central de loops') + '</span></div>' +
+    '<div class="breadcrumb">' + icon('grid') + '<span>Central de loops</span></div>' +
     '<div class="top-actions"><span class="sync' + (state.errors ? ' warn' : '') + '" id="sync-label">' +
-    icon(statusIcon) + '<span>' + escape(status) + '</span></span>' +
-    (musicianLink ? '' : button('link', 'Gerar link do app', 'device', 'ghost') + iconButton(live ? 'admin' : 'live',
-      live ? 'Central de loops' : 'Modo ao vivo', live ? 'grid' : 'current', 'data-mobile-toggle')) +
-    '<span class="version-on-mobile">' + versionTag() + '</span>' + locker + '</div></header><main class="main">' + (live ? liveView() : adminView()) + '</main></div></div>';
+      icon(statusIcon) + '<span>' + escape(status) + '</span></span>' + settingsMenu(user) +
+    '</div></header><main class="main admin-main">' + adminView() + '</main></div></div>';
 }
 
 function loginView() {
@@ -125,7 +144,7 @@ function loginView() {
     '<button class="button primary" type="submit">' + icon('user') + 'Entrar</button>' +
     '<p class="error" id="login-error" role="alert">' + escape(cloud.authError) + '</p></form>' +
     '<details class="recovery-help"><summary>Esqueci minha senha</summary>' +
-    '<p>O link do Netlify abre o endereço principal do projeto. Para criar ou redefinir sua senha, confirme que ele exibe V9. Não solicite vários e-mails seguidos.</p>' +
+    '<p>O link do Netlify abre o endereço principal do projeto. Para criar ou redefinir sua senha, confirme que ele exibe V10. Não solicite vários e-mails seguidos.</p>' +
     '<form id="request-recovery-form"><label class="field"><span>E-mail da conta</span><input type="email" name="email" required autocomplete="email"></label>' +
     '<button class="button ghost" type="submit">Enviar link de recuperação</button>' +
     '<p id="recovery-message" role="status"></p></form></details>' +
@@ -171,18 +190,35 @@ function songsFor(view) {
 
 function library(view) {
   const search = view === 'live' ? state.searchLive : state.searchAdmin;
-  return '<aside class="library frame"><div class="library-head"><h2>' + (view === 'live' ? 'Repertório' : 'Músicas') +
-    '</h2><span class="count" id="song-count"></span></div>' +
+  const live = view === 'live';
+  return '<aside class="library frame' + (live ? ' repertoire-drawer' : '') + '" ' +
+    (live ? 'id="live-drawer" role="dialog" aria-modal="true" aria-label="Repertório de músicas" hidden' : '') + '>' +
+    '<div class="library-head"><div><p class="library-overline">' + (live ? 'SELEÇÃO RÁPIDA' : 'BIBLIOTECA') + '</p><h2>' +
+    (live ? 'Repertório' : 'Músicas') + '</h2></div><div class="library-head-tools"><span class="count" id="song-count"></span>' +
+    (live ? iconButton('close-library','Fechar repertório','x') : '') + '</div></div>' +
     '<label class="search">' + icon('search') + '<input id="search" type="search" autocomplete="off" placeholder="Buscar música" aria-label="Buscar música" value="' +
     escape(search) + '"></label><div class="items" id="items"></div>' +
-    (view === 'live' ? '<div class="library-foot">' + icon('headphones') +
-      '<span>' + (cloud.enabled ? 'Baixe o repertório antes do evento' : 'Áudios de demonstração') + '</span></div>' : '') + '</aside>';
+    (live ? '<div class="library-download"><p>ARQUIVOS PARA TOCAR SEM INTERNET</p>' +
+      button('download', 'Baixar para offline', 'download', 'ghost', 'id="download-btn"') + '</div>' +
+      '<div class="library-foot">' + icon('headphones') +
+      '<span>Antes do evento, baixe os WAVs e confira a reprodução em modo avião.</span></div>' : '') + '</aside>';
 }
 
 function liveView() {
-  return '<div class="heading"><div><h1>Modo ao vivo</h1><p>Loops de bateria e percussão</p></div>' +
-    (state.selected ? button('download', 'Baixar para offline', 'download', 'ghost', 'id="download-btn"') : '') + '</div>' +
-    '<div class="workspace-grid"><section class="deck" aria-label="Player de loops">' + deck() + '</section>' + library('live') + '</div>';
+  return '<div class="live-workspace"><section class="deck stage-deck" aria-label="Player de loops">' + deck() +
+    '</section><div id="drawer-backdrop" class="drawer-backdrop" data-action="close-library" hidden></div>' + library('live') + '</div>';
+}
+
+function toggleLibrary(open) {
+  const drawer = get('#live-drawer'), backdrop = get('#drawer-backdrop'), trigger = get('#repertoire-toggle');
+  if (!drawer || !backdrop) return;
+  state.libraryOpen = open;
+  drawer.hidden = !open;
+  backdrop.hidden = !open;
+  if (trigger) trigger.setAttribute('aria-expanded', String(open));
+  document.body.classList.toggle('drawer-visible', open);
+  if (open) drawer.querySelector('#search')?.focus();
+  else trigger?.focus();
 }
 
 function deck() {
@@ -200,6 +236,9 @@ function deck() {
   return '<section class="frame"><div class="deck-header"><div><h2>' + escape(song.name) + '</h2><p class="track-meta">' +
     (song.occasion ? escape(song.occasion) + ' · ' : '') + escape(song.bpm) + ' BPM original · ' + escape(song.beats) +
     ' tempos</p></div><span class="chip" id="player-chip"></span></div>' +
+    '<div class="stage-status" role="status" aria-live="polite"><div class="stage-status-main"><span class="stage-status-label">PARTE EM EXECUÇÃO</span>' +
+    '<strong id="stage-active">' + escape(PLAY_PARTS.find(p => p.id === openingPart)?.label || 'Aguardando') + '</strong></div>' +
+    '<div class="stage-status-side"><span id="stage-mode">Pronto · contínuo</span><small id="stage-next"></small></div></div>' +
     '<div class="wave-box"><canvas id="waveform" role="img" aria-label="Forma de onda da parte atual"></canvas><div>' +
     '<span id="wave-caption">' + escape(PLAY_PARTS.find(part => part.id === openingPart)?.label || 'Loop') + '</span><span id="wave-caption-right">Compasso</span></div></div>' +
     '<div class="transport"><div class="tempo">' + iconButton('slower', 'Diminuir BPM', 'minus', 'id="slower"') +
@@ -235,14 +274,12 @@ function adminView() {
   const amount = state.songs.filter(song => !song.deleted).length;
   return '<div class="heading"><div><p class="eyebrow">STUDIO MARKS / ADMINISTRAÇÃO</p><h1>Central Administrativa</h1>' +
     '<p>Seu repertório, seus loops e as regras de palco no mesmo lugar.</p></div>' +
-    '<div class="admin-quick-actions">' + button('backup', 'Backup / Restaurar', 'download', 'ghost') +
-    button('new', 'Nova música', 'plus', 'primary') + '</div></div>' +
+    '<div class="admin-quick-actions">' + button('new', 'Nova música', 'plus', 'primary') + '</div></div>' +
     '<div class="admin-summary">' +
     '<div class="mini-stat"><small>MÚSICAS</small><strong>' + amount + '</strong><span>Na biblioteca</span></div>' +
     '<div class="mini-stat"><small>SALVAMENTO</small><strong>' + (cloud.enabled ? 'Nuvem' : 'Local') + '</strong><span>' +
       (cloud.enabled ? 'Netlify Blobs + aparelho' : 'Demonstração sem nuvem') + '</span></div>' +
-    '<div class="access-shortcut"><div><small>ACESSO DO MÚSICO</small><strong>Aplicativo no celular</strong><span>Link direto · Mesmo login · Loops offline</span></div>' +
-    button('link', 'Gerar link', 'link', 'primary') + '</div></div>' +
+    '<div class="access-shortcut"><div><small>ACESSO DO MÚSICO</small><strong>Aplicativo no celular</strong><span>Gere o link em Configurações · Modo Live sem edição</span></div>' + icon('device') + '</div></div>' +
     (state.errors ? '<div class="warning" role="status">' + escape(state.errors) + ' ' +
       button('sync', 'Tentar sincronizar', 'refresh', 'ghost') + '</div>' : '') +
     '<div class="workspace-grid admin-grid">' + library('admin') + '<section class="frame admin-editor">' +
@@ -355,8 +392,7 @@ function editor() {
     '</div>' + button('add-custom', 'Adicionar virada específica', 'plus', 'ghost') + '</details>' +
     editorSection(song, 'finais', 'Acabamento e final', 'Arquivos de encerramento de execução única, inclusive cauda do prato.') +
     transitionEditor(song) +
-    '<div class="footer-actions"><small class="subtle">O cadastro aparece no Modo Live automaticamente. Para tocar, importe ao menos um loop contínuo (Parte A, Refrão ou outra parte). Depois sincronize e baixe no celular.</small>' +
-    button('link', 'Gerar link do aplicativo', 'link', 'ghost') + '</div>';
+    '<div class="footer-actions"><small class="subtle">O cadastro aparece no Modo Live automaticamente. Para tocar, importe ao menos um loop contínuo. Confira os WAVs offline antes do evento.</small></div>';
 }
 
 function fileRow(part, audio, song = state.admin) {
@@ -385,6 +421,8 @@ function render() {
   if (cloud.enabled && cloud.authFlow?.type === 'invalid') { app.innerHTML = authLinkErrorView(); return; }
   if (cloud.enabled && cloud.authFlow) { app.innerHTML = passwordView(); return; }
   if (cloud.enabled && !cloud.session()) { app.innerHTML = loginView(); return; }
+  document.body.classList.remove('drawer-visible');
+  state.libraryOpen = false;
   app.innerHTML = shell();
   updateLibrary();
   if (state.view === 'live') updatePlayback(true);
@@ -455,12 +493,17 @@ async function copyMobile() {
   // Link estável e exclusivo da interface do músico; sem menus de cadastro.
   url.search = '?modo=musico';
   url.hash = '';
+  const preview = location.hostname.match(/^[a-f0-9]{12,}--(.+\.netlify\.app)$/i);
+  const stable = new URL(url.href);
+  if (preview) stable.hostname = preview[1];
   const published = !['localhost', '127.0.0.1', '0.0.0.0'].includes(url.hostname) && url.protocol === 'https:';
   dialog.innerHTML = '<h2>Link do músico · Só Modo Live</h2>' +
-    '<p>Abre somente o repertório e o player, sem Central Administrativa ou edição. Entre na conta autorizada e deixe os WAVs baixados. No iPhone: Safari → Compartilhar → Adicionar à Tela de Início.</p>' +
-    (published ? '' : '<p class="warning">Este é um endereço de teste local. Publique no Netlify antes de usar o link em outro aparelho.</p>') +
-    '<label class="field"><span>Endereço de acesso</span><input readonly value="' + escape(url.href) + '"></label>' +
-    '<div class="batch-footer" style="margin-top:14px">' + button('copy', 'Copiar link', 'link', 'primary') +
+    '<p>O link abre diretamente o player, sem tela de edição. No iPhone: abra pelo Safari, entre uma vez no Netlify Identity e escolha Compartilhar → Adicionar à Tela de Início. Depois baixe os WAVs dentro do app instalado.</p>' +
+    (published ? '<p class="link-note">Se o Netlify pedir login da própria plataforma antes do aplicativo, confira Project visibility no painel: o projeto Private exige conta da equipe. Para acesso direto, a interface pode ser Public; o login Identity continua protegendo os WAVs e cadastros.</p>' : '<p class="warning">Este é um endereço local. Para usar no celular, publique no Netlify.</p>') +
+    '<label class="field"><span>Link do app no iPhone (endereço principal)</span><input readonly value="' + escape(stable.href) + '"></label>' +
+    (preview ? '<label class="field" style="margin-top:10px"><span>Link desta versão de teste (Permalink)</span><input readonly value="' + escape(url.href) + '"></label><p class="link-note">Para instalar definitivamente, use o endereço principal quando a V10 estiver publicada. O Permalink é uma prévia isolada.</p>' : '') +
+    '<div class="batch-footer" style="margin-top:14px">' + button('copy', 'Copiar app oficial', 'link', 'primary') +
+    (preview ? button('copy-preview', 'Copiar link de teste', 'link', 'ghost') : '') +
     button('share', 'Compartilhar', 'share', 'ghost') +
     '<a class="button ghost" href="' + escape(url.href) + '" target="_blank" rel="noopener noreferrer">Abrir link do músico</a>' +
     '<button class="button ghost" id="close-link">Fechar</button></div>';
@@ -468,7 +511,7 @@ async function copyMobile() {
   dialog.querySelector('[data-action="copy"]').addEventListener('click', async () => {
     try {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard indisponível');
-      await navigator.clipboard.writeText(url.href);
+      await navigator.clipboard.writeText(stable.href);
       notice('Link do músico copiado.');
     } catch {
       const field = dialog.querySelector('input');
@@ -477,11 +520,24 @@ async function copyMobile() {
       catch { notice('Selecione e copie o endereço do músico.'); }
     }
   });
+  dialog.querySelector('[data-action="copy-preview"]')?.addEventListener('click', async () => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Indisponível');
+      await navigator.clipboard.writeText(url.href);
+      notice('Permalink de teste copiado.');
+    } catch {
+      const fields = dialog.querySelectorAll('input');
+      const input = fields[fields.length - 1];
+      input?.focus(); input?.select();
+      try { if (!document.execCommand('copy')) throw new Error('Cópia indisponível'); notice('Link de teste copiado.'); }
+      catch { notice('Selecione e copie o link de teste.'); }
+    }
+  });
   dialog.querySelector('[data-action="share"]').addEventListener('click', async () => {
     if (navigator.share) {
-      try { await navigator.share({ title: 'Loops Marks Pro', text: 'Abrir o Modo Live', url: url.href }); }
+      try { await navigator.share({ title: 'Loops Marks Pro', text: 'Abrir o Modo Live', url: stable.href }); }
       catch (error) { if (error.name !== 'AbortError') notice('Não foi possível compartilhar o endereço.'); }
-    } else window.open('https://wa.me/?text=' + encodeURIComponent('Loops Marks Pro — Modo Live: ' + url.href), '_blank', 'noopener,noreferrer');
+    } else window.open('https://wa.me/?text=' + encodeURIComponent('Loops Marks Pro — Modo Live: ' + stable.href), '_blank', 'noopener,noreferrer');
   });
   dialog.showModal();
 }
@@ -723,7 +779,7 @@ function updateDownload() {
   if (!element || !song) return;
   const saved = state.offline.get(song.id);
   const same = song.demo || (saved && sortedSignature(saved) === sortedSignature(song));
-  const text = state.download || (same ? 'Offline disponível' : saved ? 'Atualizar offline' : 'Baixar para offline');
+  const text = state.download || (same ? 'Offline pronto' : saved ? 'Atualizar arquivos offline' : 'Baixar para offline');
   if (element.textContent !== text) element.innerHTML = icon(same ? 'check' : 'download') + '<span>' + escape(text) + '</span>';
   element.disabled = Boolean(state.download || state.info.running || song.demo || (same && player.ready));
 }
@@ -781,6 +837,20 @@ function updatePlayback(force = false) {
   const playing = player.summary();
   const previous = state.info;
   state.info = playing;
+  if (get('#stage-active')) {
+    const isFill = Boolean(playing.active && ([...PARTS, ...(state.selected?.customFills || [])]
+      .some(part => part.id === fillBase(playing.active) && part.type === 'virada')));
+    const name = playing.active ? player.label(playing.active) :
+      (player.ready ? player.label(player.initialPart || 'a') : 'Aguardando');
+    const mode = !playing.running ? (player.ready ? 'Pronto para iniciar' : 'Preparando áudio') :
+      isFill ? 'Virada em execução' : playing.entryAttack ? 'Entrada com crash' :
+      playing.active === 'intro' ? 'Introdução' : 'Loop contínuo';
+    const next = playing.next ? 'PRÓXIMO · ' + player.label(playing.next) : '';
+    if (get('#stage-active').textContent !== name) get('#stage-active').textContent = name;
+    if (get('#stage-mode').textContent !== mode) get('#stage-mode').textContent = mode;
+    if (get('#stage-next').textContent !== next) get('#stage-next').textContent = next;
+    get('.stage-status')?.classList.toggle('in-queue', Boolean(playing.next));
+  }
   if (previous.running && !playing.running) {
     releaseScreen();
     if (state.errors || cloud.enabled) requestSync();
@@ -929,6 +999,8 @@ async function changeView(view) {
   }
   await saveBeforeLeaving();
   state.view = view;
+  state.libraryOpen = false;
+  document.body.classList.remove('drawer-visible');
   const url = new URL(location.href);
   url.searchParams.set('modo', musicianLink ? 'musico' : (view === 'live' ? 'ao-vivo' : 'central'));
   history.replaceState(null, '', url);
@@ -1152,6 +1224,8 @@ async function handleAction(element) {
     finally {element.disabled=false;}
     return;
   }
+  if (action === 'open-library') { toggleLibrary(true); return; }
+  if (action === 'close-library') { toggleLibrary(false); return; }
   if (action === 'live' || action === 'admin') { await changeView(action); return; }
   if (action === 'link') { await copyMobile(); return; }
   if (action === 'backup') { await openBackupCenter(); return; }
@@ -1216,6 +1290,7 @@ async function handleAction(element) {
       if (state.selected?.id === song.id || startPending || state.download) return;
       if (player.running && !await confirmChoice('Trocar de música?', 'A reprodução atual vai parar.', 'Trocar música')) return;
       if (player.running) stopPlayback();
+      toggleLibrary(false);
       selectLive(await preferDownloaded(song));
     } else {
       await saveBeforeLeaving();
@@ -1288,6 +1363,10 @@ async function handleAction(element) {
     requestSync();
   }
 }
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && state.libraryOpen) { event.preventDefault(); toggleLibrary(false); }
+});
 
 app.addEventListener('click', event => {
   const target = event.target.closest('[data-action]');

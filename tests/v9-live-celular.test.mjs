@@ -26,6 +26,6 @@ test('V9 link de músico não inclui central administrativa nem cadastro',()=>{
  assert.equal(manifest.start_url,'./?modo=musico');
  assert.match(app,/url\.search = '\?modo=musico'/);
  assert.match(app,/if \(musicianLink && view !== 'live'\) return/);
- assert.match(app,/musicianLink \? '' : '<button class="nav-link" data-action="admin"/);
+ assert.match(app,/musicianLink \? '<span class="stage-top-left"/);
  assert.match(app,/musicianLink \? '' : button\('admin', 'Completar cadastro'/);
 });

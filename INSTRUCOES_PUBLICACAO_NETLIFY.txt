@@ -1,1 +1,13 @@
-V9 — GitHub: substituir os arquivos do LoopsMarksPro (não crie projeto novo). Netlify: Base vazio, npm run build, Publish dist, Functions netlify/functions. Depois do deploy, abrir a Central e gerar o Link do músico (?modo=musico). Confira V9 e faça teste de áudio online e offline. Não compartilhe credenciais administrativas.
+LOOPS MARKS PRO - V10
+
+1. Guarde a V9. Extraia este ZIP.
+2. Envie os arquivos da V10 para a raiz do mesmo GitHub TeacherMrMarks/LoopsMarksPro.
+3. Netlify: mantenha Base directory vazio; Build command npm run build; Publish dist; Functions netlify/functions.
+4. Com Auto Publishing Locked, confira a V10 pelo Permalink do deploy novo.
+5. O link oficial do músico é https://loops-marks-pro.netlify.app/?modo=musico (site principal); durante testes o botão Copiar link de teste usa a URL do deploy.
+6. Para a interface abrir no iPhone sem login da plataforma Netlify, configure Project visibility Public. O Netlify Identity continua exigido para acessar os dados. Se mantiver Private, a proteção da plataforma exigirá login de equipe.
+7. No Safari do iPhone: Compartilhar > Adicionar à Tela de Início. No app instalado, baixar WAVs via repertório e testar modo avião.
+8. Backup / Restaurar, gerar link, e-mail e sair ficam em Configurações na Central.
+9. Não é necessário outro site ou projeto Netlify. Não apague seus WAVs.
+
+Os testes locais passaram; o build e o uso real no Netlify/iPhone ainda devem ser validados.

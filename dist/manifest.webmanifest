@@ -1,14 +1,14 @@
 {
   "id": "./",
   "name": "Loops Marks Pro",
-  "short_name": "Loops Marks Live",
+  "short_name": "Loops Marks Pro",
   "lang": "pt-BR",
   "start_url": "./?modo=musico",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#101c1a",
-  "theme_color": "#101c1a",
+  "background_color": "#0c1722",
+  "theme_color": "#0c1722",
   "icons": [
     {
       "src": "./icon-192.png",
@@ -22,5 +22,6 @@
       "type": "image/png",
       "purpose": "any"
     }
-  ]
+  ],
+  "description": "Player de loops de bateria para apresentações ao vivo, com áudio offline."
 }
