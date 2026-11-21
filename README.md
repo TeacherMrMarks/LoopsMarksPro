@@ -1,8 +1,19 @@
-# Loops Marks Pro — V13
+# Loops Marks Pro — V14
 
 **Pacote de atualização do mesmo projeto GitHub + Netlify**, criado a partir da V12, sem apagar nem renomear os stores existentes de músicas e WAVs. A V12 permanece preservada como arquivo ZIP separado.
 
-## Recursos implementados
+## Atualização V14 — apenas layout e navegação (paleta V13 preservada)
+
+- Editor de música e ritmo com **seis abas horizontais**: **Dados**, **Loops**, **Crash**, **Viradas**, **Mapa musical** e **Finais**.
+- **Somente a aba selecionada é exibida** abaixo do cabeçalho. O aplicativo reorganiza os mesmos controles da V13 sem duplicar os campos ou alterar o sistema de salvamento.
+- Na aba **Dados** estão identificação, tipo, pasta, BPM, compasso e comportamento. Em **Loops** ficam introdução, contínuos e partes adicionais; em **Crash**, as entradas; em **Viradas**, automáticas, manuais, específicas e variações; em **Mapa**, os mapas de transição e sequência; em **Finais**, os encerramentos.
+- Biblioteca de **Músicas** e de **Ritmos** com alternância **Cards / Lista**, salva localmente como preferência visual.
+- **A paleta de cores original foi mantida.** O modo Live do músico e a barra lateral principal não foram redesenhados.
+- **Nenhuma alteração** nas Netlify Functions, Netlify Identity, Netlify Blobs, modelo de dados, WAVs, motor de áudio, backups, links de músico ou recursos offline.
+
+## Recursos já existentes e preservados da V13
+
+
 
 **Repertório com nome e BPM próprios por apresentação**
 - Adicione uma música cadastrada ou um ritmo reutilizável a um repertório.
@@ -33,10 +44,10 @@
 ## Publicação no Netlify
 
 1. Faça **Backup completo** da V12 antes de qualquer atualização e guarde o ZIP original.
-2. Extraia o ZIP V13 e envie o **conteúdo extraído** à raiz do mesmo repositório GitHub `LoopsMarksPro`.
+2. Extraia o ZIP V14 e envie o **conteúdo extraído** à raiz do mesmo repositório GitHub `LoopsMarksPro`.
 3. Configuração de build: base vazia; `npm run build`; publish `dist`; functions `netlify/functions`.
-4. Mantenha o bloqueio de publicação automática se desejar testar o novo **Permalink** antes de promover a V13 ao endereço principal.
-5. Confirme que aparece `V13`, entre com seu Netlify Identity e teste com a música já cadastrada, um repertório com duas músicas usando o mesmo ritmo em BPMs diferentes e uma sequência musical de teste.
+4. Mantenha o bloqueio de publicação automática se desejar testar o novo **Permalink** antes de promover a V14 ao endereço principal.
+5. Confirme que aparece `V14`, entre com seu Netlify Identity e teste com a música já cadastrada, um repertório com duas músicas usando o mesmo ritmo em BPMs diferentes e uma sequência musical de teste.
 6. Antes de cerimônias, faça teste real de áudio e Modo Avião no iPhone 11, inclusive mudanças automáticas, acabamentos e baixa/atualização de WAVs.
 
 ## Compatibilidade / segurança
@@ -50,4 +61,4 @@
 - 62 testes automatizados passando: regressões desde as versões anteriores, metadados de repertório, novas partes, componentes da interface e agendamento de etapa automática pelo relógio de áudio simulado.
 - Sintaxe JavaScript conferida.
 - **Build completo não executado neste ambiente** porque as dependências npm (`esbuild`, `@netlify/identity`, `@netlify/blobs`, `fflate`) não estavam instaladas. A compilação precisa ser confirmada no Netlify.
-- O navegador automatizado deste ambiente bloqueou a abertura da prévia local, então o layout da V13 ainda precisa de validação visual no Permalink.
+- O navegador automatizado deste ambiente bloqueou a abertura da prévia local, então o layout da V14 ainda precisa de validação visual no Permalink.

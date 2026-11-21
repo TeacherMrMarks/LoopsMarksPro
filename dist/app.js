@@ -5,7 +5,7 @@ import { exampleSongs } from './demo.js';
 import { makeBackup, restoreBackup, triggerDownload } from './backup.js';
 import { emptyLibrary, cleanLibrary, songKind, inFolder, repertoireEntries } from './library-model.js';
 
-const APP_VERSION = 'V13';
+const APP_VERSION = 'V14';
 // O link do músico carrega exclusivamente o Modo Live.
 const musicianLink = new URL(location.href).searchParams.get('modo') === 'musico';
 const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
@@ -65,6 +65,8 @@ const state = {
   managementOpen:safeStored('loops-v12-management')!=='closed',
   sidebarCollapsed:safeStored('loops-v12-sidebar')==='collapsed',
   introOpen:safeStored('loops-v12-editor-intro')!=='closed',
+  editorTab:['dados','loops','crash','viradas','mapa','finais'].includes(safeStored('loops-v14-editor-tab'))?safeStored('loops-v14-editor-tab'):'dados',
+  catalogView:safeStored('loops-v14-catalog-view')==='lista'?'lista':'cards',
   pedalLearn:null,pedalMap:loadPedalMap(),pedalLastAt:0,
 
 };
@@ -297,7 +299,10 @@ function catalogPanel(){
     '<div class="v12-catalog-filters"><label class="search">'+icon('search')+'<input type="search" id="admin-search" aria-label="Pesquisar biblioteca" placeholder="Pesquisar por nome, momento ou BPM" value="'+escape(state.adminSearch)+'"></label>'+
     '<div class="v12-folder-filters"><button class="sidebar-folder" data-action="select-folder" data-folder="" '+(!state.adminFolder?'aria-current="true"':'')+'>Todas</button>'+
     folders.map(f=>'<button class="sidebar-folder" data-action="select-folder" data-folder="'+escape(f.id)+'" '+(state.adminFolder===f.id?'aria-current="true"':'')+'>'+icon('folder')+escape(f.name)+'</button>').join('')+'</div></div>'+
-    '<div class="v12-catalog-grid" id="catalog-items"></div>';
+    '<div class="v14-catalog-view" role="group" aria-label="Modo de visualização">'+
+    '<button class="v14-view-toggle" data-action="catalog-view" data-mode="cards" aria-pressed="'+(state.catalogView==='cards')+'">'+icon('grid')+' Cards</button>'+
+    '<button class="v14-view-toggle" data-action="catalog-view" data-mode="lista" aria-pressed="'+(state.catalogView==='lista')+'">'+icon('list')+' Lista</button></div>'+
+    '<div class="v12-catalog-grid '+(state.catalogView==='lista'?'v14-list':'')+'" id="catalog-items"></div>';
 }
 function kindFolders(kind){return (state.libraryData.folders||[]).filter(f=>f.kind===kind).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));}
 function foldersPanel(){
@@ -498,6 +503,70 @@ function fileRow(part, audio, song = state.admin) {
       (audio ? '' : 'disabled')) + '</div>';
 }
 
+// V14: apresentação apenas. Move os mesmos campos originais para abas, sem recriar
+// inputs, alterar IDs, callbacks, modelo de dados, uploads ou funções de nuvem.
+const V14_EDITOR_TABS = [
+  ['dados','Dados','settings'],
+  ['loops','Loops','music'],
+  ['crash','Crash','spark'],
+  ['viradas','Viradas','wave'],
+  ['mapa','Mapa musical','layers'],
+  ['finais','Finais','flag'],
+];
+function editorGroupTab(element) {
+  const title=(element.querySelector(':scope > summary strong')?.textContent||'').toLowerCase();
+  if(title.includes('loops contínuos')||title.includes('mais partes musicais'))return 'loops';
+  if(title.includes('primeira entrada'))return 'crash';
+  if(title.includes('viradas')||title.includes('variações de virada'))return 'viradas';
+  if(title.includes('mapa'))return 'mapa';
+  if(title.includes('acabamento')||title.includes('final'))return 'finais';
+  return 'loops';
+}
+function showEditorTab(id, focus=false) {
+  const root=get('.admin-editor');
+  if(!root||!V14_EDITOR_TABS.some(tab=>tab[0]===id))return;
+  state.editorTab=id;
+  try{localStorage.setItem('loops-v14-editor-tab',id);}catch{}
+  for(const button of root.querySelectorAll('.v14-editor-tab')) {
+    const active=button.dataset.tab===id;
+    button.setAttribute('aria-selected',String(active));
+    button.tabIndex=active?0:-1;
+    if(active&&focus){button.focus({preventScroll:true});button.scrollIntoView?.({block:'nearest',inline:'nearest'});}
+  }
+  for(const panel of root.querySelectorAll('.v14-editor-panel')){
+    panel.hidden=panel.dataset.tab!==id;
+    if(!panel.hidden){const first=panel.querySelector('details.editor-group, details.v12-editor-intro');if(first)first.open=true;}
+  }
+}
+function setupEditorTabs(){
+  const root=get('.admin-editor');
+  if(!root||!root.querySelector(':scope > #v12-editor-intro'))return;
+  const header=root.querySelector(':scope > .deck-header');
+  if(!header)return;
+  const nav=document.createElement('div');
+  nav.className='v14-editor-tabs';nav.setAttribute('role','tablist');
+  nav.setAttribute('aria-label','Seções da edição de música ou ritmo');
+  nav.innerHTML=V14_EDITOR_TABS.map(([id,title,glyph])=>
+    '<button type="button" class="v14-editor-tab" role="tab" id="v14-tab-'+id+'" data-action="editor-tab" data-tab="'+id+'" aria-controls="v14-panel-'+id+'" aria-selected="false" tabindex="-1">'+icon(glyph)+'<span>'+title+'</span></button>').join('');
+  header.after(nav);
+  const panels=new Map();
+  for(const [id] of V14_EDITOR_TABS){
+    const panel=document.createElement('section');panel.className='v14-editor-panel';
+    panel.id='v14-panel-'+id;panel.dataset.tab=id;panel.setAttribute('role','tabpanel');
+    panel.setAttribute('aria-labelledby','v14-tab-'+id);panel.hidden=true;
+    panels.set(id,panel);root.append(panel);
+  }
+  const intro=root.querySelector(':scope > #v12-editor-intro');
+  if(intro)panels.get('dados').append(intro);
+  const toolbar=root.querySelector(':scope > .import-toolbar');
+  if(toolbar)panels.get('loops').append(toolbar);
+  const groups=[...root.querySelectorAll(':scope > details.editor-group')];
+  for(const group of groups)panels.get(editorGroupTab(group)).append(group);
+  const footer=root.querySelector(':scope > .footer-actions');
+  if(footer)panels.get('finais').append(footer);
+  showEditorTab(state.editorTab);
+}
+
 function render() {
   if (musicianLink) state.view = 'live';
   if (cloud.enabled && cloud.authFlow?.type === 'invalid') { app.innerHTML = authLinkErrorView(); return; }
@@ -506,6 +575,7 @@ function render() {
   document.body.classList.remove('drawer-visible');
   state.libraryOpen = false;
   app.innerHTML = shell();
+  setupEditorTabs();
   updateLibrary();
   if (state.view === 'live') updatePlayback(true);
   else updateSaveLabel();
@@ -517,6 +587,7 @@ function normalized(value) {
 
 function updateAdminSidebar(){
   const container=get('#catalog-items');if(!container)return;
+  container.classList.toggle('v14-list',state.catalogView==='lista');
   const rows=songsFor('admin').filter(song=>inFolder(song,state.adminKind,state.adminFolder))
     .filter(song=>normalized(song.name+' '+song.occasion+' '+song.bpm).includes(normalized(state.adminSearch)))
     .sort((a,b)=>(a.name||'').localeCompare(b.name||'','pt-BR'));
@@ -1406,6 +1477,12 @@ async function mutateRepertoire(task){
 }
 async function handleAction(element) {
   const { action, id, part } = element.dataset;
+  if(action==='editor-tab'){showEditorTab(element.dataset.tab,true);return;}
+  if(action==='catalog-view'){
+    state.catalogView=element.dataset.mode==='lista'?'lista':'cards';
+    try{localStorage.setItem('loops-v14-catalog-view',state.catalogView);}catch{}
+    render();return;
+  }
   if(action==='toggle-management'){state.managementOpen=!state.managementOpen;
     try{localStorage.setItem('loops-v12-management',state.managementOpen?'open':'closed');}catch{}render();return;}
   if(action==='collapse-sidebar'){state.sidebarCollapsed=!state.sidebarCollapsed;
@@ -1629,7 +1706,7 @@ async function handleAction(element) {
     } else {
       await saveBeforeLeaving();
       state.admin = structuredClone(await repo.song(song.id) || song);
-      state.adminKind=songKind(song);state.adminFolder=state.admin.folderId||'';state.adminPanel='editor';
+      state.adminKind=songKind(song);state.adminFolder=state.admin.folderId||'';state.adminPanel='editor';state.editorTab='dados';
       state.editLabel = '';
       render();
     }
@@ -1638,10 +1715,10 @@ async function handleAction(element) {
   if (action === 'new') {
     await saveBeforeLeaving();
     state.admin = {...newSong(),kind:state.adminKind,folderId:state.adminFolder};
-    state.adminPanel='editor';
+    state.adminPanel='editor';state.editorTab='dados';
     state.editLabel = '';
     render();
-    get('[data-field="name"]').focus();
+    get('[data-field="name"]')?.focus();
     return;
   }
   if (!state.admin) return;

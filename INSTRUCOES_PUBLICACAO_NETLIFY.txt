@@ -1,12 +1,11 @@
-LOOPS MARKS PRO V13
-===================
-1. Faça backup completo da V12.
-2. Extraia este ZIP; envie os ARQUIVOS E PASTAS para a raiz do GitHub (sem aninhar outra pasta).
-3. Netlify: Base directory vazio, Build command npm run build, Publish directory dist, Functions netlify/functions.
-4. Com publicação automática bloqueada, abra o permalink do NOVO DEPLOY V13 para testar; não gere deploy repetidamente.
-5. Confira V13 e faça login Netlify Identity.
-6. Teste: criar/editar uma música, importar WAV, adicionar seção personalizada, montar mapa, duplicar ritmo com nome/BPM distinto em repertório, abrir Modo Live, exportar e importar backup, fechar todas as janelas por X.
-7. Confirme o funcionamento no iPhone em modo avião antes de uso ao vivo.
-8. Somente quando aprovar a V13 publique o deploy existente em produção, sem novo build.
+Loops Marks Pro V14 — atualização exclusivamente visual
 
-ATENÇÃO: a V13 preserva os registros da V12, mas não dispensa backup. Links/credenciais não são exportados por segurança.
+1) Faça um backup completo na V13 e guarde o ZIP da versão anterior.
+2) Extraia o ZIP V14 e envie todo o conteúdo extraído à raiz do mesmo repositório GitHub.
+3) Preserve as configurações do Netlify: base vazia, build npm run build, publish dist, functions netlify/functions.
+4) Mantenha a publicação automática bloqueada para testar no novo Permalink sem mudar a produção.
+5) Abra a Central de Loops ou Músicas → Nova música e teste Dados, Loops, Crash, Viradas, Mapa musical e Finais; confira o salvamento automático.
+6) Em Músicas/Ritmos, teste alternar Cards e Lista.
+7) Confirme que as músicas antigas, WAVs, backups, login e o Modo Live continuam como antes.
+
+A V14 não muda a paleta nem o motor de áudio, nem funções Netlify.
