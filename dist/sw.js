@@ -1,4 +1,4 @@
-const VERSION = 'loops-marks-v6-identity-20261120';
+const VERSION = 'loops-marks-v7-identity-20261121';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './netlify-client.js', './backup.js', './data.js',
   './audio.js', './stretch.js', './demo.js', './importer.js', './manifest.webmanifest',

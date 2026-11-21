@@ -1,11 +1,17 @@
-LOOPS MARKS PRO V6 - INSTRUÇÕES
+LOOPS MARKS PRO V7 — INSTALAÇÃO NO MESMO NETLIFY
 
-USAR O MESMO SITE E GITHUB.
-Subir arquivos extraídos à RAIZ do repositório.
-Netlify: base vazio; command npm run build; publish dist; functions netlify/functions.
-IMPORTANTE: publicar V6 no DOMÍNIO PRINCIPAL para aceitar links de convite e recuperação de senha. Permalink antigo não recebe esses links.
-Netlify > Identity > Users > Invite users, ou Send reset password email para quem já foi convidado.
-V6 mostra tela CRIAR SENHA ou DEFINIR NOVA SENHA ao abrir link de e-mail.
-V5 LOOPS_ADMIN_* e LOOPS_SESSION_SECRET não são usados.
-Não compartilhar tokens dos e-mails.
-Faça backup antes de atualizar; teste login, nuvem, offline e viradas.
+1. Guarde a V6 em ZIP e faça backup de todas as músicas no aplicativo, se possível.
+2. Extraia este ZIP; envie os ARQUIVOS extraídos para a raiz do GitHub LoopsMarksPro.
+3. Netlify: Base directory vazio; Build command npm run build; Publish directory dist;
+   Functions directory netlify/functions. Identity deve estar ativado com Invite only.
+4. Para receber links de convite ou recuperação, publique a V7 no endereço PRINCIPAL
+   (um deploy já concluído pode ser promovido, sem novo build).
+5. Confirme V7 no navegador InPrivate antes de pedir um novo e-mail.
+6. Se o Netlify disser excesso de tentativas, não repita o pedido: é bloqueio
+   do Identity. Aguarde a liberação e use apenas o link mais recente.
+7. Primeiro faça login, confirme a Central e salve uma música pequena. Teste
+   também /.netlify/functions/loops-session (sem login retorna 401).
+8. Mantenha a V6 guardada; nenhum outro projeto ou variável LOOPS_ADMIN_* é necessário.
+
+A V7 usa os mesmos stores Netlify Blobs e o mesmo IndexedDB da V6.
+TESTES LOCAIS não substituem validação real do Identity, nuvem e WAV offline.

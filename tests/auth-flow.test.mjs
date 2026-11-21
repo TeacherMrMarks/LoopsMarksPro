@@ -5,7 +5,8 @@ import { readFileSync } from 'node:fs';
 const path = new URL('../dist/data.js', import.meta.url);
 const original = readFileSync(path, 'utf8');
 const importedSDK = original.replace(/^import \{[^\n]+\} from '\.\/netlify-client\.js';/m,
-  `const { login: identityLogin, logout: identityLogout, getUser: identityGetUser,\n    handleAuthCallback, acceptInvite: identityAcceptInvite, updateUser: identityUpdateUser,\n    requestPasswordRecovery: identityRequestRecovery } = globalThis.__authTestSDK;`);
+  `const { login: identityLogin, logout: identityLogout, getUser: identityGetUser,\n    handleAuthCallback, acceptInvite: identityAcceptInvite, updateUser: identityUpdateUser,\n    requestPasswordRecovery: identityRequestRecovery, getSettings: identityGetSettings,
+    refreshSession: identityRefreshSession } = globalThis.__authTestSDK;`);
 
 function setupSDK(auth) {
   let current = null;
@@ -16,10 +17,17 @@ function setupSDK(auth) {
     removeItem: k => storage.delete(k),
   };
   Object.defineProperty(globalThis, 'navigator', { value: { onLine: true }, configurable: true });
+  globalThis.fetch = async (_url,options={}) => {
+    const verified = current && !globalThis.__denyServerSession;
+    return Response.json(verified ? {user:{id:current.id,email:current.email,roles:[]}} :
+      {error:'Entre com uma conta autorizada no Netlify Identity.'},{status:verified?200:401});
+  };
   globalThis.__authTestSDK = {
     login: async () => current,
     logout: async () => {},
     getUser: async () => current,
+    getSettings: async () => ({disableSignup:true}),
+    refreshSession: async () => current,
     handleAuthCallback: async () => auth,
     acceptInvite: async (token, password) => { assert.equal(token, 'token-de-convite'); assert.equal(password,'senha1234'); current = {id:'u1', email:'user@test.com'}; return current; },
     updateUser: async (payload) => { assert.deepEqual(payload, {password:'senha5678'}); current = {id:'u1', email:'user@test.com'}; return current; },
@@ -76,9 +84,9 @@ test('invalid recovery link does not silently open the usual application', async
     const cloud = await makeCloud();
     await cloud.initialize();
     assert.equal(cloud.authFlow?.type,'invalid');
-    assert.match(cloud.authError,/Netlify não confirmou/);
-    assert.equal(cloud.session()?.email,'user@test.com');
-    assert.deepEqual(cleared, ['/']);
+    assert.match(cloud.authError,/link não pôde ser confirmado/);
+    assert.equal(cloud.session(), null);
+    assert.deepEqual(cleared, []);
   } finally {
     if (previousLocation === undefined) delete globalThis.location;
     else globalThis.location = previousLocation;
@@ -87,14 +95,14 @@ test('invalid recovery link does not silently open the usual application', async
   }
 });
 
-test('V6 version marker is present on login and account UI', () => {
+test('V7 version marker is present on login and account UI', () => {
   const app = readFileSync(new URL('../dist/app.js', import.meta.url),'utf8');
   const html = readFileSync(new URL('../dist/index.html', import.meta.url),'utf8');
-  assert.match(app,/const APP_VERSION = 'V6'/);
+  assert.match(app,/const APP_VERSION = 'V7'/);
   assert.match(app,/class=\"login-footer\"/);
   assert.match(app,/version-on-mobile/);
   assert.match(app,/session-line/);
-  assert.match(html,/V6/);
+  assert.match(html,/V7/);
 });
 
 test('service worker checks the network first and retains offline fallback', () => {
@@ -103,7 +111,7 @@ test('service worker checks the network first and retains offline fallback', () 
   assert.match(sw,/skipWaiting/);
 });
 
-test('V6 confirmed recovery link takes priority over an existing signed-in user', async () => {
+test('V7 confirmed recovery link takes priority over an existing signed-in user', async () => {
   const savedLocation = globalThis.location, savedHistory=globalThis.history;
   const changed=[];
   globalThis.location={hash:'#recovery_token=opaque-test',pathname:'/',search:''};
@@ -114,7 +122,9 @@ test('V6 confirmed recovery link takes priority over an existing signed-in user'
     const cloud=await makeCloud();
     await cloud.initialize();
     assert.equal(cloud.authFlow?.type,'recovery');
-    assert.equal(cloud.session()?.email,'user@test.com');
+    assert.equal(cloud.session(),null);
+    assert.deepEqual(changed,[]);
+    await cloud.finishRecovery('senha5678');
     assert.deepEqual(changed,['/']);
   } finally {
     if(savedLocation === undefined) delete globalThis.location; else globalThis.location=savedLocation;
@@ -122,12 +132,12 @@ test('V6 confirmed recovery link takes priority over an existing signed-in user'
   }
 });
 
-test('V6 does not embed own admin username, password or session secret', () => {
+test('V7 does not embed own admin username, password or session secret', () => {
   const source=readFileSync(new URL('../dist/data.js',import.meta.url),'utf8');
   assert.doesNotMatch(source,/LOOPS_ADMIN_PASSWORD|LOOPS_SESSION_SECRET|loops-auth/);
 });
 
-test('V6 accepting an invite clears the one-time link before reopening the app', async () => {
+test('V7 accepting an invite clears the one-time link before reopening the app', async () => {
   const originalLocation=globalThis.location, originalHistory=globalThis.history;
   const clean=[];
   globalThis.location={hash:'#invite_token=token-de-convite',pathname:'/',search:''};
@@ -144,4 +154,74 @@ test('V6 accepting an invite clears the one-time link before reopening the app',
     if (originalLocation===undefined) delete globalThis.location; else globalThis.location=originalLocation;
     if (originalHistory===undefined) delete globalThis.history; else globalThis.history=originalHistory;
   }
+});
+
+
+test('V7 login must be authorized by both Identity and server session check', async () => {
+  const sdk=setupSDK(null);
+  sdk.setCurrent({id:'u1',email:'user@test.com'});
+  globalThis.__denyServerSession=true;
+  try {
+    const cloud=await makeCloud();
+    await assert.rejects(()=>cloud.signIn('user@test.com','senha-validada'),/Entre com uma conta autorizada/);
+    assert.equal(cloud.session(),null);
+  } finally {delete globalThis.__denyServerSession;}
+  const cloud=await makeCloud();
+  await cloud.signIn('user@test.com','senha-validada');
+  assert.equal(cloud.session().id,'u1');
+});
+
+test('V7 does not trust a cached online profile without Identity session', async () => {
+  const {storage}=setupSDK(null);
+  storage.set('loops-marks-last-user-v3',JSON.stringify({id:'u1',email:'user@test.com',at:Date.now()}));
+  const cloud=await makeCloud();
+  await cloud.initialize();
+  assert.equal(cloud.session(),null);
+  assert.equal(storage.has('loops-marks-last-user-v3'),false);
+});
+
+test('V7 offline session is allowed only after server confirmation within 48h', async () => {
+  const {storage}=setupSDK(null);
+  const savedAt=Date.now();
+  const navigatorValue=globalThis.navigator;
+  Object.defineProperty(globalThis,'navigator',{value:{onLine:false},configurable:true});
+  try {
+    const fresh=await makeCloud();
+    storage.set('loops-marks-last-user-v3',JSON.stringify({id:'u1',email:'user@test.com',at:savedAt}));
+    await fresh.initialize();
+    assert.equal(fresh.session().email,'user@test.com');
+    const old=await makeCloud();
+    storage.set('loops-marks-last-user-v3',JSON.stringify({id:'u1',email:'user@test.com',at:savedAt-49*60*60*1000}));
+    await old.initialize();
+    assert.equal(old.session(),null);
+    const legacy=await makeCloud();
+    storage.set('loops-marks-last-user-v3',JSON.stringify({id:'u1',email:'user@test.com'}));
+    await legacy.initialize();
+    assert.equal(legacy.session(),null);
+  } finally {Object.defineProperty(globalThis,'navigator',{value:navigatorValue,configurable:true});}
+});
+
+test('V7 rate-limits repeated recovery requests locally and identifies rate limits from Identity',async()=>{
+  let requested=0;
+  const {storage}=setupSDK(null);
+  globalThis.__authTestSDK.requestPasswordRecovery=async()=>{requested++;};
+  const cloud=await makeCloud();
+  await cloud.sendPasswordReset('user@test.com');
+  await assert.rejects(()=>cloud.sendPasswordReset('user@test.com'),/solicitou um link recentemente/);
+  assert.equal(requested,1);
+  storage.delete('loops-marks-v7-reset-at');
+  globalThis.__authTestSDK.requestPasswordRecovery=async()=>{const e=new Error('too many requests');e.status=429;throw e;};
+  const secondCloud=await makeCloud();
+  await assert.rejects(()=>secondCloud.sendPasswordReset('user@test.com'),/limitou temporariamente/);
+});
+
+
+test('V7 diagnostic recognizes Identity enabled with no logged-in session, without sending email',async()=>{
+  setupSDK(null);
+  const cloud=await makeCloud();
+  const status=await cloud.diagnoseIdentity();
+  assert.match(status,/Identity e função de sessão estão ativos/);
+  assert.match(status,/Falta entrar/);
+  const app=readFileSync(new URL('../dist/app.js',import.meta.url),'utf8');
+  assert.match(app,/auth-check/);
 });

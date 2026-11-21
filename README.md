@@ -1,27 +1,37 @@
-# Loops Marks Pro — V6 (Netlify Identity)
+# Loops Marks Pro — V7
 
-**Base musical:** V4, preservando entrada com crash, loop contínuo, viradas adaptativas, viradas manuais e finais. **Mudança principal:** retorno ao Netlify Identity (convite com e-mail e recuperação de senha) em substituição ao login próprio da V5. A V6 mostra a versão na tela de login e junto à conta.
+**Versão oficial de correção de autenticação**, criada a partir da V6 com a Central de Cifras Studio Marks Pro como referência de fluxo. A Central de Cifras original não foi modificada.
 
-## Publicação no MESMO projeto
+## O que mudou
 
-1. Guarde a V4/V5 como backup. Extraia este ZIP e envie seu conteúdo, não o ZIP fechado, para a raiz do mesmo repositório GitHub `LoopsMarksPro`.
-2. No Netlify: Base directory **vazio**; Build command `npm run build`; Publish directory `dist`; Functions directory `netlify/functions`. O Netlify instalará dependências `@netlify/identity`, `@netlify/blobs`, `fflate` e `esbuild` e fará o build.
-3. Em **Identity**, mantenha Netlify Identity habilitado, preferencialmente cadastro **Invite only**. Convide o seu e-mail em Identity > Users. Você receberá um link para configurar sua senha.
-4. **IMPORTANTE:** o link de convite ou recuperação do Netlify normalmente redireciona para o **endereço principal do projeto** (`nome.netlify.app`), não para o Permalink de um deploy em teste. **Publique a V6 no endereço principal antes de solicitar novo e-mail.** Sem isso, você pode cair na tela de uma versão antiga, mesmo se a V6 funcionar no Permalink.
-5. Abra o e-mail **mais recente** no navegador, com internet. A V6 deve mostrar *Criar senha de acesso* (convite) ou *Definir nova senha* (recuperação), não a Central. Escolha e confirme uma senha de pelo menos 8 caracteres. Só depois entre pelo login normal.
-6. As variáveis `LOOPS_ADMIN_USERNAME`, `LOOPS_ADMIN_PASSWORD` e `LOOPS_SESSION_SECRET` da V5 **não são usadas** pela V6; podem ser eliminadas do projeto quando tudo estiver validado. Não envie senhas ou tokens de redefinição por chat.
+- Netlify Identity com sequência `getSettings` → `handleAuthCallback` → `getUser`/`refreshSession`.
+- Verificação adicional, após login ou restauração de sessão, por `/.netlify/functions/loops-session`, executada no servidor.
+- Convites e recuperação de senha continuam processados no app, com prioridade sobre uma sessão antiga. Convite é aceito pelo token; recuperação usa `updateUser({password})`.
+- Se uma senha foi redefinida mas houve falha posterior ao confirmar a sessão, o aplicativo indica que é possível entrar com a **nova senha**, em vez de exigir outro e-mail.
+- Erros de limite de tentativas, token vencido e falha de conexão com mensagens diferentes.
+- Diagnóstico discreto na tela de login: **Verificar configuração de acesso** verifica Identity e a função de sessão sem solicitar e-mail nem alterar senha.
+- Acesso offline apenas com sessão anteriormente confirmada no servidor e gravada há no máximo 48 horas; logout limpa o registro. **Não existe bypass de login nem acesso aos dados de outra conta.**
+- Identificação **V7** e cache atualizado sem apagar IndexedDB nem os WAVs.
 
-## Sessão, armazenamento e backup
+## Mantido
 
-- Login Netlify Identity com sessão persistente gerenciada pelo SDK, sem exigir novo e-mail a cada abertura normal. Sessões podem expirar ou exigir novo login após logout.
-- Mesmo armazenamento no Netlify Blobs da V4: `loops-v3-songs`, `loops-v3-wavs` e `loops-v3-history`, segregado pelo ID do usuário da Identity. O backend só permite acessar os dados do usuário autenticado.
-- Salvamento local imediato e sincronização com Netlify quando conectado. No celular, baixar os áudios antes de tocar offline. O backup ZIP mantém as funcionalidades da V4.
-- Se algum conteúdo foi armazenado usando a conta personalizada da V5, ele não aparece automaticamente na conta Identity; será preciso fazer backup/importação conforme necessário.
+- Mesmo site Netlify e mesmo repositório GitHub.
+- Mesmos bancos Netlify Blobs: `loops-v3-songs`, `loops-v3-wavs`, `loops-v3-history`.
+- Mesmo armazenamento local `loops-marks-data` por conta; mantém seus dados da V4/V6.
+- Motor da V4/V6: loop com crash apenas na entrada, loop contínuo, viradas adaptativas, manuais, transições e acabamentos.
+- Backups ZIP, download offline, sincronização e player do modo ao vivo.
 
-## Observações e testes
+## Publicação
 
-- Na recuperação, V6 prioriza o link recebido por e-mail mesmo quando já existe sessão. Se o link for inválido/expirado, mostra um aviso e não ignora o erro abrindo diretamente a Central. Também evita deixar um token de recuperação processado na barra de endereço.
-- Evite pedir dezenas de links sucessivos, pois o provedor pode aplicar limites de envio.
-- Depois de publicar, confira: rótulo **V6** no endereço principal; convite; reset de senha; login; salvamento Netlify; backup; download offline; e viradas no iPhone em modo avião.
-- Verificação local `npm test` e checagens sintáticas executadas. **O login com um token real do Netlify e a reprodução no iPhone exigem teste na publicação**.
-- Os arquivos de `dist/netlify-client.js` servem como placeholder e são gerados durante `npm run build`; não publique apenas a pasta `dist` pelo Drop.
+1. Guarde a V6 e seus backups. Extraia o ZIP e envie o conteúdo para a raiz do mesmo repositório `LoopsMarksPro`.
+2. Mantenha no Netlify: Base directory **vazio**; build `npm run build`; publish `dist`; functions `netlify/functions`.
+3. Identity habilitado e cadastro preferencialmente por convite. Não precisa das variáveis de senha da V5 (`LOOPS_ADMIN_*`, `LOOPS_SESSION_SECRET`).
+4. Links de convite ou recuperação **abrem o endereço principal**, não necessariamente um Permalink. Promova o deploy V7 já pronto e confirme **V7** na tela antes de pedir outro e-mail.
+5. Se estiver com limite do Identity por muitas tentativas, o aplicativo não consegue liberar o bloqueio. Não repita pedidos; aguarde o próprio Netlify permitir novos envios.
+6. Teste primeiro login e sessão, depois a gravação e sincronização de uma música pequena, o backup e, finalmente, WAVs reais em modo avião no iPhone.
+
+## Segurança e limitações
+
+A função `loops-session` retorna só ID/e-mail da conta autenticada e não modifica dados. A função `loops-api` continua verificando o Identity em cada operação e isolando registros pelo ID. Outros usuários convidados ao mesmo Identity podem usar suas próprias bibliotecas, mas **não** os áudios de outras contas.
+
+**Esta versão tem testes automatizados locais; a validação com convites e recuperação reais do Netlify, a compilação npm e o teste do player no celular precisam ocorrer na publicação.** O limite de e-mails é uma restrição do próprio Netlify, não é eliminado pelo código.

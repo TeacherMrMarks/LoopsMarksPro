@@ -2,6 +2,8 @@
 export async function login(){throw new Error('Execute npm run build e publique via GitHub/Netlify.');}
 export async function logout(){}
 export async function getUser(){return null;}
+export async function getSettings(){throw new Error('Publique via GitHub para ativar o Netlify Identity.');}
+export async function refreshSession(){return null;}
 export async function handleAuthCallback(){}
 export async function acceptInvite(){throw new Error('Publique via GitHub para ativar o Netlify Identity.');}
 export async function updateUser(){throw new Error('Publique via GitHub para ativar o Netlify Identity.');}

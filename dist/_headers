@@ -14,3 +14,6 @@
   Cache-Control: no-cache, must-revalidate
 /data.js
   Cache-Control: no-cache, must-revalidate
+
+/.netlify/functions/loops-session
+  Cache-Control: private, no-store

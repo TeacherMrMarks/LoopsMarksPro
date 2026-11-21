@@ -86,3 +86,19 @@ test('Upload saves WAV chunks and validated manifest before song sync',async()=>
     assert.equal(forbidden.status,403);
   }finally{globalThis.fetch=native;}
 });
+
+
+test('V7 session endpoint rejects anonymous requests and exposes only verified account identity', async () => {
+  const source = await readFile(new URL('../netlify/functions/loops-session.mjs',import.meta.url),'utf8');
+  const module = await import('data:text/javascript;charset=utf-8,' + encodeURIComponent(
+    source.replace("import {getUser} from '@netlify/identity';",
+      'const getUser=globalThis.__netlifyIdentity.getUser;')));
+  loggedIn=false;
+  assert.equal((await module.default(new Request('https://loops.test/.netlify/functions/loops-session'))).status,401);
+  loggedIn=true;
+  const response=await module.default(new Request('https://loops.test/.netlify/functions/loops-session'));
+  assert.equal(response.status,200);
+  assert.deepEqual(Object.keys(await response.json()),['user']);
+  const invalidMethod=await module.default(new Request('https://loops.test/.netlify/functions/loops-session',{method:'POST'}));
+  assert.equal(invalidMethod.status,405);
+});

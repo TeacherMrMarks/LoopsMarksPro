@@ -4,7 +4,7 @@ import { Player, bpmRange } from './audio.js';
 import { exampleSongs } from './demo.js';
 import { makeBackup, restoreBackup, triggerDownload } from './backup.js';
 
-const APP_VERSION = 'V6';
+const APP_VERSION = 'V7';
 const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#dialog');
@@ -120,10 +120,14 @@ function loginView() {
     '<button class="button primary" type="submit">' + icon('user') + 'Entrar</button>' +
     '<p class="error" id="login-error" role="alert">' + escape(cloud.authError) + '</p></form>' +
     '<details class="recovery-help"><summary>Esqueci minha senha</summary>' +
-    '<p>O e-mail do Netlify abrirá o endereço principal deste projeto. Para criar ou redefinir a senha, esse endereço precisa estar rodando a V6.</p>' +
+    '<p>O link do Netlify abre o endereço principal do projeto. Para criar ou redefinir sua senha, confirme que ele exibe V7. Não solicite vários e-mails seguidos.</p>' +
     '<form id="request-recovery-form"><label class="field"><span>E-mail da conta</span><input type="email" name="email" required autocomplete="email"></label>' +
     '<button class="button ghost" type="submit">Enviar link de recuperação</button>' +
     '<p id="recovery-message" role="status"></p></form></details>' +
+    '<details class="recovery-help"><summary>Verificar configuração de acesso</summary>' +
+    '<p>Diagnóstico sem enviar e-mail de recuperação e sem alterar sua senha.</p>' +
+    button('auth-check', 'Verificar Identity', 'refresh', 'ghost') +
+    '<p id="auth-check-message" role="status"></p></details>' +
     '<div class="login-footer">Loops Marks Pro ' + APP_VERSION + '</div>' +
     '</section></main>';
 }
@@ -1028,6 +1032,15 @@ function batchPreview(source) {
 
 async function handleAction(element) {
   const { action, id, part } = element.dataset;
+  if (action === 'auth-check') {
+    element.disabled=true;
+    const result=get('#auth-check-message');
+    if(result) result.textContent='Verificando…';
+    try {const status=await cloud.diagnoseIdentity();if(result) result.textContent=status;}
+    catch {if(result) result.textContent='Não foi possível verificar a conexão com o Netlify.';}
+    finally {element.disabled=false;}
+    return;
+  }
   if (action === 'live' || action === 'admin') { await changeView(action); return; }
   if (action === 'link') { await copyMobile(); return; }
   if (action === 'backup') { await openBackupCenter(); return; }
@@ -1245,7 +1258,8 @@ app.addEventListener('submit', async event => {
       else await cloud.finishRecovery(password);
       output.textContent = '';
       await boot();
-      notice('Senha configurada. Bem-vindo ao Loops Marks Pro.');
+      notice(cloud.session() ? 'Senha configurada. Bem-vindo ao Loops Marks Pro.' :
+        'Senha alterada. Entre com seu e-mail e a nova senha.');
     } catch (error) {
       output.textContent = error.message || 'Não foi possível concluir. Solicite outro link.';
     } finally { submit.disabled = false; }
@@ -1263,8 +1277,7 @@ app.addEventListener('submit', async event => {
     await boot();
   } catch (error) {
     const errorOutput = get('#login-error');
-    const message = error.code === 400 || error.code === 401
-      ? 'E-mail ou senha incorretos. Confira os dados e tente novamente.' : (error.message || 'Falha de autenticação. Ative Netlify Identity no painel do projeto.');
+    const message = error.message || 'Não foi possível confirmar seu login no Netlify Identity.';
     if (errorOutput) errorOutput.textContent = message;
     else notice(message);
   } finally { submit.disabled = false; }
