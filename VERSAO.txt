@@ -1,1 +1,1 @@
-Loops Marks Pro V7 — Netlify Identity com verificação de sessão no servidor
+Loops Marks Pro V8 — correção de repertório ao vivo, mantendo Identity e nuvem.

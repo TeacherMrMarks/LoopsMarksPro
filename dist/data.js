@@ -29,6 +29,14 @@ export const PARTS = [
   { id: 'outro', label: 'Final', icon: 'flag', type: 'uma vez', group: 'finais' },
 ];
 export const PLAY_PARTS = PARTS.filter(part => part.group === 'loops' && part.id !== 'intro');
+// O repertório inclui todos os cadastros, mesmo os que ainda estão recebendo WAVs.
+// O primeiro loop disponível inicia o player: a Parte A não é obrigatória.
+export function firstPlayablePart(song) {
+  return PLAY_PARTS.find(part => Boolean(song?.parts?.[part.id]))?.id || null;
+}
+export function liveCatalog(rows) {
+  return rows.filter(song => song && !song.deleted);
+}
 export const MANUAL_PARTS = PARTS.filter(part => part.group === 'manuais');
 export const FINALES = PARTS.filter(part => part.group === 'finais');
 export const FILL_IDS = new Set(PARTS.filter(part => part.type === 'virada').map(part => part.id));

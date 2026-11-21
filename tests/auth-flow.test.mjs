@@ -95,14 +95,14 @@ test('invalid recovery link does not silently open the usual application', async
   }
 });
 
-test('V7 version marker is present on login and account UI', () => {
+test('V8 version marker is present on login and account UI', () => {
   const app = readFileSync(new URL('../dist/app.js', import.meta.url),'utf8');
   const html = readFileSync(new URL('../dist/index.html', import.meta.url),'utf8');
-  assert.match(app,/const APP_VERSION = 'V7'/);
+  assert.match(app,/const APP_VERSION = 'V8'/);
   assert.match(app,/class=\"login-footer\"/);
   assert.match(app,/version-on-mobile/);
   assert.match(app,/session-line/);
-  assert.match(html,/V7/);
+  assert.match(html,/V8/);
 });
 
 test('service worker checks the network first and retains offline fallback', () => {

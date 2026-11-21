@@ -1,4 +1,4 @@
-import { PARTS, DEFAULT_FILLS, FILL_IDS, ENTRY_OF, BASE_OF_ENTRY, fillBase, fillVariantId } from './data.js';
+import { PARTS, DEFAULT_FILLS, FILL_IDS, ENTRY_OF, BASE_OF_ENTRY, fillBase, fillVariantId, firstPlayablePart } from './data.js';
 import { demoBuffer } from './demo.js';
 
 const LOOPS = new Set(Object.keys(ENTRY_OF));
@@ -121,7 +121,8 @@ export class Player {
       const buffer = adjusted.length >= frames ? adjusted : this.copyWithPadding(adjusted, frames);
       buffers.set(key, { buffer, seconds: ENDINGS.has(key) ? buffer.duration : target, beats });
     }
-    if (!buffers.has('a')) throw new Error('Cadastre o WAV contínuo da Parte A para tocar.');
+    this.initialPart = firstPlayablePart(song);
+    if (!this.initialPart || !buffers.has(this.initialPart)) throw new Error('Cadastre ao menos um WAV contínuo para tocar.');
     this.song = song;
     this.bpm = bpm;
     this.beatSeconds = 60 / bpm;
@@ -227,7 +228,7 @@ export class Player {
     if (this.buffers.has('intro')) {
       const intro = this.segment('intro', this.epoch);
       this.introduction(intro);
-    } else this.scheduleDestination('a', this.epoch);
+    } else this.scheduleDestination(this.initialPart || 'a', this.epoch);
   }
   introduction(intro) {
     const fill = this.buffers.has('fillIntro') ? 'fillIntro' : null;
@@ -236,11 +237,11 @@ export class Player {
       if (start > intro.at + EPS) { this.silence(intro, start); this.segment(fill, start); }
       else {
         this.segment(fill, intro.end);
-        this.scheduleDestination('a', intro.end + this.buffers.get(fill).seconds);
+        this.scheduleDestination(this.initialPart || 'a', intro.end + this.buffers.get(fill).seconds);
         return;
       }
     }
-    this.scheduleDestination('a', intro.naturalEnd);
+    this.scheduleDestination(this.initialPart || 'a', intro.naturalEnd);
   }
   current(now = this.ctx.currentTime) {
     return this.segments.findLast(s => s.at <= now && s.end > now) || null;
@@ -250,7 +251,7 @@ export class Player {
     const key = this.baseFor(active?.key);
     if (LOOPS.has(key)) return key;
     if (active?.key === 'intro') return 'intro';
-    return this.pending?.dest || this.baseFor(this.segments.findLast(s => LOOPS.has(this.baseFor(s.key)))?.key) || 'a';
+    return this.pending?.dest || this.baseFor(this.segments.findLast(s => LOOPS.has(this.baseFor(s.key)))?.key) || this.initialPart || 'a';
   }
   autoFill(from, dest) {
     const setting = this.song.transitions?.[from + '>' + dest];
@@ -304,8 +305,8 @@ export class Player {
       this.silence(fromSegment, changeAt);
       // Mantém a continuidade da Parte A quando o arquivo de introdução terminar antes da troca.
       if (Number.isFinite(fromSegment.naturalEnd) && fromSegment.naturalEnd < changeAt - EPS &&
-          !ENDINGS.has(fromSegment.key) && this.buffers.has('a')) {
-        const bridge = this.segment('a', fromSegment.naturalEnd);
+          !ENDINGS.has(fromSegment.key) && this.buffers.has(this.initialPart || 'a')) {
+        const bridge = this.segment(this.initialPart || 'a', fromSegment.naturalEnd);
         this.silence(bridge, changeAt);
       }
     }
@@ -321,7 +322,7 @@ export class Player {
   fill(key) {
     if (!this.running || !this.isFill(key) || !this.fillExists(fillBase(key))) return false;
     const dest = this.pending?.dest && this.pending.changeAt > this.ctx.currentTime + LEAD
-      ? this.pending.dest : (LOOPS.has(this.fromKey()) ? this.fromKey() : 'a');
+      ? this.pending.dest : (LOOPS.has(this.fromKey()) ? this.fromKey() : (this.initialPart || 'a'));
     return this.request(dest, fillBase(key));
   }
   cancel() {

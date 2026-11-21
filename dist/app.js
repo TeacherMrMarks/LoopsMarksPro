@@ -1,10 +1,10 @@
-import { Cloud, Repository, PARTS, PLAY_PARTS, MANUAL_PARTS, FINALES, newSong, MAX_FILE_BYTES, fillBase, fillVariantId } from './data.js';
+import { Cloud, Repository, PARTS, PLAY_PARTS, MANUAL_PARTS, FINALES, newSong, MAX_FILE_BYTES, fillBase, fillVariantId, firstPlayablePart, liveCatalog } from './data.js';
 import { suggestSlot } from './importer.js';
 import { Player, bpmRange } from './audio.js';
 import { exampleSongs } from './demo.js';
 import { makeBackup, restoreBackup, triggerDownload } from './backup.js';
 
-const APP_VERSION = 'V7';
+const APP_VERSION = 'V8';
 const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#dialog');
@@ -158,9 +158,10 @@ function authLinkErrorView() {
 }
 
 function songsFor(view) {
-  const rows = state.songs.filter(row => !row.deleted);
-  if (view === 'admin') return rows;
-  return rows.filter(song => song.name && song.parts?.a).concat(cloud.enabled ? [] : exampleSongs);
+  // A música deve aparecer no Modo Live assim que o cadastro é salvo.
+  // Faltando um loop contínuo, ela fica visível com orientação em vez de sumir.
+  const rows = liveCatalog(state.songs);
+  return view === 'admin' ? rows : rows.concat(cloud.enabled ? [] : exampleSongs);
 }
 
 function library(view) {
@@ -181,8 +182,12 @@ function liveView() {
 
 function deck() {
   const song = state.selected;
-  if (!song) return '<div class="frame blank"><h2>Seu repertório começa aqui</h2><p>Cadastre uma música com o WAV da Parte A para tocar.</p>' +
+  if (!song) return '<div class="frame blank"><h2>Seu repertório começa aqui</h2><p>Cadastre uma música na Central Administrativa.</p>' +
     button('admin', 'Abrir central', 'grid', 'primary') + '</div>';
+  const openingPart = firstPlayablePart(song);
+  if (!openingPart) return '<div class="frame blank"><h2>' + escape(song.name || 'Música sem título') +
+    '</h2><p>Cadastro encontrado. Para reproduzir, importe pelo menos um WAV no campo <strong>Loop contínuo</strong> (Parte A, Refrão ou outra parte). Entradas com prato e viradas não substituem o loop contínuo.</p>' +
+    button('admin', 'Completar cadastro', 'grid', 'primary') + '</div>';
   const parts = PLAY_PARTS.filter(part => song.parts?.[part.id]);
   const manual = MANUAL_PARTS.filter(part => Object.keys(song.parts || {}).some(id => fillBase(id) === part.id));
   const endings = FINALES.filter(part => song.parts?.[part.id]);
@@ -190,7 +195,7 @@ function deck() {
     (song.occasion ? escape(song.occasion) + ' · ' : '') + escape(song.bpm) + ' BPM original · ' + escape(song.beats) +
     ' tempos</p></div><span class="chip" id="player-chip"></span></div>' +
     '<div class="wave-box"><canvas id="waveform" role="img" aria-label="Forma de onda da parte atual"></canvas><div>' +
-    '<span id="wave-caption">Parte A</span><span id="wave-caption-right">Compasso</span></div></div>' +
+    '<span id="wave-caption">' + escape(PLAY_PARTS.find(part => part.id === openingPart)?.label || 'Loop') + '</span><span id="wave-caption-right">Compasso</span></div></div>' +
     '<div class="transport"><div class="tempo">' + iconButton('slower', 'Diminuir BPM', 'minus', 'id="slower"') +
     '<div class="bpm-center"><strong id="bpm">' + escape(state.bpm) + '</strong><small>BPM</small></div>' +
     iconButton('faster', 'Aumentar BPM', 'plus', 'id="faster"') + '</div><div class="transport-actions">' +
@@ -344,7 +349,7 @@ function editor() {
     '</div>' + button('add-custom', 'Adicionar virada específica', 'plus', 'ghost') + '</details>' +
     editorSection(song, 'finais', 'Acabamento e final', 'Arquivos de encerramento de execução única, inclusive cauda do prato.') +
     transitionEditor(song) +
-    '<div class="footer-actions"><small class="subtle">Para tocar, cadastre pelo menos o WAV contínuo da Parte A. Depois sincronize e baixe no celular. As entradas com crash são opcionais.</small>' +
+    '<div class="footer-actions"><small class="subtle">O cadastro aparece no Modo Live automaticamente. Para tocar, importe ao menos um loop contínuo (Parte A, Refrão ou outra parte). Depois sincronize e baixe no celular.</small>' +
     button('link', 'Gerar link do aplicativo', 'link', 'ghost') + '</div>';
 }
 
@@ -393,10 +398,11 @@ function updateLibrary() {
   const visible = rows.filter(song => normalized(song.name + ' ' + song.occasion).includes(search));
   container.innerHTML = visible.map(song => {
     const downloaded = song.demo || state.offline.has(song.id);
+    const status = firstPlayablePart(song) ? '' : ' · Falta loop contínuo';
     return '<button type="button" class="item" data-action="song" data-id="' + escape(song.id) + '" aria-pressed="' +
       (song.id === selected) + '"><span class="item-icon">' + icon('music') + '</span><span><span class="item-title">' +
       escape(song.name || 'Sem título') + '</span><span class="item-meta">' + escape(song.occasion || 'Rascunho') + ' · ' +
-      escape(song.bpm) + ' BPM</span></span>' + (downloaded && view === 'live' ? icon('check') : '') + '</button>';
+      escape(song.bpm) + ' BPM' + escape(view === 'live' ? status : '') + '</span></span>' + (downloaded && view === 'live' ? icon('check') : '') + '</button>';
   }).join('') || '<p class="empty-list">' + (search ? 'Nenhuma música encontrada.' : 'Nenhuma música cadastrada.') + '</p>';
 }
 
@@ -636,6 +642,12 @@ function latestSelected() {
 async function prepareLive() {
   const shown = state.selected;
   if (!shown || state.view !== 'live') return;
+  if (!firstPlayablePart(shown)) {
+    player.cancelPreparation();
+    state.preparation = 'Importe um loop contínuo para tocar.';
+    updatePlayback(true);
+    return;
+  }
   const current = repo;
   const generation = ++currentGeneration;
   state.preparation = 'Preparando áudio…';
@@ -651,7 +663,7 @@ async function prepareLive() {
     const ready = await player.prepare(shown, state.bpm, path => current.audio(path));
     if (!ready || generation !== currentGeneration) return;
     player.volume(state.volume);
-    computePeaks('a');
+    computePeaks(player.initialPart || 'a');
     state.preparation = '';
   } catch (error) {
     if (generation !== currentGeneration) return;
@@ -769,8 +781,8 @@ function updatePlayback(force = false) {
     }
     const cancel = get('#cancel-btn');
     if (cancel) { cancel.hidden = !playing.canCancel; cancel.disabled = !playing.canCancel; }
-    get('#wave-caption').textContent = playing.active ? player.label(playing.active) + (playing.entryAttack ? ' · Crash' : '') : 'Parte A';
-    if (previous.active !== playing.active && player.ready) computePeaks(playing.active || 'a');
+    get('#wave-caption').textContent = playing.active ? player.label(playing.active) + (playing.entryAttack ? ' · Crash' : '') : player.label(player.initialPart || 'a');
+    if (previous.active !== playing.active && player.ready) computePeaks(playing.active || player.initialPart || 'a');
     updateDownload();
   }
   const modeLabel = get('#fill-mode span');
