@@ -1,1 +1,2 @@
-Loops Marks Pro V8 — correção de repertório ao vivo, mantendo Identity e nuvem.
+LOOPS MARKS PRO — V9
+Correção: Modo Live, áudio na nuvem, prévia WAV, link do músico.

@@ -4,7 +4,9 @@ import { Player, bpmRange } from './audio.js';
 import { exampleSongs } from './demo.js';
 import { makeBackup, restoreBackup, triggerDownload } from './backup.js';
 
-const APP_VERSION = 'V8';
+const APP_VERSION = 'V9';
+// O link do músico carrega exclusivamente o Modo Live.
+const musicianLink = new URL(location.href).searchParams.get('modo') === 'musico';
 const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#dialog');
@@ -47,7 +49,7 @@ const get = name => app.querySelector(name);
 const label = key => PARTS.find(item => item.id === fillBase(key))?.label || state.admin?.customFills?.find(item => item.id === fillBase(key))?.label || key;
 const idle = { running: false, beat: -1 };
 const state = {
-  view: new URL(location.href).searchParams.get('modo') === 'central' ? 'admin' : 'live',
+  view: !musicianLink && new URL(location.href).searchParams.get('modo') === 'central' ? 'admin' : 'live',
   songs: [], offline: new Map(), selected: null, admin: null, bpm: 0, volume: 0.82,
   preparation: '', syncLabel: '', errors: '', searchLive: '', searchAdmin: '',
   selectedSignature: '', info: idle, download: '', capture: null,
@@ -68,6 +70,9 @@ let currentGeneration = 0;
 let draftWrites = Promise.resolve();
 let writesPending = 0;
 let batchFiles = [];
+let previewContext = null;
+let previewSound = null;
+let previewToken = 0;
 const ownEdits = new Map();
 
 function brand(extra = '') {
@@ -97,9 +102,9 @@ function shell() {
   const user = cloud.session()?.email || 'Conta não conectada';
   const [status, statusIcon] = statusText();
   const locker = cloud.enabled ? button('logout', '', 'exit', 'mobile-only ghost', 'aria-label="Sair"') : '';
-  return '<div class="shell"><aside class="sidebar">' + brand() + '<nav aria-label="Seções">' +
+  return '<div class="shell' + (musicianLink ? ' musician-shell' : '') + '"><aside class="sidebar">' + brand() + '<nav aria-label="Seções">' +
     '<button class="nav-link" data-action="live" ' + (live ? 'aria-current="page"' : '') + '>' + icon('current') + 'Modo ao vivo</button>' +
-    '<button class="nav-link" data-action="admin" ' + (!live ? 'aria-current="page"' : '') + '>' + icon('grid') + 'Central de loops</button>' +
+    (musicianLink ? '' : '<button class="nav-link" data-action="admin" ' + (!live ? 'aria-current="page"' : '') + '>' + icon('grid') + 'Central de loops</button>') +
     '</nav><div class="sidebar-foot">' +
     (cloud.enabled ? '<button class="nav-link" data-action="logout">' + icon('exit') + 'Sair da conta</button>' : '') +
     '<div class="session-line">' + icon('user') + '<span class="account-name" title="' + escape(user) + '">' + escape(user) + '</span>' + versionTag() + '</div></div></aside>' +
@@ -107,20 +112,20 @@ function shell() {
     '<div class="breadcrumb">' + icon(live ? 'current' : 'grid') + '<span>' + (live ? 'Modo ao vivo' : 'Central de loops') + '</span></div>' +
     '<div class="top-actions"><span class="sync' + (state.errors ? ' warn' : '') + '" id="sync-label">' +
     icon(statusIcon) + '<span>' + escape(status) + '</span></span>' +
-    button('link', 'Gerar link do app', 'device', 'ghost') + iconButton(live ? 'admin' : 'live',
-      live ? 'Central de loops' : 'Modo ao vivo', live ? 'grid' : 'current', 'data-mobile-toggle') +
+    (musicianLink ? '' : button('link', 'Gerar link do app', 'device', 'ghost') + iconButton(live ? 'admin' : 'live',
+      live ? 'Central de loops' : 'Modo ao vivo', live ? 'grid' : 'current', 'data-mobile-toggle')) +
     '<span class="version-on-mobile">' + versionTag() + '</span>' + locker + '</div></header><main class="main">' + (live ? liveView() : adminView()) + '</main></div></div>';
 }
 
 function loginView() {
   return '<main class="login"><section class="frame login-card">' + brand() +
-    '<h1>Entrar na central</h1><p>Acesse com o e-mail convidado no Netlify Identity. No primeiro acesso, abra o convite para criar sua senha.</p>' +
+    '<h1>' + (musicianLink ? 'Entrar no Modo Live' : 'Entrar na central') + '</h1><p>Acesse com o e-mail convidado no Netlify Identity. No primeiro acesso, abra o convite para criar sua senha.</p>' +
     '<form id="login-form"><label class="field"><span>E-mail</span><input type="email" name="email" required autocomplete="username"></label>' +
     '<label class="field"><span>Senha</span><input type="password" name="password" required autocomplete="current-password"></label>' +
     '<button class="button primary" type="submit">' + icon('user') + 'Entrar</button>' +
     '<p class="error" id="login-error" role="alert">' + escape(cloud.authError) + '</p></form>' +
     '<details class="recovery-help"><summary>Esqueci minha senha</summary>' +
-    '<p>O link do Netlify abre o endereço principal do projeto. Para criar ou redefinir sua senha, confirme que ele exibe V7. Não solicite vários e-mails seguidos.</p>' +
+    '<p>O link do Netlify abre o endereço principal do projeto. Para criar ou redefinir sua senha, confirme que ele exibe V9. Não solicite vários e-mails seguidos.</p>' +
     '<form id="request-recovery-form"><label class="field"><span>E-mail da conta</span><input type="email" name="email" required autocomplete="email"></label>' +
     '<button class="button ghost" type="submit">Enviar link de recuperação</button>' +
     '<p id="recovery-message" role="status"></p></form></details>' +
@@ -182,12 +187,13 @@ function liveView() {
 
 function deck() {
   const song = state.selected;
-  if (!song) return '<div class="frame blank"><h2>Seu repertório começa aqui</h2><p>Cadastre uma música na Central Administrativa.</p>' +
-    button('admin', 'Abrir central', 'grid', 'primary') + '</div>';
+  if (!song) return '<div class="frame blank"><h2>Seu repertório começa aqui</h2><p>' +
+    (musicianLink ? 'Nenhuma música sincronizada nesta conta. Cadastre e sincronize o repertório pelo computador.' : 'Cadastre uma música na Central Administrativa.') + '</p>' +
+    (musicianLink ? '' : button('admin', 'Abrir central', 'grid', 'primary')) + '</div>';
   const openingPart = firstPlayablePart(song);
   if (!openingPart) return '<div class="frame blank"><h2>' + escape(song.name || 'Música sem título') +
     '</h2><p>Cadastro encontrado. Para reproduzir, importe pelo menos um WAV no campo <strong>Loop contínuo</strong> (Parte A, Refrão ou outra parte). Entradas com prato e viradas não substituem o loop contínuo.</p>' +
-    button('admin', 'Completar cadastro', 'grid', 'primary') + '</div>';
+    (musicianLink ? '' : button('admin', 'Completar cadastro', 'grid', 'primary')) + '</div>';
   const parts = PLAY_PARTS.filter(part => song.parts?.[part.id]);
   const manual = MANUAL_PARTS.filter(part => Object.keys(song.parts || {}).some(id => fillBase(id) === part.id));
   const endings = FINALES.filter(part => song.parts?.[part.id]);
@@ -367,6 +373,7 @@ function fileRow(part, audio, song = state.admin) {
       'data-unit="' + (filling ? 'beats' : 'bars') + '" aria-label="' + unit + ' de ' + escape(part.label) + '" value="' + escape(count) + '" ' +
       (audio && !variant ? '' : 'disabled') + '><span>' + unit + '</span></label>') +
     '<input type="file" accept=".wav,audio/wav,audio/x-wav" data-file="' + escape(part.id) + '" hidden>' +
+    button('preview', 'Ouvir', 'play', 'ghost audio-preview', 'data-part="' + escape(part.id) + '" aria-label="Ouvir ' + escape(part.label) + '" ' + (audio ? '' : 'disabled')) +
     button('browse', audio ? 'Trocar' : 'Importar', audio ? 'refresh' : 'plus', 'ghost',
       'data-part="' + escape(part.id) + '" aria-label="Importar WAV de ' + escape(part.label) + '"') +
     iconButton('remove-file', 'Remover WAV de ' + escape(part.label), 'trash', 'data-part="' + escape(part.id) + '" ' +
@@ -374,6 +381,7 @@ function fileRow(part, audio, song = state.admin) {
 }
 
 function render() {
+  if (musicianLink) state.view = 'live';
   if (cloud.enabled && cloud.authFlow?.type === 'invalid') { app.innerHTML = authLinkErrorView(); return; }
   if (cloud.enabled && cloud.authFlow) { app.innerHTML = passwordView(); return; }
   if (cloud.enabled && !cloud.session()) { app.innerHTML = loginView(); return; }
@@ -397,7 +405,8 @@ function updateLibrary() {
   get('#song-count').textContent = rows.length;
   const visible = rows.filter(song => normalized(song.name + ' ' + song.occasion).includes(search));
   container.innerHTML = visible.map(song => {
-    const downloaded = song.demo || state.offline.has(song.id);
+    const offlineRecord = state.offline.get(song.id);
+    const downloaded = song.demo || (offlineRecord && sortedSignature(offlineRecord) === sortedSignature(song));
     const status = firstPlayablePart(song) ? '' : ' · Falta loop contínuo';
     return '<button type="button" class="item" data-action="song" data-id="' + escape(song.id) + '" aria-pressed="' +
       (song.id === selected) + '"><span class="item-icon">' + icon('music') + '</span><span><span class="item-title">' +
@@ -443,20 +452,30 @@ function confirmChoice(title, description, ok) {
 
 async function copyMobile() {
   const url = new URL(location.href);
-  url.search = '?modo=ao-vivo';
+  // Link estável e exclusivo da interface do músico; sem menus de cadastro.
+  url.search = '?modo=musico';
   url.hash = '';
   const published = !['localhost', '127.0.0.1', '0.0.0.0'].includes(url.hostname) && url.protocol === 'https:';
-  dialog.innerHTML = '<h2>Link do aplicativo · Modo Live</h2>' +
-    '<p>Abra no celular, entre com a mesma conta e baixe os loops. No iPhone, use Safari → Compartilhar → Adicionar à Tela de Início.</p>' +
+  dialog.innerHTML = '<h2>Link do músico · Só Modo Live</h2>' +
+    '<p>Abre somente o repertório e o player, sem Central Administrativa ou edição. Entre na conta autorizada e deixe os WAVs baixados. No iPhone: Safari → Compartilhar → Adicionar à Tela de Início.</p>' +
     (published ? '' : '<p class="warning">Este é um endereço de teste local. Publique no Netlify antes de usar o link em outro aparelho.</p>') +
     '<label class="field"><span>Endereço de acesso</span><input readonly value="' + escape(url.href) + '"></label>' +
     '<div class="batch-footer" style="margin-top:14px">' + button('copy', 'Copiar link', 'link', 'primary') +
     button('share', 'Compartilhar', 'share', 'ghost') +
+    '<a class="button ghost" href="' + escape(url.href) + '" target="_blank" rel="noopener noreferrer">Abrir link do músico</a>' +
     '<button class="button ghost" id="close-link">Fechar</button></div>';
   dialog.querySelector('#close-link').addEventListener('click', () => dialog.close());
   dialog.querySelector('[data-action="copy"]').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(url.href); notice('Link do modo Live copiado.'); }
-    catch { dialog.querySelector('input').focus(); dialog.querySelector('input').select(); notice('Selecione e copie o endereço.'); }
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard indisponível');
+      await navigator.clipboard.writeText(url.href);
+      notice('Link do músico copiado.');
+    } catch {
+      const field = dialog.querySelector('input');
+      field.focus(); field.select();
+      try { if (!document.execCommand('copy')) throw new Error('Falha ao copiar'); notice('Link do músico copiado.'); }
+      catch { notice('Selecione e copie o endereço do músico.'); }
+    }
   });
   dialog.querySelector('[data-action="share"]').addEventListener('click', async () => {
     if (navigator.share) {
@@ -469,6 +488,7 @@ async function copyMobile() {
 
 // Central de Backup V3. O backup completo é independente da nuvem: inclui todos os WAVs.
 async function openBackupCenter() {
+  stopPreview();
   if (!repo) return;
   if (player.running) { notice('Pare a reprodução antes de abrir os backups.'); return; }
   await saveBeforeLeaving();
@@ -500,7 +520,7 @@ async function openBackupCenter() {
     message.textContent='Preparando backup…';
     const blob=await makeBackup(repo,mode,(n,total)=>{message.textContent='Incluindo WAV '+n+'/'+total;});
     const stamp=new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
-    triggerDownload(blob,'Loops-Marks-Pro-V3-'+mode+'-'+stamp+'.zip');
+    triggerDownload(blob,'Loops-Marks-Pro-'+APP_VERSION+'-'+mode+'-'+stamp+'.zip');
     message.textContent='Backup criado: '+(blob.size/1024/1024).toFixed(1)+' MB. Guarde este ZIP em local seguro.';
   })));
   dialog.querySelector('#restore-file').addEventListener('change',e=>{
@@ -629,9 +649,8 @@ function selectLive(song) {
 }
 
 async function preferDownloaded(song) {
-  if (!song || song.demo) return song;
-  const saved = state.offline.get(song.id);
-  if (saved && sortedSignature(saved) !== sortedSignature(song) && !await repo.available(song)) return saved;
+  // Não exibir metadados antigos do cache offline: eles escondiam a Parte A recém-salva.
+  // Se faltar WAV, prepareLive busca os arquivos da versão atual na nuvem.
   return song;
 }
 
@@ -653,12 +672,37 @@ async function prepareLive() {
   state.preparation = 'Preparando áudio…';
   updatePlayback(true);
   try {
-    const local = shown.demo || await current.available(shown);
+    let local = shown.demo || await current.available(shown);
     if (generation !== currentGeneration) return;
-    if (!local) {
-      state.preparation = 'Baixe os áudios para tocar.';
+    if (!local && !navigator.onLine) {
+      state.preparation = 'WAV não encontrado neste aparelho. Conecte-se para baixar esta música antes do evento.';
       updatePlayback(true);
       return;
+    }
+    if (!local) {
+      state.preparation = 'Baixando os WAVs que faltam…';
+      state.download = 'Baixando WAVs…';
+      updatePlayback(true);
+      updateDownload();
+      try {
+        await current.download(shown, (count, all) => {
+          if (generation !== currentGeneration) return;
+          state.preparation = 'Baixando WAVs ' + count + '/' + all + '…';
+          state.download = 'Baixando ' + count + '/' + all;
+          updatePlayback(true);
+          updateDownload();
+        });
+      } finally {
+        if (generation === currentGeneration) {
+          state.download = '';
+          updateDownload();
+        }
+      }
+      if (generation !== currentGeneration) return;
+      state.offline.set(shown.id, shown);
+      updateLibrary();
+      local = await current.available(shown);
+      if (!local) throw new Error('Os WAVs não ficaram completos no aparelho. Tente Baixar para offline.');
     }
     const ready = await player.prepare(shown, state.bpm, path => current.audio(path));
     if (!ready || generation !== currentGeneration) return;
@@ -875,7 +919,9 @@ async function saveBeforeLeaving() {
 }
 
 async function changeView(view) {
+  if (musicianLink && view !== 'live') return; // Link do músico nunca mostra a Central de edição.
   if (state.view === view) return;
+  stopPreview();
   if (state.capture || startPending) return;
   if (player.running) {
     if (!await confirmChoice('Parar a reprodução?', 'A música está tocando.', 'Parar e abrir')) return;
@@ -884,7 +930,7 @@ async function changeView(view) {
   await saveBeforeLeaving();
   state.view = view;
   const url = new URL(location.href);
-  url.searchParams.set('modo', view === 'live' ? 'ao-vivo' : 'central');
+  url.searchParams.set('modo', musicianLink ? 'musico' : (view === 'live' ? 'ao-vivo' : 'central'));
   history.replaceState(null, '', url);
   if (view === 'admin' && !state.admin) {
     const first = songsFor('admin')[0];
@@ -992,6 +1038,7 @@ async function saveImported(imports) {
 }
 
 async function importWav(source) {
+  stopPreview();
   const file = source.files?.[0];
   const song = state.admin;
   if (!file || !song) return;
@@ -1042,6 +1089,58 @@ function batchPreview(source) {
   });
 }
 
+function paintPreviewButtons() {
+  for (const button of app.querySelectorAll('[data-action="preview"]')) {
+    const active = previewSound?.part === button.dataset.part;
+    button.innerHTML = icon(active ? 'stop' : 'play') + '<span>' + (active ? 'Parar' : 'Ouvir') + '</span>';
+    button.title = active ? 'Parar prévia' : 'Ouvir este WAV';
+  }
+}
+
+function stopPreview() {
+  previewToken++;
+  if (previewSound) {
+    const sound = previewSound;
+    previewSound = null;
+    sound.source.onended = null;
+    try { sound.source.stop(); } catch {}
+    try { sound.source.disconnect(); sound.gain.disconnect(); } catch {}
+  }
+  paintPreviewButtons();
+}
+
+async function previewWav(part) {
+  const same = previewSound?.part === part;
+  stopPreview();
+  if (same) return;
+  const meta = state.admin?.parts?.[part];
+  if (!meta?.path) { notice('Importe um WAV antes de ouvir.'); return; }
+  const Context = window.AudioContext || window.webkitAudioContext;
+  if (!Context) { notice('Este navegador não permite prévia de áudio.'); return; }
+  previewContext ||= new Context({ latencyHint: 'interactive' });
+  // resume é chamado a partir do toque do usuário para funcionar no iPhone.
+  const resume = previewContext.resume();
+  const ticket = ++previewToken;
+  notice('Preparando prévia do WAV…');
+  await resume;
+  let blob = await repo.audio(meta.path);
+  if (!blob && navigator.onLine && cloud.session()) blob = await cloud.audio(meta.path);
+  if (ticket !== previewToken) return;
+  if (!blob) throw new Error('WAV ainda não disponível. Confira o salvamento na nuvem.');
+  const buffer = await previewContext.decodeAudioData(await blob.arrayBuffer());
+  if (ticket !== previewToken) return;
+  const source = previewContext.createBufferSource();
+  const gain = previewContext.createGain();
+  gain.gain.value = 0.85;
+  source.buffer = buffer;
+  source.connect(gain).connect(previewContext.destination);
+  previewSound = {part, source, gain};
+  source.onended = () => { if (previewSound?.source === source) stopPreview(); };
+  source.start();
+  paintPreviewButtons();
+  notice('Ouvindo ' + (slotInfo(state.admin, part)?.label || part) + '…');
+}
+
 async function handleAction(element) {
   const { action, id, part } = element.dataset;
   if (action === 'auth-check') {
@@ -1089,6 +1188,7 @@ async function handleAction(element) {
     return;
   }
   if (action === 'logout') {
+    stopPreview();
     if (state.capture) return;
     if (!await confirmChoice('Sair da conta?', 'Para entrar novamente neste aparelho, use seu e-mail e senha.', 'Sair')) return;
     await saveBeforeLeaving();
@@ -1107,6 +1207,8 @@ async function handleAction(element) {
     return;
   }
   if (state.capture) return;
+  if (action === 'preview') { if (state.view === 'admin') await previewWav(part); return; }
+  if (musicianLink && ['new','browse','remove-file','delete','batch-import','add-custom','remove-custom','add-transition','remove-transition','backup','link'].includes(action)) return;
   if (action === 'song') {
     const song = songsFor(state.view).find(row => row.id === id);
     if (!song) return;
@@ -1161,8 +1263,10 @@ async function handleAction(element) {
     await persistDraft(); render(); return;
   }
   if (action === 'browse') {
+    stopPreview();
     get('[data-file="' + part + '"]').click();
   } else if (action === 'remove-file') {
+    stopPreview();
     delete state.admin.parts[part];
     await persistDraft();
     render();

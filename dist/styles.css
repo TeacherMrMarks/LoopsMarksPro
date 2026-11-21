@@ -425,3 +425,17 @@ dialog:has(.batch-list) {width:min(calc(100vw - 28px),660px);}
   .variant-family > div {padding:4px;}
   .mode-toggle {font-size:.68rem;padding:6px;}
 }
+
+/* V9: botão Ouvir separado do seletor de arquivo, sem sacrificar espaço no celular. */
+.file-row { grid-template-columns:24px minmax(0,1fr) 88px auto auto 34px; }
+.file-row .audio-preview { color:#8cf0d1; border-color:#276a62; white-space:nowrap; }
+.file-row .audio-preview:disabled {opacity:.37;}
+.musician-shell .sidebar nav { margin-bottom:auto; }
+.musician-shell .sidebar-foot { margin-top:0; }
+.musician-shell .heading p { margin-top:4px; }
+@media (max-width:650px) {
+ .file-row {grid-template-columns:16px minmax(0,1fr) 44px 33px 33px 29px; gap:4px;}
+ .file-row .audio-preview,.file-row [data-action="browse"] {padding:6px;display:flex;align-items:center;justify-content:center;}
+ .file-row .button svg {width:15px;height:15px;display:block;}
+ .musician-shell .topbar [data-mobile-toggle] {display:none!important;}
+}
