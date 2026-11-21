@@ -1,4 +1,4 @@
-import { Cloud, Repository, PARTS, PLAY_PARTS, MANUAL_PARTS, FINALES, newSong, MAX_FILE_BYTES, fillBase, fillVariantId, firstPlayablePart, liveCatalog, playableParts, extraSections, CRASH_STOPS } from './data.js';
+import { Cloud, Repository, PARTS, PLAY_PARTS, MANUAL_PARTS, FINALES, newSong, MAX_FILE_BYTES, fillBase, fillVariantId, firstPlayablePart, liveCatalog, playableParts, extraSections, CRASH_STOPS, hasAudioPart } from './data.js';
 import { suggestSlot } from './importer.js';
 import { Player, bpmRange } from './audio.js';
 import { METERS, meterOf, meterHint, meterChoice, beatUnitForChoice, countForMeter, classifyDuration, wavMeasure } from './meter.js';
@@ -6,7 +6,7 @@ import { exampleSongs } from './demo.js';
 import { makeBackup, restoreBackup, triggerDownload } from './backup.js';
 import { emptyLibrary, cleanLibrary, songKind, inFolder, repertoireEntries } from './library-model.js';
 
-const APP_VERSION = 'V20';
+const APP_VERSION = 'V21';
 // O link do músico carrega exclusivamente o Modo Live.
 const musicianLink = new URL(location.href).searchParams.get('modo') === 'musico';
 const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
@@ -245,7 +245,7 @@ function deck() {
     (introReady ? 'Introdução musical ('+(song.introMode==='repeat'?'repete até comando':'uma vez')+') → ' : '') + 'Parte escolhida';
   const manual = MANUAL_PARTS.filter(part => Object.keys(song.parts || {}).some(id => fillBase(id) === part.id));
   const endings = FINALES.filter(part => song.parts?.[part.id]);
-  const crashStops = CRASH_STOPS.filter(part => song.parts?.[part.id]);
+  const crashStops = CRASH_STOPS.filter(part => hasAudioPart(song, part.id));
   const activeRep=(state.libraryData.repertoires||[]).find(r=>r.id===state.activeRepId);
   const repEntries=activeRep?repertoireEntries(activeRep,songsFor('live')):[];
   const repNav=repEntries.length?'<div class="live-rep-strip"><span>'+icon('list')+' '+escape(activeRep.name)+' · '+(state.activeRepPos+1)+'/'+repEntries.length+'</span><div>'+iconButton('rep-prev-live','Música anterior','arrowup',''+(state.activeRepPos===0?'disabled':''))+iconButton('rep-next-live','Próxima música','arrowdown',''+(state.activeRepPos===repEntries.length-1?'disabled':''))+'</div></div>':'';
@@ -553,7 +553,7 @@ function editorGroupTab(element) {
   const title=(element.querySelector(':scope > summary strong')?.textContent||'').toLowerCase();
   if(title.includes('loops contínuos')||title.includes('mais partes musicais'))return 'loops';
   if(title.includes('loop + crash')||title.includes('primeira entrada'))return 'loopcrash';
-  if(title==='crash')return 'crash';
+  if(title==='crash' || title==='crashes adicionais')return 'crash';
   if(title.includes('viradas')||title.includes('variações de virada'))return 'viradas';
   if(title.includes('mapa'))return 'mapa';
   if(title.includes('acabamento')||title.includes('final'))return 'finais';

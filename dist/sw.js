@@ -1,4 +1,4 @@
-const VERSION = 'loops-marks-b36f6565f06e';
+const VERSION = 'loops-marks-v21-crash-ui-20261121';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './netlify-client.js', './backup.js', './data.js', './library-model.js',
   './audio.js', './meter.js', './stretch.js', './demo.js', './importer.js', './manifest.webmanifest',

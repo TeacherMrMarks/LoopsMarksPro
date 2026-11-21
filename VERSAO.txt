@@ -1,4 +1,4 @@
-Loops Marks Pro — V20
-Base: V19
-Mudancas: Contagem Live ligada/desligada, escolha de 1 ou 2 compassos, Crash 1/2/3 em sobreposicao ao loop no proximo tempo 1, compatibilidade de pedais e preservacao de dados.
-Status: 105/105 testes automatizados locais aprovados; aguardando compilacao de producao pelo Netlify e testes com WAVs reais.
+Loops Marks Pro — V21
+Base: V20 (mantida intacta)
+Mudancas: aba Crash passa a conter os tres campos de Crashes adicionais; no Modo Live, so aparecem ataques com WAV efetivamente vinculado. Nenhuma mudanca nos identificadores, na sincronizacao ou na execucao do audio.
+Status: 109/109 testes automatizados locais aprovados; a compilacao de producao deve ser validada no Netlify.

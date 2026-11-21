@@ -1,15 +1,15 @@
-Loops Marks Pro V20 — publicacao incremental a partir da V19
+Loops Marks Pro V21 — correcao pontual sobre a V20
 
-1. Faca BACKUP COMPLETO na Central e guarde o ZIP da V19 original.
-2. Extraia todos os arquivos do ZIP V20 na raiz do MESMO repositorio GitHub.
-3. Nao apague seus dados, WAVs, pastas, repertorios nem crie outro site Netlify.
-4. Configuracao mantida: build `npm run build`; publish `dist`; Netlify Functions `netlify/functions`; Node 22.
-5. O ZIP inclui um `dist/netlify-client.js` placeholder: OBRIGATORIO fazer o build do Netlify, que gera o modulo real de Identity/backup. Nao usar deploy estatico direto do dist.
-6. Confira o log de deploy e o Permalink ANTES de publicar como versao oficial.
-7. Modo Live Central e celular: selecione contagem ligada/desligada e 1 ou 2 compassos. Teste WAV de 1 compasso com selecao de 2 e WAV de 2 compassos com selecao de 1.
-8. Parar -> selecionar Parte B ou Refrao -> Iniciar: contagem so entra quando estiver ligada; depois entra automaticamente na parte selecionada.
-9. Durante Parte A ou Refrão, dispare Crash 1/2/3 no meio do compasso: WAV deve comecar no proximo tempo 1, sem cortar o loop, viradas ou cauda do prato.
-10. Confirme que Acabamento e Final continuam encerrando a execucao. Teste pedal com mapeamentos antigos e novos.
-11. Verifique BPM, compassos 3/4 e 6/8, musica e ritmo, repertorios, pedais, sincronizacao e uso offline.
+1. Na Central, faça BACKUP COMPLETO e mantenha o ZIP original da V20 guardado.
+2. Extraia o ZIP da V21 na raiz do MESMO repositorio GitHub que publica no MESMO site Netlify.
+3. Nao apague WAVs, musicas, ritmos, repertorios, pastas, dados ou chaves de acesso.
+4. Mantenha build `npm run build`, publish `dist`, functions `netlify/functions`, Node 22.
+5. O `dist/netlify-client.js` incluido no ZIP e apenas um placeholder; e OBRIGATORIO o build do Netlify antes de testar login. Nao publique o dist de forma isolada.
+6. Abra o Permalink de teste e confira que aparece V21.
+7. Em Central > cadastro de ritmo/musica > aba Crash: devem aparecer Crash 1, 2 e 3 para importar, reutilizar, ouvir, trocar ou remover WAVs.
+8. Com todos os crashes vazios, abra o Modo Live: nao pode aparecer secao de crashes vazia, nem botoes para crash sem WAV.
+9. Cadastre apenas Crash 2: Modo Live deve mostrar SOMENTE Crash 2; remova o WAV de Crash 2 e confirme que o botao desaparece apos atualizar o cadastro.
+10. Com a bateria tocando, confira que o crash registrado toca no proximo tempo 1 sem interromper os loops.
+11. Confira tambem os acessos do celular, crash de pedal, viradas, contagem, introducao, repertorios e backup.
 
-Testes automatizados locais: 105 de 105 passaram. Build local nao concluido por falta de esbuild; precisa ser validado no Netlify.
+Validacao local: 109/109 testes aprovados. Build de producao e teste real dependem do Netlify.

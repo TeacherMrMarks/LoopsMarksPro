@@ -47,6 +47,12 @@ export function liveCatalog(rows) {
 export const MANUAL_PARTS = PARTS.filter(part => part.group === 'manuais');
 export const FINALES = PARTS.filter(part => part.group === 'finais');
 export const CRASH_STOPS = PARTS.filter(part => part.group === 'crashstops');
+// Só habilita controles Live para um WAV realmente associado; áudios de demonstração são gerados em memória.
+export function hasAudioPart(song, id) {
+  const audio = song?.parts?.[id];
+  return Boolean(audio?.path || (song?.demo && audio?.name));
+}
+
 export const FILL_IDS = new Set(PARTS.filter(part => part.type === 'virada').map(part => part.id));
 export const ENTRY_OF = Object.fromEntries(PLAY_PARTS.map(part => [part.id, part.id + 'Entry']));
 export const BASE_OF_ENTRY = Object.fromEntries(Object.entries(ENTRY_OF).map(([base, entry]) => [entry, base]));
