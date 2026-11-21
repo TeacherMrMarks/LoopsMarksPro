@@ -1,11 +1,11 @@
-import { Cloud, Repository, PARTS, PLAY_PARTS, MANUAL_PARTS, FINALES, newSong, MAX_FILE_BYTES, fillBase, fillVariantId, firstPlayablePart, liveCatalog, playableParts, extraSections } from './data.js';
+import { Cloud, Repository, PARTS, PLAY_PARTS, MANUAL_PARTS, FINALES, newSong, MAX_FILE_BYTES, fillBase, fillVariantId, firstPlayablePart, liveCatalog, playableParts, extraSections, CRASH_STOPS } from './data.js';
 import { suggestSlot } from './importer.js';
 import { Player, bpmRange } from './audio.js';
 import { exampleSongs } from './demo.js';
 import { makeBackup, restoreBackup, triggerDownload } from './backup.js';
 import { emptyLibrary, cleanLibrary, songKind, inFolder, repertoireEntries } from './library-model.js';
 
-const APP_VERSION = 'V14';
+const APP_VERSION = 'V15';
 // O link do músico carrega exclusivamente o Modo Live.
 const musicianLink = new URL(location.href).searchParams.get('modo') === 'musico';
 const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
@@ -65,7 +65,7 @@ const state = {
   managementOpen:safeStored('loops-v12-management')!=='closed',
   sidebarCollapsed:safeStored('loops-v12-sidebar')==='collapsed',
   introOpen:safeStored('loops-v12-editor-intro')!=='closed',
-  editorTab:['dados','loops','crash','viradas','mapa','finais'].includes(safeStored('loops-v14-editor-tab'))?safeStored('loops-v14-editor-tab'):'dados',
+  editorTab:(()=>{const remembered=safeStored('loops-v15-editor-tab') || (safeStored('loops-v14-editor-tab')==='crash'?'loopcrash':safeStored('loops-v14-editor-tab'));return ['dados','loops','loopcrash','crash','viradas','mapa','finais'].includes(remembered)?remembered:'dados';})(),
   catalogView:safeStored('loops-v14-catalog-view')==='lista'?'lista':'cards',
   pedalLearn:null,pedalMap:loadPedalMap(),pedalLastAt:0,
 
@@ -120,7 +120,7 @@ function loadPedalMap(){
   }catch{return {};}
 }
 function settingsMenu(user){
-  return '<button class="nav-link v12-settings-btn" data-action="settings" title="Configurações">'+icon('settings')+'<span>Configurações</span></button>';
+  return '<button type="button" class="nav-link v12-settings-btn v15-primary-nav" data-action="settings" title="Configurações">'+icon('settings')+'<span>Configurações</span></button>';
 }
 function adminSidebar() {
   const user=cloud.session()?.email||'Conta não conectada';
@@ -135,8 +135,8 @@ function adminSidebar() {
     '<button type="button" class="nav-link" data-action="show-kind" data-kind="rhythm" title="Ritmos" '+(state.adminKind==='rhythm'&&state.adminPanel==='catalog'?'aria-current="page"':'')+'>'+icon('wave')+'<span>Ritmos</span></button>'+
     '<button type="button" class="nav-link" data-action="show-repertoires" title="Repertórios" '+(state.adminPanel==='repertoires'?'aria-current="page"':'')+'>'+icon('list')+'<span>Repertórios</span></button>'+
     '<button type="button" class="nav-link" data-action="show-folders" title="Gerenciar pastas" '+(state.adminPanel==='folders'?'aria-current="page"':'')+'>'+icon('folder')+'<span>Gerenciar pastas</span></button></div>'+
-    '<div class="sidebar-rule"></div><button class="nav-link" data-action="live" title="Modo ao vivo">'+icon('current')+'<span>Modo ao vivo</span></button></nav>'+
-    '<div class="v12-sidebar-bottom"><button class="nav-link" data-action="sync" title="Estado da sincronização">'+icon(statusIcon)+'<span id="sync-label">'+escape(status)+'</span></button>'+settingsMenu(user)+'</div></aside>';
+    '<div class="sidebar-rule"></div><button class="nav-link v15-primary-nav" data-action="live" title="Modo ao vivo">'+icon('current')+'<span>Modo ao vivo</span></button></nav>'+
+    '<div class="v12-sidebar-bottom">'+settingsMenu(user)+'</div></aside>';
 }
 function shell() {
   const live=state.view==='live';
@@ -238,6 +238,7 @@ function deck() {
   const parts = playableParts(song).filter(part => song.parts?.[part.id]);
   const manual = MANUAL_PARTS.filter(part => Object.keys(song.parts || {}).some(id => fillBase(id) === part.id));
   const endings = FINALES.filter(part => song.parts?.[part.id]);
+  const crashStops = CRASH_STOPS.filter(part => song.parts?.[part.id]);
   const activeRep=(state.libraryData.repertoires||[]).find(r=>r.id===state.activeRepId);
   const repEntries=activeRep?repertoireEntries(activeRep,songsFor('live')):[];
   const repNav=repEntries.length?'<div class="live-rep-strip"><span>'+icon('list')+' '+escape(activeRep.name)+' · '+(state.activeRepPos+1)+'/'+repEntries.length+'</span><div>'+iconButton('rep-prev-live','Música anterior','arrowup',''+(state.activeRepPos===0?'disabled':''))+iconButton('rep-next-live','Próxima música','arrowdown',''+(state.activeRepPos===repEntries.length-1?'disabled':''))+'</div></div>':'';
@@ -270,11 +271,14 @@ function deck() {
     '</div>' + (song.kind!=='rhythm'&&(song.sequence||[]).length ? '<div class="live-map-toolbar"><span id="live-map-status">Mapa musical · '+escape(song.sequenceMode==='automatic'?'Automático':'Assistido')+'</span>'+iconButton('map-previous','Etapa anterior','arrowup')+button('map-next','Próxima parte','arrowdown','ghost')+'</div>':'') + (manual.length ? '<div class="section-head live-subsection"><h2>Viradas manuais</h2><span>Retorna ao loop</span></div>' +
     '<div class="pads manual-pads">' + manual.map(part => '<button type="button" class="pad fill-pad" data-action="fill" data-part="' +
     part.id + '" disabled>' + icon(part.icon) + '<strong>' + escape(part.label) + '</strong><small>Virada avulsa</small></button>').join('') +
-    '</div>' : '') + (endings.length ? '<div class="section-head live-subsection"><h2>Encerramentos</h2><span>Toque uma vez</span></div>' +
+    '</div>' : '') + (crashStops.length ? '<div class="section-head live-subsection"><h2>Crash</h2><span>Bumbo + prato · sem virada</span></div>' +
+    '<div class="pads crash-pads">' + crashStops.map(part => '<button type="button" class="pad crash-stop-pad" data-action="part" data-part="' + part.id + '" disabled>' +
+    icon('spark') + '<strong>' + escape(part.label) + '</strong><small>Parada com cauda do prato</small></button>').join('') + '</div>' : '') +
+    (endings.length ? '<div class="section-head live-subsection"><h2>Encerramentos</h2><span>Toque uma vez</span></div>' +
     '<div class="pads end-pads">' + endings.map(part => '<button type="button" class="pad final ' + (part.id === 'finish' ? 'finish' : '') +
     '" data-action="part" data-part="' + part.id + '" disabled>' + icon(part.icon) + '<strong>' + escape(part.label) +
     '</strong><small>Finaliza a execução</small></button>').join('') + '</div>' : '') +
-    (!manual.length && !endings.length ? '<p class="subtle note">Cadastre viradas e acabamentos na Central Administrativa.</p>' : '') +
+    (!manual.length && !endings.length && !crashStops.length ? '<p class="subtle note">Cadastre viradas, crash e acabamentos na Central Administrativa.</p>' : '') +
     '</section>';
 }
 
@@ -285,7 +289,9 @@ function adminView() {
     'Seu repertório, seus loops e as regras de palco no mesmo lugar.';
   const action=state.adminPanel==='repertoires'?button('new-repertoire','Novo repertório','plus','primary'):
     ['editor','catalog'].includes(state.adminPanel)?button('new',state.adminKind==='rhythm'?'Novo ritmo':'Nova música','plus','primary'):'';
-  return '<div class="v11-heading"><div><h1>'+title+'</h1><p>'+desc+'</p></div><div class="admin-quick-actions">'+action+'</div></div>'+
+  const [syncStatus,syncIcon]=statusText();
+  return '<div class="v11-heading"><div><h1>'+title+'</h1><p>'+desc+'</p></div><div class="admin-quick-actions">'+action+
+    '<span class="v15-sync-status" id="sync-label" title="'+escape(syncStatus)+'" role="status">'+icon(syncIcon)+'<span>'+escape(syncStatus)+'</span></span></div></div>'+ 
     (state.errors?'<div class="warning" role="status">'+escape(state.errors)+' '+button('sync','Tentar sincronizar','refresh','ghost')+'</div>':'')+
     '<section class="frame admin-editor v11-editor">'+(state.adminPanel==='folders'?foldersPanel():state.adminPanel==='catalog'?catalogPanel():
       state.adminPanel==='repertoires'?repertoiresPanel():state.admin?editor():
@@ -403,7 +409,7 @@ function transitionEditor(song) {
 
 function sequenceEditor(song) {
   if(songKind(song)==='rhythm') return '<div class="v13-rhythm-map-note">Ritmo livre: controle as partes, viradas e o final diretamente no Modo Live ou pelo pedal.</div>';
-  const sections=[...(song.parts?.intro?[{id:'intro',label:'Introdução'}]:[]),...playableParts(song).filter(p=>song.parts?.[p.id]),...FINALES.filter(p=>song.parts?.[p.id])];
+  const sections=[...(song.parts?.intro?[{id:'intro',label:'Introdução'}]:[]),...playableParts(song).filter(p=>song.parts?.[p.id]),...FINALES.filter(p=>song.parts?.[p.id]),...CRASH_STOPS.filter(p=>song.parts?.[p.id])];
   const stages=song.sequence||[];
   const lookup=id=>sections.find(p=>p.id===id)?.label || id;
   return '<details class="editor-group v13-sequence-editor" open><summary><span>'+icon('list')+'<strong>04 · Mapa da sequência musical</strong></span><small>'+stages.length+' etapas</small></summary>'+
@@ -425,9 +431,19 @@ function customSectionsEditor(song){
   const sections=extraSections(song);
   return '<details class="editor-group v13-extra-sections"><summary><span>'+icon('layers')+'<strong>Mais partes musicais</strong></span><small>'+sections.length+' personalizadas</small></summary>'+
     '<p class="group-hint">Acrescente Verso 2, Ponte, Solo, Interlúdio, Coda, Parte D, E e outros loops. Cada um pode ter uma entrada com prato.</p>'+
-    '<div class="v13-extra-list">'+sections.map(part=>'<div class="v13-extra-item"><div class="v13-extra-heading"><label class="field"><span>Nome da parte</span><input maxlength="52" data-section-name="'+part.id+'" value="'+escape(part.label)+'"></label>'+iconButton('section-remove','Excluir esta parte','trash','data-id="'+part.id+'"')+'</div>'+fileRow(part,song.parts?.[part.id],song)+fileRow({...part,id:part.id+'Entry',label:'Entrada '+part.label+' com crash',group:'entradas',type:'entrada'},song.parts?.[part.id+'Entry'],song)+'</div>').join('')+'</div>'+button('section-add','Criar nova parte','plus','ghost')+'</details>';
+    '<div class="v13-extra-list">'+sections.map(part=>'<div class="v13-extra-item"><div class="v13-extra-heading"><label class="field"><span>Nome da parte</span><input maxlength="52" data-section-name="'+part.id+'" value="'+escape(part.label)+'"></label>'+iconButton('section-remove','Excluir esta parte','trash','data-id="'+part.id+'"')+'</div>'+fileRow(part,song.parts?.[part.id],song)+'</div>').join('')+'</div>'+button('section-add','Criar nova parte','plus','ghost')+'</details>';
 }
 
+
+// As entradas com crash de partes personalizadas também ficam na aba Loop + Crash.
+function customEntryEditor(song){
+  const sections=extraSections(song);
+  if(!sections.length)return '';
+  return '<details class="editor-group v15-extra-entries"><summary><span>'+icon('spark')+
+    '<strong>Loop + Crash · Partes personalizadas</strong></span><small>'+sections.filter(part=>song.parts?.[part.id+'Entry']).length+'/'+sections.length+' áudios</small></summary>'+
+    '<p class="group-hint">Cada entrada com prato toca uma vez antes do respectivo loop contínuo.</p><div class="file-list">'+
+    sections.map(part=>fileRow({...part,id:part.id+'Entry',label:'Entrada '+part.label+' com crash',group:'entradas',type:'entrada'},song.parts?.[part.id+'Entry'],song)).join('')+'</div></details>';
+}
 function editor() {
   const song = state.admin;
   const customized = song.customFills || [];
@@ -463,7 +479,7 @@ function editor() {
     button('batch-import','Importar vários WAVs','plus','ghost') + '<input type="file" id="batch-files" accept=".wav,audio/wav,audio/x-wav" multiple hidden></div>' +
     editorSection(song, 'loops', 'Loops contínuos e introdução',
       'O WAV contínuo NÃO deve ter crash de entrada repetido. Ele fica em repetição até a próxima troca.', true) +
-    editorSection(song, 'entradas', 'Primeira entrada com crash (opcional)',
+    editorSection(song, 'entradas', 'Loop + Crash · Entradas por parte (opcional)',
       'WAV de um ou mais compassos com o prato de ataque. Toca UMA vez a cada entrada na parte; depois vem o loop contínuo. O WAV precisa ter o mesmo BPM e compasso.') +
     editorSection(song, 'automaticas', 'Viradas automáticas', 'Opcional: entram no tempo certo quando você pede outra parte.', true) +
     editorSection(song, 'manuais', 'Viradas manuais', 'Uma virada selecionada manualmente substitui a automática antes da parte desejada.') +
@@ -475,15 +491,17 @@ function editor() {
     fileRow({...part,icon:'wave',type:'virada'}, song.parts?.[part.id], song) +
     button('remove-custom', 'Excluir virada específica', 'trash', 'ghost danger', 'data-part="' + escape(part.id) + '"') + '</div>').join('') +
     '</div>' + button('add-custom', 'Adicionar virada específica', 'plus', 'ghost') + '</details>' +
+    editorSection(song, 'crashstops', 'Crash', 'Bumbo + prato para PARAR a música ou o ritmo. Escolha até 3 WAVs de ataque final: toca uma vez, sem virada, e aguarda a cauda inteira do prato antes de encerrar.') +
     editorSection(song, 'finais', 'Acabamento e final', 'Arquivos de encerramento de execução única, inclusive cauda do prato.') +
     customSectionsEditor(song) +
+    customEntryEditor(song) +
     transitionEditor(song) +
     sequenceEditor(song) +
     '<div class="footer-actions"><small class="subtle">O cadastro aparece no Modo Live automaticamente. Para tocar, importe ao menos um loop contínuo. Confira os WAVs offline antes do evento.</small></div>';
 }
 
 function fileRow(part, audio, song = state.admin) {
-  const finishing = part.group === 'finais' || ['finish','outro'].includes(part.id);
+  const finishing = ['finais','crashstops'].includes(part.group) || ['finish','outro',...CRASH_STOPS.map(p=>p.id)].includes(part.id);
   const filling = part.type === 'virada';
   const variant = part.id.match(/__(\d+)$/);
   const unit = filling ? 'tempos' : 'comp.';
@@ -508,6 +526,7 @@ function fileRow(part, audio, song = state.admin) {
 const V14_EDITOR_TABS = [
   ['dados','Dados','settings'],
   ['loops','Loops','music'],
+  ['loopcrash','Loop + Crash','spark'],
   ['crash','Crash','spark'],
   ['viradas','Viradas','wave'],
   ['mapa','Mapa musical','layers'],
@@ -516,7 +535,8 @@ const V14_EDITOR_TABS = [
 function editorGroupTab(element) {
   const title=(element.querySelector(':scope > summary strong')?.textContent||'').toLowerCase();
   if(title.includes('loops contínuos')||title.includes('mais partes musicais'))return 'loops';
-  if(title.includes('primeira entrada'))return 'crash';
+  if(title.includes('loop + crash')||title.includes('primeira entrada'))return 'loopcrash';
+  if(title==='crash')return 'crash';
   if(title.includes('viradas')||title.includes('variações de virada'))return 'viradas';
   if(title.includes('mapa'))return 'mapa';
   if(title.includes('acabamento')||title.includes('final'))return 'finais';
@@ -526,7 +546,7 @@ function showEditorTab(id, focus=false) {
   const root=get('.admin-editor');
   if(!root||!V14_EDITOR_TABS.some(tab=>tab[0]===id))return;
   state.editorTab=id;
-  try{localStorage.setItem('loops-v14-editor-tab',id);}catch{}
+  try{localStorage.setItem('loops-v15-editor-tab',id);}catch{}
   for(const button of root.querySelectorAll('.v14-editor-tab')) {
     const active=button.dataset.tab===id;
     button.setAttribute('aria-selected',String(active));
@@ -729,6 +749,7 @@ const pedalActions=[
   ...PLAY_PARTS.map(p=>['part:'+p.id,'Ir para '+p.label]),
   ...MANUAL_PARTS.map(p=>['fill:'+p.id,'Virada: '+p.label]),
   ...FINALES.map(p=>['part:'+p.id,'Encerramento: '+p.label]),
+  ...CRASH_STOPS.map(p=>['part:'+p.id,'Crash final: '+p.label]),
   ['rep-prev-live','Música anterior'],['rep-next-live','Próxima música'],['open-library','Abrir repertório']
 ];
 function pedalOptions(value){return '<option value="">Não atribuir</option>'+pedalActions.map(([id,txt])=>
@@ -1080,6 +1101,7 @@ function updatePlayback(force = false) {
     const name = playing.active ? player.label(playing.active) :
       (player.ready ? player.label(player.initialPart || 'a') : 'Aguardando');
     const mode = !playing.running ? (player.ready ? 'Pronto para iniciar' : 'Preparando áudio') :
+      CRASH_STOPS.some(p=>p.id===playing.active) ? 'Crash final · cauda do prato' :
       isFill ? 'Virada em execução' : playing.entryAttack ? 'Entrada com crash' :
       playing.active === 'intro' ? 'Introdução' : 'Loop contínuo';
     const next = playing.next ? 'PRÓXIMO · ' + player.label(playing.next) : (playing.sequenceTotal ? 'MAPA · '+(playing.sequenceIndex+1)+'/'+playing.sequenceTotal : '');
@@ -1103,7 +1125,8 @@ function updatePlayback(force = false) {
     playing.running ? (queued || (playing.active ? player.label(playing.active) + (playing.entryAttack ? ' · entrada com crash' : ' · contínuo') : 'Iniciando…')) :
     (preparation || (player.ready ? 'Todos os áudios preparados · Pronto para tocar' : 'Selecione os áudios para tocar.'));
   const chip = playing.running ? (playing.interrupted ? 'Interrompido' : 'Tocando') : player.ready ? 'Pronto para tocar' : 'Aguardando áudio';
-  const closing = ['finish','outro'].includes(playing.next) || ['finish','outro'].includes(playing.active);
+  const closing = ['finish','outro',...CRASH_STOPS.map(p=>p.id)].includes(playing.next) ||
+    ['finish','outro',...CRASH_STOPS.map(p=>p.id)].includes(playing.active);
   if (force || previous.running !== playing.running || previous.next !== playing.next ||
       previous.fill !== playing.fill || previous.active !== playing.active || previous.entryAttack !== playing.entryAttack || previous.canCancel !== playing.canCancel || previous.interrupted !== playing.interrupted) {
     const text = get('#player-message');
@@ -1128,7 +1151,7 @@ function updatePlayback(force = false) {
       pad.disabled = !playing.running || (pad.dataset.action === 'fill' ? !player.fillExists(key) : !player.buffers.has(key)) || closing;
       const info = pad.querySelector('small');
       if (info) info.textContent = current ? (playing.entryAttack ? 'Com crash' : 'Tocando') : inQueue ? 'Na fila' :
-        pad.dataset.action === 'fill' ? 'Virada avulsa' : ['finish','outro'].includes(key) ? 'Finalizar' :
+        pad.dataset.action === 'fill' ? 'Virada avulsa' : CRASH_STOPS.some(p=>p.id===key) ? 'Bumbo + prato · parar' : ['finish','outro'].includes(key) ? 'Finalizar' :
         (state.selected.parts?.[key + 'Entry'] ? 'Entrada + contínuo' : 'Loop contínuo');
     }
     const cancel = get('#cancel-btn');
@@ -1310,7 +1333,7 @@ async function inspectWav(file, part, song) {
   try { duration = (await player.context().decodeAudioData(await file.arrayBuffer())).duration; }
   catch { throw new Error(file.name + ': não foi possível ler o WAV. Tente PCM 16/24 bits.'); }
   const secondsPerBeat = 60 / song.bpm;
-  const ending = ['outro','finish'].includes(part);
+  const ending = ['outro','finish',...CRASH_STOPS.map(p=>p.id)].includes(part);
   const variant = part.match(/__(\d+)$/);
   const fill = slotInfo(song,fillBase(part))?.type === 'virada';
   if (variant && (!fill || Number(variant[1]) > song.beats)) throw new Error('Variação inválida para o compasso atual.');

@@ -25,6 +25,9 @@ export const PARTS = [
   { id: 'fillLight', label: 'Virada leve', icon: 'wave', type: 'virada', group: 'manuais' },
   { id: 'fillStrong', label: 'Virada forte', icon: 'wave', type: 'virada', group: 'manuais' },
   { id: 'fillSpecial', label: 'Virada especial', icon: 'wave', type: 'virada', group: 'manuais' },
+  { id: 'crashStop', label: 'Crash 1 · Bumbo + prato', icon: 'spark', type: 'uma vez', group: 'crashstops' },
+  { id: 'crashStop2', label: 'Crash 2 · Bumbo + prato', icon: 'spark', type: 'uma vez', group: 'crashstops' },
+  { id: 'crashStop3', label: 'Crash 3 · Bumbo + prato', icon: 'spark', type: 'uma vez', group: 'crashstops' },
   { id: 'finish', label: 'Acabamento', icon: 'check', type: 'uma vez', group: 'finais' },
   { id: 'outro', label: 'Final', icon: 'flag', type: 'uma vez', group: 'finais' },
 ];
@@ -42,6 +45,7 @@ export function liveCatalog(rows) {
 }
 export const MANUAL_PARTS = PARTS.filter(part => part.group === 'manuais');
 export const FINALES = PARTS.filter(part => part.group === 'finais');
+export const CRASH_STOPS = PARTS.filter(part => part.group === 'crashstops');
 export const FILL_IDS = new Set(PARTS.filter(part => part.type === 'virada').map(part => part.id));
 export const ENTRY_OF = Object.fromEntries(PLAY_PARTS.map(part => [part.id, part.id + 'Entry']));
 export const BASE_OF_ENTRY = Object.fromEntries(Object.entries(ENTRY_OF).map(([base, entry]) => [entry, base]));

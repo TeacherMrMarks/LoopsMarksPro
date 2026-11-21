@@ -1,64 +1,30 @@
-# Loops Marks Pro — V14
+# Loops Marks Pro — V15
 
-**Pacote de atualização do mesmo projeto GitHub + Netlify**, criado a partir da V12, sem apagar nem renomear os stores existentes de músicas e WAVs. A V12 permanece preservada como arquivo ZIP separado.
+Atualização incremental construída a partir da **V14**, preservando a paleta de cores e a configuração atual do Netlify, banco, links de músicos e autenticação.
 
-## Atualização V14 — apenas layout e navegação (paleta V13 preservada)
+## Alterações V15
 
-- Editor de música e ritmo com **seis abas horizontais**: **Dados**, **Loops**, **Crash**, **Viradas**, **Mapa musical** e **Finais**.
-- **Somente a aba selecionada é exibida** abaixo do cabeçalho. O aplicativo reorganiza os mesmos controles da V13 sem duplicar os campos ou alterar o sistema de salvamento.
-- Na aba **Dados** estão identificação, tipo, pasta, BPM, compasso e comportamento. Em **Loops** ficam introdução, contínuos e partes adicionais; em **Crash**, as entradas; em **Viradas**, automáticas, manuais, específicas e variações; em **Mapa**, os mapas de transição e sequência; em **Finais**, os encerramentos.
-- Biblioteca de **Músicas** e de **Ritmos** com alternância **Cards / Lista**, salva localmente como preferência visual.
-- **A paleta de cores original foi mantida.** O modo Live do músico e a barra lateral principal não foram redesenhados.
-- **Nenhuma alteração** nas Netlify Functions, Netlify Identity, Netlify Blobs, modelo de dados, WAVs, motor de áudio, backups, links de músico ou recursos offline.
+- **Lateral padronizada:** Gerenciamento, Modo ao vivo e Configurações têm o mesmo padrão visual de borda, preenchimento, tipografia e ícones. Os submenus não mudam.
+- **Sincronização discreta:** indicador de estado foi removido da lateral da Central Administrativa e colocado no canto direito do cabeçalho de cada página. O processo de sincronização não mudou. No Modo Live o indicador permanece no topo, como antes.
+- **Abas do editor reorganizadas:** Dados | Loops | **Loop + Crash** | **Crash** | Viradas | Mapa musical | Finais. A aba *Loop + Crash* contém os WAVs já existentes de entrada na parte, tocados uma vez e seguidos do loop contínuo.
+- **Novo Crash de parada:** a nova aba **Crash** permite cadastrar até 3 WAVs distintos para um ataque isolado **bumbo + prato** com cauda prolongada, em músicas e ritmos. Os novos arquivos são independentes dos loops com crash, das viradas e dos acabamentos existentes.
+- **Modo Live:** se o cadastro tem algum desses 3 WAVs, aparecem botões na nova seção **Crash**. Ao tocar, o motor agenda o ataque para o próximo início de compasso, interrompe o loop anterior sem virada e deixa o WAV soar **até o fim da cauda natural**, encerrando a execução. Os mesmos comandos estão disponíveis para mapeamento de pedal Bluetooth HID. O arquivo nunca fica em repetição.
+- **Nomes sugeridos para importação em lote:** `Crash_Final.wav` (Crash 1), `Crash_Final_2.wav` (Crash 2), `Crash_Final_3.wav` (Crash 3), sem modificar a associação existente de `Parte_A_com_crash.wav` (entrada com crash).
+- **Mapa musical:** se desejar, os ataques Crash já cadastrados também podem ser usados como etapa de encerramento de uma música.
+- **Backup:** o ZIP completo continua incluindo todos os `song.parts` e WAVs, portanto inclui também Crash 1, 2 e 3 sem migração de dados ou alteração de estrutura de armazenamento.
 
-## Recursos já existentes e preservados da V13
+## Como testar
 
+1. Faça um backup da V14 e mantenha uma cópia do ZIP anterior.
+2. Extraia o pacote V15 e atualize a raiz do mesmo GitHub, mantendo as configurações de build (`npm run build`, publicação `dist`, funções `netlify/functions`).
+3. Abra o Permalink do deploy de teste antes de promover para produção.
+4. Crie um ritmo com Parte A contínua e `Crash_Final.wav` na aba Crash. Confira que tocar no botão **Crash 1** durante o loop não reproduz virada e termina após a cauda inteira do WAV.
+5. Teste separadamente a aba **Loop + Crash** (entrada na seção que continua no loop) e a aba **Crash** (parada final isolada).
+6. Confira a sincronização discreta no cabeçalho e o alinhamento dos botões externos na lateral.
+7. Antes do uso no palco, teste os arquivos WAV reais no iPhone e em Modo Avião.
 
+**Segurança e compatibilidade:** Netlify Functions, Netlify Identity, Netlify Blobs, stores, URLs do músico e mecanismos de backup/restauração não foram modificados. O novo slot Crash usa a mesma persistência de WAV que todos os demais. Não altere variáveis ou configurações do Netlify.
 
-**Repertório com nome e BPM próprios por apresentação**
-- Adicione uma música cadastrada ou um ritmo reutilizável a um repertório.
-- Cada item do repertório aceita **nome próprio** (por exemplo, “Entrada da noiva”) e **BPM individual**.
-- O mesmo ritmo pode ser utilizado várias vezes com nomes e andamentos distintos, sem alterar o cadastro original nem duplicar os WAVs.
-- Continua valendo o limite anterior de **±10 BPM** para preservar a qualidade dos áudios. Os ritmos e músicas podem ser reordenados, duplicados e excluídos do repertório.
-- No modo ao vivo, selecionar uma música ou um repertório fecha a gaveta e retorna aos botões do player.
+## Testes
 
-**Mapa da sequência musical (para músicas)**
-- Seção nova no editor: crie uma ordem com partes musicais já cadastradas, introdução inicial e encerramentos.
-- Acrescente quantas etapas precisar (limite técnico: 120), incluindo retornos e repetições. Cada etapa aceita de 1 a 16 repetições ou **Até comando**.
-- **Modo assistido:** o botão “Próxima parte” avança a música quando você decidir. Há também “Etapa anterior”. As viradas e entradas continuam respeitando o relógio de áudio.
-- **Modo automático:** a passagem é agendada usando a duração do WAV, o BPM e os compassos; é possível interromper a sequência ao acionar manualmente outra parte. Etapas “Até comando” aguardam seu comando.
-- A introdução gravada toca automaticamente antes do primeiro loop. Quando usada no mapa, permanece como etapa de abertura (não como retorno de meio de música).
-- Os ritmos genéricos continuam com troca livre pelos botões ou pelo pedal, sem obrigação de usar mapa.
-
-**Partes musicais adicionais**
-- Novo editor “Mais partes musicais”: crie, renomeie e remova seções personalizadas (até 36), como Ponte, Solo, Verso 3, Interlúdio, Parte D/E, Coda ou qualquer outro nome.
-- Para cada parte, importe um loop WAV contínuo e, opcionalmente, uma primeira entrada com crash.
-- Essas partes entram nos mapas de transição e de sequência e aparecem como botões no Modo Live quando tiverem WAV.
-
-**Backup e janelas**
-- O backup completo exporta os novos nomes do repertório, BPMs, mapas, partes personalizadas e WAVs, além das pastas e preferências locais não sensíveis (como o mapeamento do pedal).
-- A **importação do ZIP** recria os registros e os arquivos sem apagar os existentes. Os links de acesso e credenciais não entram no backup por segurança.
-- A janela de Backup/Restauração ganhou layout responsivo, importação em destaque, opções avançadas recolhíveis e botão **X** de fechamento. A janela de link do músico também possui X.
-- Os diálogos de Configurações passam a impedir rolagem **horizontal**. Em telas muito pequenas, ainda pode haver rolagem vertical para evitar ocultar funções.
-
-## Publicação no Netlify
-
-1. Faça **Backup completo** da V12 antes de qualquer atualização e guarde o ZIP original.
-2. Extraia o ZIP V14 e envie o **conteúdo extraído** à raiz do mesmo repositório GitHub `LoopsMarksPro`.
-3. Configuração de build: base vazia; `npm run build`; publish `dist`; functions `netlify/functions`.
-4. Mantenha o bloqueio de publicação automática se desejar testar o novo **Permalink** antes de promover a V14 ao endereço principal.
-5. Confirme que aparece `V14`, entre com seu Netlify Identity e teste com a música já cadastrada, um repertório com duas músicas usando o mesmo ritmo em BPMs diferentes e uma sequência musical de teste.
-6. Antes de cerimônias, faça teste real de áudio e Modo Avião no iPhone 11, inclusive mudanças automáticas, acabamentos e baixa/atualização de WAVs.
-
-## Compatibilidade / segurança
-
-- Mantidos os stores `loops-v3-songs`, `loops-v3-wavs`, `loops-v3-history`, `loops-v11-library` e `loops-v12-access`, sem migração destrutiva.
-- Mantidos o Netlify Identity, links revogáveis de músico, armazenamento Netlify Blobs, motor de viradas adaptativas, entradas com crash, controle por pedal Bluetooth HID, backup, PWA e reprodução offline.
-- **O teste local não substitui testes no Netlify e com seus WAVs reais.** Os fluxos automáticos seguem sendo aperfeiçoados e devem ser ensaiados antes de apresentações.
-
-## Validação local
-
-- 62 testes automatizados passando: regressões desde as versões anteriores, metadados de repertório, novas partes, componentes da interface e agendamento de etapa automática pelo relógio de áudio simulado.
-- Sintaxe JavaScript conferida.
-- **Build completo não executado neste ambiente** porque as dependências npm (`esbuild`, `@netlify/identity`, `@netlify/blobs`, `fflate`) não estavam instaladas. A compilação precisa ser confirmada no Netlify.
-- O navegador automatizado deste ambiente bloqueou a abertura da prévia local, então o layout da V14 ainda precisa de validação visual no Permalink.
+Execute `npm test` para validar regressões e a lógica de Crash. Testes locais não substituem o teste real com WAV e Bluetooth no aparelho do músico.

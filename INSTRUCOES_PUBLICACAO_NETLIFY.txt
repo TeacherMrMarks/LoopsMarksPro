@@ -1,11 +1,11 @@
-Loops Marks Pro V14 — atualização exclusivamente visual
+Loops Marks Pro V15 — atualização exclusivamente visual
 
 1) Faça um backup completo na V13 e guarde o ZIP da versão anterior.
-2) Extraia o ZIP V14 e envie todo o conteúdo extraído à raiz do mesmo repositório GitHub.
+2) Extraia o ZIP V15 e envie todo o conteúdo extraído à raiz do mesmo repositório GitHub.
 3) Preserve as configurações do Netlify: base vazia, build npm run build, publish dist, functions netlify/functions.
 4) Mantenha a publicação automática bloqueada para testar no novo Permalink sem mudar a produção.
 5) Abra a Central de Loops ou Músicas → Nova música e teste Dados, Loops, Crash, Viradas, Mapa musical e Finais; confira o salvamento automático.
 6) Em Músicas/Ritmos, teste alternar Cards e Lista.
 7) Confirme que as músicas antigas, WAVs, backups, login e o Modo Live continuam como antes.
 
-A V14 não muda a paleta nem o motor de áudio, nem funções Netlify.
+A V15 não muda a paleta nem o motor de áudio, nem funções Netlify.

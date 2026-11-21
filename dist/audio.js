@@ -1,8 +1,8 @@
-import { PARTS, DEFAULT_FILLS, FILL_IDS, ENTRY_OF, BASE_OF_ENTRY, fillBase, fillVariantId, firstPlayablePart, playableParts, extraSections } from './data.js';
+import { PARTS, DEFAULT_FILLS, FILL_IDS, ENTRY_OF, BASE_OF_ENTRY, fillBase, fillVariantId, firstPlayablePart, playableParts, extraSections, CRASH_STOPS } from './data.js';
 import { demoBuffer } from './demo.js';
 
 const LOOPS = new Set(Object.keys(ENTRY_OF));
-const ENDINGS = new Set(['outro', 'finish']);
+const ENDINGS = new Set(['outro', 'finish', ...CRASH_STOPS.map(part => part.id)]);
 const LEAD = 0.075;           // antecedência para agendamento no relógio Web Audio
 const FADE = 0.004;
 const EPS = 0.0002;
@@ -294,9 +294,12 @@ export class Player {
     if (this.pending && ENDINGS.has(this.pending.dest) && !ENDINGS.has(dest)) return false;
     if (this.pending && now >= this.pending.changeAt - LEAD && !ENDINGS.has(dest)) return false;
     const from = this.pending && now < this.pending.changeAt - LEAD ? this.pending.from : this.fromKey();
-    const chosenManual = manual || (this.pending?.manual && this.pending.changeAt > now + LEAD
-      ? this.pending.family : null);
-    let family = chosenManual || this.autoFill(from, dest);
+    // Ataque final de bumbo + prato: nenhuma virada, nem mesmo uma já enfileirada.
+    // O ataque começa no próximo tempo 1 e sua cauda WAV termina naturalmente.
+    const isolatedCrash = CRASH_STOPS.some(part => part.id === dest);
+    const chosenManual = isolatedCrash ? null : (manual || (this.pending?.manual && this.pending.changeAt > now + LEAD
+      ? this.pending.family : null));
+    let family = isolatedCrash ? null : (chosenManual || this.autoFill(from, dest));
     if (this.loopKeys.has(dest) && dest === from && !chosenManual && this.song.repeatMode === 'direct') family = null;
     if (family && !this.fillExists(family)) return false;
     this.clearPlan();

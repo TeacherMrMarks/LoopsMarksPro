@@ -1,1 +1,1 @@
-Loops Marks Pro V14 — abas horizontais no editor + lista/cards na biblioteca. Sem alteração de paleta, login, nuvem, áudio ou backup.
+Loops Marks Pro V15 — menus externos padronizados; sincronização no topo direito; abas “Loop + Crash” e “Crash” separadas com ataques finais bumbo + prato sem viradas. Sem mudanças no Netlify ou na paleta.

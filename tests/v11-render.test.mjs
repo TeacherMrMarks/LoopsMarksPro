@@ -41,7 +41,8 @@ test('V12 editor recolhe identificação e mantém as seções de viradas',()=>{
  assert.match(html,/Tipo de cadastro/);
  assert.match(html,/Música específica/);
  assert.match(html,/Ritmo reutilizável/);
- assert.match(html,/Primeira entrada com crash/);
+ assert.match(html,/Loop \+ Crash/);
+ assert.match(html,/data-file="crashStop"/);
  assert.match(html,/Viradas automáticas/);
  assert.match(html,/Mapa de transições/);
 });

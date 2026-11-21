@@ -5,6 +5,13 @@ const norm = value => String(value).normalize('NFD').replace(/[\u0300-\u036f]/g,
 
 export function suggestSlot(filename) {
   const text = norm(filename);
+  // Distingue o crash de parada (bumbo + prato) da entrada de loop com crash.
+  // Ex.: Crash_Final_2.wav -> crashStop2; Parte_A_com_crash.wav -> aEntry.
+  if (/(?:^|_)(?:crash|prato)(?:_|$)/.test(text) &&
+      /(?:final|parada|stop|encerramento|bumbo)/.test(text)) {
+    const n = text.match(/(?:^|_)([123])(?:_|$)/)?.[1];
+    return n && n !== '1' ? 'crashStop' + n : 'crashStop';
+  }
   // Ex.: Virada_Refrão_2T.wav -> fillChorus__2; Refrão_Entrada.wav -> chorusEntry.
   const duration = text.match(/(?:_|^)([1-9]\d?)(?:t|tempo|tempos)(?:_|$)/)?.[1];
   const entry = /(entrada|com_crash|crash|ataque|primeiro_loop|loop_1)(?:_|$)/.test(text);
