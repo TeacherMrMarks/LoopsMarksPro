@@ -664,3 +664,114 @@ body.drawer-visible {overflow:hidden}
   .stage-deck .end-pads {grid-template-columns:repeat(2,minmax(0,1fr))}
   .stage-deck .manual-pads {grid-template-columns:repeat(3,minmax(0,1fr))}
 }
+
+/* V11 — organização profissional, editor ampliado e biblioteca no painel lateral. */
+.v11-shell {grid-template-columns:290px minmax(0,1fr)!important;background:#0d1723;color:#eaf4fa}
+.v11-sidebar {width:100%;background:linear-gradient(180deg,#101f2e,#0e1b29);border-right:1px solid #30465a;padding:17px 13px 14px!important;gap:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#425a69 transparent}
+.v11-sidebar .brand {padding:9px 8px 17px!important;border-bottom:1px solid #2b4152;margin-bottom:12px}
+.v11-sidebar nav {display:grid;gap:3px}
+.v11-sidebar .nav-link {margin:0;padding:9px 11px;border-radius:9px;min-height:38px;font-size:.82rem;color:#b9cbd9}
+.v11-sidebar .nav-link:hover,.v11-sidebar .nav-link[aria-current="page"] {color:#92f2d6;border-color:#376b68;background:#193d40}
+.v11-sidebar .nav-link svg {color:#80dcc4;width:16px;height:16px}
+.v11-sidebar .sidebar-rule {border-top:1px solid #304456;margin:5px 0}
+.sidebar-collections {margin:11px 0 13px;min-height:130px;display:flex;flex-direction:column;gap:6px;flex:1;overflow:hidden}
+.sidebar-section-title {display:flex;justify-content:space-between;align-items:center;letter-spacing:.12em;font-size:.68rem;color:#78d9cf;padding:2px 9px}
+.v11-sidebar .search {margin:0 2px 6px;background:#102330;border-color:#345367}
+.v11-sidebar .search input {min-height:33px;font-size:.78rem}
+.sidebar-folder-list {display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:2px 2px 5px;max-height:130px;overflow-y:auto}
+.sidebar-folder {display:inline-flex;align-items:center;gap:5px;border:1px solid #334e5d;background:#1a2d3b;color:#b7d4e0;border-radius:7px;padding:5px 8px;font-size:.73rem;max-width:100%}
+.sidebar-folder[aria-current="true"] {background:#205147;color:#8ff1c7;border-color:#3d987b}
+.sidebar-folder svg {width:14px;height:14px}
+.sidebar-song-list {display:grid;align-content:start;gap:3px;overflow-y:auto;min-height:45px;flex:1;scrollbar-width:thin}
+.sidebar-song-list .item {min-height:51px;padding:6px;gap:7px}
+.sidebar-song-list .item-title {font-size:.79rem}
+.sidebar-song-list .item-meta {font-size:.67rem}
+.sidebar-song-list .item-icon {background:#1f4350;color:#9de5d9}
+.sidebar-v11-actions {display:grid;gap:5px;padding-top:9px;border-top:1px solid #30465a}
+.sidebar-v11-actions .settings-menu {width:100%;position:relative}
+.sidebar-v11-actions .settings-menu summary {display:flex;gap:10px;align-items:center;width:100%;justify-content:flex-start;border-radius:9px;font-size:.82rem}
+.sidebar-v11-actions .settings-menu summary span {display:inline}
+.sidebar-v11-actions .settings-panel {right:auto;left:0;bottom:47px;top:auto;width:min(290px,92vw);z-index:50}
+.v11-main {margin:0;padding:22px clamp(16px,2.3vw,35px) 45px;max-width:1750px;width:100%}
+.v11-heading {display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:14px}
+.v11-heading h1 {font-size:clamp(1.54rem,2.25vw,2.4rem);letter-spacing:-.048em;line-height:1.1}
+.v11-heading p {color:#9fb8c6;margin-top:5px;font-size:.82rem}
+.v11-heading .button {font-size:.80rem}
+.v11-editor {width:100%;min-width:0;min-height:440px;background:#152738;border:1px solid #2b4758;box-shadow:0 18px 35px #020a1530;padding:21px clamp(16px,2.5vw,32px)}
+.v11-editor .deck-header {padding-bottom:16px;border-bottom:1px solid #335063}
+.v11-editor .editor-group {background:#192e40;border-color:#345367}
+.v11-editor .file-row {background:#132737;border-color:#2d4d5d}
+.v11-editor .form-grid {grid-template-columns:minmax(180px,1.6fr) minmax(160px,1.2fr) minmax(100px,.65fr) minmax(100px,.65fr)}
+.v11-classification {display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0 0 23px;background:#113240;padding:12px;border:1px solid #2d6570;border-radius:12px}
+.v11-classification .field select {background:#112c39;border-color:#42747a}
+.editor-panel-head {border-bottom:1px solid #345061;padding-bottom:15px;margin-bottom:20px}
+.editor-panel-head h2 {font-size:1.45rem;letter-spacing:-.04em;margin:4px 0}
+.editor-panel-head p:last-child {color:#adc1ce;font-size:.79rem}
+.v11-form-row {display:flex;align-items:end;gap:10px;flex-wrap:wrap;padding:14px;background:#132c3d;border:1px solid #325061;border-radius:11px}
+.v11-form-row .field {flex:1;min-width:155px}
+.v11-form-row .button {align-self:end}
+.folder-block {margin-top:22px;display:grid;gap:9px}
+.folder-block h3 {font-size:1.02rem}
+.folder-admin-row {display:grid;grid-template-columns:20px minmax(0,1fr) 78px 35px;gap:9px;align-items:center;border:1px solid #345263;background:#132c3e;border-radius:9px;padding:9px}
+.folder-admin-row>svg {color:#69d9ca}
+.folder-admin-row input {min-width:0;background:#112432;color:#edf4f8;border:1px solid #405f70;border-radius:7px;padding:7px 9px}
+.folder-admin-row span {font-size:.72rem;color:#9bb8c5}
+.repertoire-admin-layout {display:grid;grid-template-columns:minmax(190px,240px) minmax(0,1fr);gap:17px}
+.rep-list {display:grid;align-content:start;gap:7px}
+.rep-item {display:flex;align-items:center;gap:9px;color:#d0e2eb;text-align:left;border:1px solid #345265;background:#162c3b;border-radius:9px;padding:10px;min-width:0}
+.rep-item[aria-pressed="true"] {border-color:#54c9b7;background:#164340;color:#a5ffe1}
+.rep-item span {min-width:0}
+.rep-item strong {display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.81rem}
+.rep-item small {color:#a1b8c3}
+.rep-detail {min-width:0;padding:14px;border:1px solid #2f4e60;border-radius:12px;background:#102838}
+.rep-detail-head {display:grid;grid-template-columns:1fr minmax(140px,200px);gap:10px}
+.rep-actions {display:flex;gap:8px;flex-wrap:wrap;margin:15px 0 18px}
+.rep-actions .button {font-size:.75rem;min-height:34px}
+.rep-tracks {display:grid;gap:7px;margin-bottom:14px}
+.rep-track {display:grid;grid-template-columns:27px minmax(110px,1fr) 90px 33px 33px 33px;align-items:center;gap:6px;background:#172f41;border:1px solid #345263;border-radius:9px;padding:7px}
+.rep-track-num {font-weight:800;color:#7cdcbf;text-align:center}
+.rep-track-name {min-width:0}.rep-track-name strong{display:block;font-size:.82rem;text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
+.rep-track-name small {font-size:.66rem;color:#a9c4ce}
+.rep-bpm {display:grid;gap:2px;font-size:.60rem;color:#b2c8d3}
+.rep-bpm input {width:82px;background:#0e2230;color:#fff;border:1px solid #3a5769;border-radius:6px;padding:5px}
+.rep-track .icon-btn {width:31px;height:31px}
+.rep-add {margin-top:10px}
+.drawer-tabs {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;margin-bottom:12px}
+.drawer-tabs button {padding:7px 2px;border:1px solid #395e6b;border-radius:7px;background:#193442;color:#b5d0da;font-size:.67rem;font-weight:700}
+.drawer-tabs button[aria-pressed="true"] {color:#10332e;background:#82e8c5;border-color:#82e8c5}
+.live-rep-strip {display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 8px;margin-bottom:8px;background:#1b4347;border:1px solid #40756e;border-radius:9px;color:#c2fbe5;font-size:.69rem}
+.live-rep-strip>span {display:flex;align-items:center;gap:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.live-rep-strip>span svg {width:14px;height:14px}
+.live-rep-strip>div {display:flex;gap:5px}
+.live-rep-strip .icon-btn {width:27px;height:27px;background:#255251;color:#a5f7d6;border-color:#4a8e80}
+.repertoire-drawer .library-download {gap:6px}
+.repertoire-drawer .library-download .button {min-height:33px;font-size:.76rem}
+@media(max-width:1000px) {.v11-shell {grid-template-columns:255px minmax(0,1fr)!important}.repertoire-admin-layout {grid-template-columns:1fr}.rep-list {display:flex;overflow:auto}.rep-item {min-width:150px}}
+@media(max-width:790px) {
+ .v11-shell {display:block!important}
+ .v11-sidebar {height:auto;position:relative;overflow:visible;max-height:none;padding:9px 12px!important}
+ .v11-sidebar .brand {display:none}
+ .v11-sidebar nav {display:flex;flex-wrap:wrap;gap:4px}
+ .v11-sidebar .nav-link {width:auto;min-height:34px;padding:6px 10px;font-size:.72rem}
+ .v11-sidebar .sidebar-collections {display:block;min-height:0;max-height:185px;overflow:auto;margin:6px 0}
+ .v11-sidebar .sidebar-song-list {max-height:105px}
+ .v11-sidebar .sidebar-v11-actions {display:flex;flex-wrap:wrap;justify-content:space-between}
+ .v11-main {padding:12px}
+ .v11-editor {padding:13px}
+ .v11-editor .form-grid {grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:550px) {
+ .v11-heading h1 {font-size:1.45rem}
+ .v11-heading p {font-size:.71rem}
+ .v11-heading .button {min-height:32px;padding:6px;font-size:.70rem}
+ .v11-classification,.rep-detail-head {grid-template-columns:1fr}
+ .rep-track {grid-template-columns:22px minmax(80px,1fr) 58px 28px 28px 28px;gap:3px;padding:4px}
+ .rep-bpm input {width:52px}
+ .rep-track .icon-btn {width:25px;height:26px}
+ .v11-editor .form-grid {grid-template-columns:repeat(2,minmax(0,1fr))}
+ .v11-editor .file-row {grid-template-columns:20px minmax(0,1fr) 76px auto 30px;gap:4px}
+ .v11-editor .file-row .button {font-size:.69rem;padding:5px}
+}
+
+.v11-rhythm-template{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;background:#163d40;border:1px solid #2c7370;border-radius:10px;margin:8px 0 18px;color:#b6eddd;font-size:.78rem;flex-wrap:wrap}
+.v11-rhythm-template .button{min-height:33px;font-size:.74rem}

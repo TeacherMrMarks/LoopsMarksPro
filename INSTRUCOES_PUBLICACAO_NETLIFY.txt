@@ -1,13 +1,9 @@
-LOOPS MARKS PRO - V10
-
-1. Guarde a V9. Extraia este ZIP.
-2. Envie os arquivos da V10 para a raiz do mesmo GitHub TeacherMrMarks/LoopsMarksPro.
-3. Netlify: mantenha Base directory vazio; Build command npm run build; Publish dist; Functions netlify/functions.
-4. Com Auto Publishing Locked, confira a V10 pelo Permalink do deploy novo.
-5. O link oficial do músico é https://loops-marks-pro.netlify.app/?modo=musico (site principal); durante testes o botão Copiar link de teste usa a URL do deploy.
-6. Para a interface abrir no iPhone sem login da plataforma Netlify, configure Project visibility Public. O Netlify Identity continua exigido para acessar os dados. Se mantiver Private, a proteção da plataforma exigirá login de equipe.
-7. No Safari do iPhone: Compartilhar > Adicionar à Tela de Início. No app instalado, baixar WAVs via repertório e testar modo avião.
-8. Backup / Restaurar, gerar link, e-mail e sair ficam em Configurações na Central.
-9. Não é necessário outro site ou projeto Netlify. Não apague seus WAVs.
-
-Os testes locais passaram; o build e o uso real no Netlify/iPhone ainda devem ser validados.
+Loops Marks Pro V11 — mesma conta e mesmo projeto Netlify/GitHub.
+1. Exporte backup completo na V10.
+2. Extraia e envie o CONTEÚDO deste ZIP à raiz do repositório.
+3. Netlify Base directory: vazio | Build: npm run build | Publish: dist | Functions: netlify/functions.
+4. Mantenha publicação automática bloqueada e TESTE pelo novo Permalink.
+5. Login: o mesmo e-mail/senha do Netlify Identity (não precisa nova variável de senha).
+6. Crie pasta, ritmo, repertório; aguarde Sincronizado e confira no celular.
+7. Baixe repertório inteiro para offline e ensaie em Modo Avião antes de tocar.
+8. Promova o deploy testado quando estiver satisfeito (não rode novo build sem necessidade).

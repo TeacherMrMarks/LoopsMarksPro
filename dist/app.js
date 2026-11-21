@@ -3,8 +3,9 @@ import { suggestSlot } from './importer.js';
 import { Player, bpmRange } from './audio.js';
 import { exampleSongs } from './demo.js';
 import { makeBackup, restoreBackup, triggerDownload } from './backup.js';
+import { emptyLibrary, cleanLibrary, songKind, inFolder, repertoireEntries } from './library-model.js';
 
-const APP_VERSION = 'V10';
+const APP_VERSION = 'V11';
 // O link do músico carrega exclusivamente o Modo Live.
 const musicianLink = new URL(location.href).searchParams.get('modo') === 'musico';
 const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
@@ -41,6 +42,9 @@ const icons = {
   list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
   x: '<path d="M5 5l14 14M19 5 5 19"/>',
   share: '<path d="M12 16V3m-5 5 5-5 5 5M5 14v6h14v-6"/>',
+  folder: '<path d="M3 7v12h18V9H12l-2-3H3z"/>',
+  arrowup:'<path d="m6 14 6-6 6 6"/>',
+  arrowdown:'<path d="m6 10 6 6 6-6"/>',
   link: '<path d="m10 14 4-4m-5 6-2 2a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 0 2-2a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0" transform="translate(1 0) scale(.95 1)"/>',
 };
 const icon = key => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -55,6 +59,8 @@ const state = {
   songs: [], offline: new Map(), selected: null, admin: null, bpm: 0, volume: 0.82,
   preparation: '', syncLabel: '', errors: '', searchLive: '', searchAdmin: '',
   selectedSignature: '', info: idle, download: '', capture: null, libraryOpen: false,
+  libraryData:emptyLibrary(), adminKind:'music', adminFolder:'', adminPanel:'editor',
+  adminSearch:'', drawerTab:'all', repEditingId:null, activeRepId:null, activeRepPos:0,
 };
 const player = new Player(() => { if (player.running) updatePlayback(); });
 let repo;
@@ -111,29 +117,34 @@ function settingsMenu(user) {
     '</div></details>';
 }
 
+function adminSidebar() {
+  const user=cloud.session()?.email||'Conta não conectada';
+  const [status,statusIcon]=statusText();
+  const folderRows=(state.libraryData.folders||[]).filter(f=>f.kind===state.adminKind).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
+  return '<aside class="sidebar v11-sidebar">'+brand()+'<nav aria-label="Módulos">' +
+    '<button class="nav-link" data-action="admin" '+(state.adminPanel==='editor'?'aria-current="page"':'')+'>'+icon('grid')+'Central de loops</button>'+
+    '<button class="nav-link" data-action="show-kind" data-kind="music" '+(state.adminPanel==='editor'&&state.adminKind==='music'?'aria-current="page"':'')+'>'+icon('music')+'Músicas</button>'+
+    '<button class="nav-link" data-action="show-kind" data-kind="rhythm" '+(state.adminPanel==='editor'&&state.adminKind==='rhythm'?'aria-current="page"':'')+'>'+icon('wave')+'Ritmos</button>'+
+    '<button class="nav-link" data-action="show-repertoires" '+(state.adminPanel==='repertoires'?'aria-current="page"':'')+'>'+icon('list')+'Repertórios</button>'+
+    '<button class="nav-link" data-action="show-folders" '+(state.adminPanel==='folders'?'aria-current="page"':'')+'>'+icon('folder')+'Gerenciar pastas</button>'+
+    '<div class="sidebar-rule"></div><button class="nav-link" data-action="live">'+icon('current')+'Modo ao vivo</button></nav>'+
+    '<div class="sidebar-collections"><div class="sidebar-section-title"><strong>'+(state.adminKind==='rhythm'?'RITMOS':'MÚSICAS')+'</strong><span id="sidebar-count" class="count"></span></div>'+
+    '<label class="search">'+icon('search')+'<input type="search" id="admin-search" placeholder="Buscar na biblioteca" aria-label="Buscar música ou ritmo" value="'+escape(state.adminSearch)+'"></label>'+
+    '<div class="sidebar-folder-list"><button class="sidebar-folder" data-action="select-folder" data-folder="" '+(!state.adminFolder?'aria-current="true"':'')+'>'+icon('layers')+'Todas</button>'+
+    folderRows.map(f=>'<button class="sidebar-folder" data-action="select-folder" data-folder="'+escape(f.id)+'" '+(state.adminFolder===f.id?'aria-current="true"':'')+'>'+icon('folder')+escape(f.name)+'</button>').join('')+
+    '</div><div class="sidebar-song-list" id="sidebar-items"></div></div>'+
+    '<div class="sidebar-v11-actions"><button class="nav-link" data-action="sync" title="Sincronizar com o Netlify">'+icon(statusIcon)+'<span id="sync-label">'+escape(status)+'</span></button>'+settingsMenu(user)+'</div></aside>';
+}
 function shell() {
-  const live = state.view === 'live';
-  const user = cloud.session()?.email || 'Conta não conectada';
-  const [status, statusIcon] = statusText();
-  if (live) {
-    return '<div class="stage-shell' + (musicianLink ? ' musician-shell' : '') + '">' +
-      '<header class="stage-topbar">' +
-      (musicianLink ? '<span class="stage-top-left" aria-hidden="true"></span>' : iconButton('admin', 'Voltar à Central Administrativa', 'grid', 'data-stage-back')) +
-      brand('stage-brand') +
-      '<div class="stage-tools">' +
-      '<span class="stage-connection" title="' + escape(status) + '" id="sync-label">' + icon(statusIcon) + '<span>' + escape(status) + '</span></span>' +
-      iconButton('open-library', 'Escolher música no repertório', 'list', 'id="repertoire-toggle" aria-expanded="false" aria-controls="live-drawer"') +
-      '</div></header><main class="stage-main">' + liveView() + '</main></div>';
-  }
-  return '<div class="shell admin-shell"><aside class="sidebar">' + brand() +
-    '<nav aria-label="Seções"><button class="nav-link" data-action="live">' + icon('current') + 'Modo ao vivo</button>' +
-    '<button class="nav-link" data-action="admin" aria-current="page">' + icon('grid') + 'Central de loops</button></nav>' +
-    '<div class="sidebar-foot"><p class="sidebar-foot-label">STUDIO MARKS · CONTROLE DE PALCO</p></div></aside>' +
-    '<div class="workspace"><header class="topbar">' + brand('mobile-only') +
-    '<div class="breadcrumb">' + icon('grid') + '<span>Central de loops</span></div>' +
-    '<div class="top-actions"><span class="sync' + (state.errors ? ' warn' : '') + '" id="sync-label">' +
-      icon(statusIcon) + '<span>' + escape(status) + '</span></span>' + settingsMenu(user) +
-    '</div></header><main class="main admin-main">' + adminView() + '</main></div></div>';
+  const live=state.view==='live';
+  const [status,statusIcon]=statusText();
+  if(live) return '<div class="stage-shell'+(musicianLink?' musician-shell':'')+'"><header class="stage-topbar">'+
+    (musicianLink?'<span class="stage-top-left"></span>':iconButton('admin','Central Administrativa','grid','data-stage-back'))+
+    brand('stage-brand')+'<div class="stage-tools"><span class="stage-connection" title="'+escape(status)+'" id="sync-label">'+icon(statusIcon)+'<span>'+escape(status)+'</span></span>'+
+    iconButton('open-library','Selecionar repertório','list','id="repertoire-toggle" aria-expanded="false" aria-controls="live-drawer"')+
+    '</div></header><main class="stage-main">'+liveView()+'</main></div>';
+  return '<div class="shell admin-shell v11-shell">'+adminSidebar()+
+    '<main class="main admin-main v11-main">'+adminView()+'</main></div>';
 }
 
 function loginView() {
@@ -182,43 +193,30 @@ function authLinkErrorView() {
 }
 
 function songsFor(view) {
-  // A música deve aparecer no Modo Live assim que o cadastro é salvo.
-  // Faltando um loop contínuo, ela fica visível com orientação em vez de sumir.
-  const rows = liveCatalog(state.songs);
-  return view === 'admin' ? rows : rows.concat(cloud.enabled ? [] : exampleSongs);
+  const rows=liveCatalog(state.songs);
+  return view==='admin'?rows:rows.concat(cloud.enabled?[]:exampleSongs);
 }
-
 function library(view) {
-  const search = view === 'live' ? state.searchLive : state.searchAdmin;
-  const live = view === 'live';
-  return '<aside class="library frame' + (live ? ' repertoire-drawer' : '') + '" ' +
-    (live ? 'id="live-drawer" role="dialog" aria-modal="true" aria-label="Repertório de músicas" hidden' : '') + '>' +
-    '<div class="library-head"><div><p class="library-overline">' + (live ? 'SELEÇÃO RÁPIDA' : 'BIBLIOTECA') + '</p><h2>' +
-    (live ? 'Repertório' : 'Músicas') + '</h2></div><div class="library-head-tools"><span class="count" id="song-count"></span>' +
-    (live ? iconButton('close-library','Fechar repertório','x') : '') + '</div></div>' +
-    '<label class="search">' + icon('search') + '<input id="search" type="search" autocomplete="off" placeholder="Buscar música" aria-label="Buscar música" value="' +
-    escape(search) + '"></label><div class="items" id="items"></div>' +
-    (live ? '<div class="library-download"><p>ARQUIVOS PARA TOCAR SEM INTERNET</p>' +
-      button('download', 'Baixar para offline', 'download', 'ghost', 'id="download-btn"') + '</div>' +
-      '<div class="library-foot">' + icon('headphones') +
-      '<span>Antes do evento, baixe os WAVs e confira a reprodução em modo avião.</span></div>' : '') + '</aside>';
+  // No palco, o repertório aparece somente na gaveta discreta.
+  return '<aside class="library frame repertoire-drawer" id="live-drawer" role="dialog" aria-modal="true" aria-label="Selecionar música, ritmo ou repertório" hidden>'+
+    '<div class="library-head"><div><p class="library-overline">BIBLIOTECA</p><h2>Seleção de palco</h2></div><div class="library-head-tools"><span class="count" id="song-count"></span>'+iconButton('close-library','Fechar biblioteca','x')+'</div></div>'+
+    '<div class="drawer-tabs">'+[['all','Tudo'],['music','Músicas'],['rhythm','Ritmos'],['repertoires','Repertórios']].map(([id,txt])=>'<button type="button" data-action="drawer-tab" data-tab="'+id+'" '+(state.drawerTab===id?'aria-pressed="true"':'')+'>'+txt+'</button>').join('')+'</div>'+
+    '<label class="search">'+icon('search')+'<input id="search" type="search" autocomplete="off" placeholder="Buscar no repertório" aria-label="Buscar" value="'+escape(state.searchLive)+'"></label>'+
+    '<div class="items" id="items"></div><div class="library-download"><p>PREPARAR OFFLINE</p>'+
+    button('download','Baixar música selecionada','download','ghost','id="download-btn"')+
+    button('download-repertoire','Baixar repertório completo','download','ghost','id="download-rep-btn"')+
+    '</div><div class="library-foot">'+icon('headphones')+'<span>Baixe os áudios e confira em Modo Avião antes da apresentação.</span></div></aside>';
 }
-
 function liveView() {
-  return '<div class="live-workspace"><section class="deck stage-deck" aria-label="Player de loops">' + deck() +
-    '</section><div id="drawer-backdrop" class="drawer-backdrop" data-action="close-library" hidden></div>' + library('live') + '</div>';
+  return '<div class="live-workspace"><section class="deck stage-deck" aria-label="Player de loops">'+deck()+'</section>'+
+    '<div id="drawer-backdrop" class="drawer-backdrop" data-action="close-library" hidden></div>'+library('live')+'</div>';
 }
-
 function toggleLibrary(open) {
-  const drawer = get('#live-drawer'), backdrop = get('#drawer-backdrop'), trigger = get('#repertoire-toggle');
-  if (!drawer || !backdrop) return;
-  state.libraryOpen = open;
-  drawer.hidden = !open;
-  backdrop.hidden = !open;
-  if (trigger) trigger.setAttribute('aria-expanded', String(open));
-  document.body.classList.toggle('drawer-visible', open);
-  if (open) drawer.querySelector('#search')?.focus();
-  else trigger?.focus();
+  const drawer=get('#live-drawer'),backdrop=get('#drawer-backdrop'),trigger=get('#repertoire-toggle');
+  if(!drawer||!backdrop)return;
+  state.libraryOpen=open;drawer.hidden=!open;backdrop.hidden=!open;
+  trigger?.setAttribute('aria-expanded',String(open));document.body.classList.toggle('drawer-visible',open);
+  if(open)drawer.querySelector('#search')?.focus();else trigger?.focus();
 }
 
 function deck() {
@@ -233,7 +231,10 @@ function deck() {
   const parts = PLAY_PARTS.filter(part => song.parts?.[part.id]);
   const manual = MANUAL_PARTS.filter(part => Object.keys(song.parts || {}).some(id => fillBase(id) === part.id));
   const endings = FINALES.filter(part => song.parts?.[part.id]);
-  return '<section class="frame"><div class="deck-header"><div><h2>' + escape(song.name) + '</h2><p class="track-meta">' +
+  const activeRep=(state.libraryData.repertoires||[]).find(r=>r.id===state.activeRepId);
+  const repEntries=activeRep?repertoireEntries(activeRep,songsFor('live')):[];
+  const repNav=repEntries.length?'<div class="live-rep-strip"><span>'+icon('list')+' '+escape(activeRep.name)+' · '+(state.activeRepPos+1)+'/'+repEntries.length+'</span><div>'+iconButton('rep-prev-live','Música anterior','arrowup',''+(state.activeRepPos===0?'disabled':''))+iconButton('rep-next-live','Próxima música','arrowdown',''+(state.activeRepPos===repEntries.length-1?'disabled':''))+'</div></div>':'';
+  return '<section class="frame">'+repNav+'<div class="deck-header"><div><h2>'+escape(song.name)+'</h2><p class="track-meta">' +
     (song.occasion ? escape(song.occasion) + ' · ' : '') + escape(song.bpm) + ' BPM original · ' + escape(song.beats) +
     ' tempos</p></div><span class="chip" id="player-chip"></span></div>' +
     '<div class="stage-status" role="status" aria-live="polite"><div class="stage-status-main"><span class="stage-status-label">PARTE EM EXECUÇÃO</span>' +
@@ -271,20 +272,50 @@ function deck() {
 }
 
 function adminView() {
-  const amount = state.songs.filter(song => !song.deleted).length;
-  return '<div class="heading"><div><p class="eyebrow">STUDIO MARKS / ADMINISTRAÇÃO</p><h1>Central Administrativa</h1>' +
-    '<p>Seu repertório, seus loops e as regras de palco no mesmo lugar.</p></div>' +
-    '<div class="admin-quick-actions">' + button('new', 'Nova música', 'plus', 'primary') + '</div></div>' +
-    '<div class="admin-summary">' +
-    '<div class="mini-stat"><small>MÚSICAS</small><strong>' + amount + '</strong><span>Na biblioteca</span></div>' +
-    '<div class="mini-stat"><small>SALVAMENTO</small><strong>' + (cloud.enabled ? 'Nuvem' : 'Local') + '</strong><span>' +
-      (cloud.enabled ? 'Netlify Blobs + aparelho' : 'Demonstração sem nuvem') + '</span></div>' +
-    '<div class="access-shortcut"><div><small>ACESSO DO MÚSICO</small><strong>Aplicativo no celular</strong><span>Gere o link em Configurações · Modo Live sem edição</span></div>' + icon('device') + '</div></div>' +
-    (state.errors ? '<div class="warning" role="status">' + escape(state.errors) + ' ' +
-      button('sync', 'Tentar sincronizar', 'refresh', 'ghost') + '</div>' : '') +
-    '<div class="workspace-grid admin-grid">' + library('admin') + '<section class="frame admin-editor">' +
-    (state.admin ? editor() : '<div class="blank"><h2>Selecione uma música</h2><p>Crie uma música para importar os seus loops de bateria.</p></div>') +
-    '</section></div>';
+  const title=state.adminPanel==='folders'?'Organizar pastas':state.adminPanel==='repertoires'?'Meus repertórios':'Central Administrativa';
+  const desc=state.adminPanel==='folders'?'Organize músicas e ritmos em pastas sem mover os WAVs.':
+    state.adminPanel==='repertoires'?'Monte apresentações com músicas e ritmos, na ordem que desejar.':
+    'Seu repertório, seus loops e as regras de palco no mesmo lugar.';
+  const action=state.adminPanel==='repertoires'?button('new-repertoire','Novo repertório','plus','primary'):
+    state.adminPanel==='editor'?button('new',state.adminKind==='rhythm'?'Novo ritmo':'Nova música','plus','primary'):'';
+  return '<div class="v11-heading"><div><h1>'+title+'</h1><p>'+desc+'</p></div><div class="admin-quick-actions">'+action+'</div></div>'+
+    (state.errors?'<div class="warning" role="status">'+escape(state.errors)+' '+button('sync','Tentar sincronizar','refresh','ghost')+'</div>':'')+
+    '<section class="frame admin-editor v11-editor">'+(state.adminPanel==='folders'?foldersPanel():
+      state.adminPanel==='repertoires'?repertoiresPanel():state.admin?editor():
+      '<div class="blank"><h2>Escolha um item na biblioteca</h2><p>Use o menu lateral para selecionar ou criar uma música ou um ritmo.</p></div>')+'</section>';
+}
+function kindFolders(kind){return (state.libraryData.folders||[]).filter(f=>f.kind===kind).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));}
+function foldersPanel(){
+  return '<div class="editor-panel-head"><div><p class="eyebrow">ORGANIZAÇÃO</p><h2>Pastas da biblioteca</h2><p>Uma pasta vazia pode ser excluída sem apagar músicas ou áudios.</p></div></div>'+
+    '<form id="create-folder-form" class="v11-form-row"><label class="field"><span>Nome da pasta</span><input name="name" maxlength="70" required placeholder="Ex.: Casamentos ou Rock"></label>'+
+    '<label class="field"><span>Biblioteca</span><select name="kind"><option value="music">Músicas</option><option value="rhythm">Ritmos</option></select></label><button class="button primary" type="submit">'+icon('plus')+'Criar pasta</button></form>'+
+    ['music','rhythm'].map(kind=>'<div class="folder-block"><h3>'+(kind==='music'?'Músicas':'Ritmos')+'</h3>'+
+      (kindFolders(kind).map(f=>'<div class="folder-admin-row">'+icon('folder')+
+        '<input aria-label="Renomear pasta" data-folder-name="'+escape(f.id)+'" maxlength="70" value="'+escape(f.name)+'">'+
+        '<span>'+state.songs.filter(s=>!s.deleted&&s.folderId===f.id).length+' itens</span>'+
+        iconButton('delete-folder','Excluir pasta, sem apagar itens','trash','data-id="'+escape(f.id)+'"')+'</div>').join('')||'<p class="subtle">Nenhuma pasta cadastrada.</p>')+'</div>').join('');
+}
+function repertoiresPanel() {
+  const reps=state.libraryData.repertoires||[];
+  const rep=reps.find(r=>r.id===state.repEditingId)||reps[0];
+  const songs=liveCatalog(state.songs).sort((a,b)=>(a.name||'').localeCompare(b.name||'','pt-BR'));
+  const entries=rep?repertoireEntries(rep,songs):[];
+  return '<div class="editor-panel-head"><div><p class="eyebrow">APRESENTAÇÕES</p><h2>Repertórios personalizados</h2><p>Uma música ou ritmo pode participar de quantos repertórios você precisar, sem duplicar o WAV.</p></div></div>'+
+    '<div class="repertoire-admin-layout"><div class="rep-list">'+(reps.map(r=>'<button class="rep-item" data-action="edit-repertoire" data-id="'+escape(r.id)+'" '+(r.id===rep?.id?'aria-pressed="true"':'')+'>'+icon('list')+'<span><strong>'+escape(r.name)+'</strong><small>'+r.items.length+' itens</small></span></button>').join('')||'<p class="subtle">Nenhum repertório ainda.</p>')+'</div>'+
+    '<div class="rep-detail">'+(!rep?'<div class="blank"><h2>Crie seu primeiro repertório</h2><p>Adicione músicas ou ritmos e organize a ordem da apresentação.</p></div>':
+      '<div class="rep-detail-head"><label class="field"><span>Nome do repertório</span><input data-rep-field="name" maxlength="90" value="'+escape(rep.name)+'"></label>'+
+      '<label class="field"><span>Data (opcional)</span><input data-rep-field="date" type="date" value="'+escape(rep.date||'')+'"></label></div>'+
+      '<div class="rep-actions">'+button('use-repertoire','Abrir no Modo Live','play','primary')+button('duplicate-repertoire','Duplicar','layers','ghost')+button('delete-repertoire','Excluir','trash','ghost danger')+'</div>'+
+      '<div class="section-head"><h2>Ordem de execução</h2><span>'+entries.length+' itens disponíveis</span></div>'+
+      '<div class="rep-tracks">'+(rep.items.map((item,index)=>{
+        const song=songs.find(s=>s.id===item.songId);
+        return '<div class="rep-track"><span class="rep-track-num">'+(index+1)+'</span><span class="rep-track-name"><strong>'+escape(song?.name||'Item indisponível')+'</strong><small>'+(songKind(song)==='rhythm'?'Ritmo':'Música')+(song?' · '+song.bpm+' BPM':'')+'</small></span>'+
+          '<label class="rep-bpm">BPM<input type="number" min="30" max="280" data-rep-bpm="'+index+'" placeholder="Original" value="'+(item.bpm||'')+'" aria-label="BPM do item '+(index+1)+'"></label>'+
+          iconButton('rep-up','Subir item','arrowup','data-index="'+index+'" '+(index===0?'disabled':''))+
+          iconButton('rep-down','Descer item','arrowdown','data-index="'+index+'" '+(index===rep.items.length-1?'disabled':''))+
+          iconButton('rep-remove','Remover do repertório','trash','data-index="'+index+'"')+'</div>';}).join('')||'<p class="subtle">Adicione uma música ou ritmo abaixo.</p>')+'</div>'+
+      '<div class="v11-form-row rep-add"><label class="field"><span>Adicionar da biblioteca</span><select id="rep-add-song">'+
+      songs.map(s=>'<option value="'+escape(s.id)+'">'+escape(s.name||'Sem título')+' · '+(songKind(s)==='rhythm'?'Ritmo':'Música')+'</option>').join('')+'</select></label>'+button('rep-add','Adicionar','plus','primary',songs.length?'':'disabled')+'</div>')+'</div></div>';
 }
 
 function field(key, title, value, attrs = '') {
@@ -358,6 +389,11 @@ function editor() {
     (song.conflict ? '<div class="warning" role="status">Esta música foi editada em outro aparelho.' +
       '<div>' + button('resolve-remote', 'Usar versão da central', 'cloud', 'ghost') +
       button('resolve-local', 'Publicar minha edição', 'check', 'ghost') + '</div></div>' : '') +
+    '<div class="v11-classification"><label class="field"><span>Tipo de cadastro</span><select data-field="kind">' +
+    ['music','rhythm'].map(k=>'<option value="'+k+'" '+(songKind(song)===k?'selected':'')+'>'+(k==='music'?'Música específica':'Ritmo reutilizável')+'</option>').join('')+'</select></label>' +
+    '<label class="field"><span>Pasta</span><select data-field="folderId"><option value="">Sem pasta</option>' +
+    kindFolders(songKind(song)).map(f=>'<option value="'+escape(f.id)+'" '+(song.folderId===f.id?'selected':'')+'>'+escape(f.name)+'</option>').join('')+'</select></label></div>' +
+    (songKind(song)==='rhythm' ? '<div class="v11-rhythm-template"><span>Use esta bateria em outras músicas sem reimportar os WAVs.</span>'+button('make-from-rhythm','Criar música a partir deste ritmo','plus','ghost')+'</div>' : '') +
     '<div class="section-head"><h2>01 · Identificação</h2><span>Salva automaticamente</span></div>' +
     '<div class="form-grid">' + field('name', 'Nome da música', song.name, 'maxlength="90" placeholder="Ex.: Entrada da noiva"') +
     field('occasion', 'Momento', song.occasion, 'maxlength="55" placeholder="Ex.: Entrada"') +
@@ -433,24 +469,40 @@ function normalized(value) {
   return (value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
 }
 
+function updateAdminSidebar(){
+  const container=get('#sidebar-items');if(!container)return;
+  const rows=songsFor('admin').filter(song=>inFolder(song,state.adminKind,state.adminFolder))
+    .filter(song=>normalized(song.name+' '+song.occasion).includes(normalized(state.adminSearch)))
+    .sort((a,b)=>(a.name||'').localeCompare(b.name||'','pt-BR'));
+  const counter=get('#sidebar-count');if(counter)counter.textContent=String(rows.length);
+  container.innerHTML=rows.map(song=>'<button type="button" class="item sidebar-song" data-action="song" data-id="'+escape(song.id)+'" aria-pressed="'+(state.admin?.id===song.id)+'">'+
+    '<span class="item-icon">'+icon(songKind(song)==='rhythm'?'wave':'music')+'</span><span><span class="item-title">'+escape(song.name||'Sem título')+
+    '</span><span class="item-meta">'+escape(song.occasion||'Sem categoria')+' · '+song.bpm+' BPM</span></span></button>').join('')||
+    '<p class="empty-list">Nenhum item nesta pasta.</p>';
+}
 function updateLibrary() {
-  const container = get('#items');
-  if (!container) return;
-  const view = state.view;
-  const selected = view === 'live' ? state.selected?.id : state.admin?.id;
-  const search = normalized(view === 'live' ? state.searchLive : state.searchAdmin);
-  const rows = songsFor(view).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR'));
-  get('#song-count').textContent = rows.length;
-  const visible = rows.filter(song => normalized(song.name + ' ' + song.occasion).includes(search));
-  container.innerHTML = visible.map(song => {
-    const offlineRecord = state.offline.get(song.id);
-    const downloaded = song.demo || (offlineRecord && sortedSignature(offlineRecord) === sortedSignature(song));
-    const status = firstPlayablePart(song) ? '' : ' · Falta loop contínuo';
-    return '<button type="button" class="item" data-action="song" data-id="' + escape(song.id) + '" aria-pressed="' +
-      (song.id === selected) + '"><span class="item-icon">' + icon('music') + '</span><span><span class="item-title">' +
-      escape(song.name || 'Sem título') + '</span><span class="item-meta">' + escape(song.occasion || 'Rascunho') + ' · ' +
-      escape(song.bpm) + ' BPM' + escape(view === 'live' ? status : '') + '</span></span>' + (downloaded && view === 'live' ? icon('check') : '') + '</button>';
-  }).join('') || '<p class="empty-list">' + (search ? 'Nenhuma música encontrada.' : 'Nenhuma música cadastrada.') + '</p>';
+  updateAdminSidebar();
+  const container=get('#items');if(!container)return;
+  const search=normalized(state.searchLive);
+  const rows=songsFor('live').sort((a,b)=>(a.name||'').localeCompare(b.name||'','pt-BR'));
+  const showReps=state.drawerTab==='repertoires';
+  const filtered=showReps?(state.libraryData.repertoires||[]).filter(r=>normalized(r.name).includes(search)):
+    rows.filter(song=>(state.drawerTab==='all'||songKind(song)===state.drawerTab)&&
+      normalized(song.name+' '+song.occasion).includes(search));
+  const counter=get('#song-count');if(counter)counter.textContent=String(filtered.length);
+  container.innerHTML=showReps?filtered.map(r=>'<button type="button" class="item" data-action="choose-repertoire" data-id="'+escape(r.id)+'" aria-pressed="'+(r.id===state.activeRepId)+'">'+
+    '<span class="item-icon">'+icon('list')+'</span><span><span class="item-title">'+escape(r.name)+'</span><span class="item-meta">'+r.items.length+' itens · Músicas + ritmos</span></span></button>').join('')||'<p class="empty-list">Nenhum repertório encontrado.</p>':
+    filtered.map(song=>{
+      const saved=state.offline.get(song.id);
+      const downloaded=song.demo||(saved&&sortedSignature(saved)===sortedSignature(song));
+      const status=firstPlayablePart(song)?'':' · Falta loop contínuo';
+      return '<button type="button" class="item" data-action="song" data-id="'+escape(song.id)+'" aria-pressed="'+(song.id===state.selected?.id)+'">'+
+        '<span class="item-icon">'+icon(songKind(song)==='rhythm'?'wave':'music')+'</span><span><span class="item-title">'+escape(song.name||'Sem título')+
+        '</span><span class="item-meta">'+(songKind(song)==='rhythm'?'Ritmo':'Música')+' · '+escape(song.occasion||'')+' · '+song.bpm+' BPM'+status+'</span></span>'+
+        (downloaded?icon('check'):'')+'</button>';
+    }).join('')||'<p class="empty-list">Nenhum item encontrado.</p>';
+  app.querySelectorAll('[data-action="drawer-tab"]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.tab===state.drawerTab)));
+  const repButton=get('#download-rep-btn');if(repButton)repButton.disabled=!state.activeRepId;
 }
 
 function updateTop() {
@@ -489,55 +541,22 @@ function confirmChoice(title, description, ok) {
 }
 
 async function copyMobile() {
-  const url = new URL(location.href);
-  // Link estável e exclusivo da interface do músico; sem menus de cadastro.
-  url.search = '?modo=musico';
-  url.hash = '';
-  const preview = location.hostname.match(/^[a-f0-9]{12,}--(.+\.netlify\.app)$/i);
-  const stable = new URL(url.href);
-  if (preview) stable.hostname = preview[1];
-  const published = !['localhost', '127.0.0.1', '0.0.0.0'].includes(url.hostname) && url.protocol === 'https:';
-  dialog.innerHTML = '<h2>Link do músico · Só Modo Live</h2>' +
-    '<p>O link abre diretamente o player, sem tela de edição. No iPhone: abra pelo Safari, entre uma vez no Netlify Identity e escolha Compartilhar → Adicionar à Tela de Início. Depois baixe os WAVs dentro do app instalado.</p>' +
-    (published ? '<p class="link-note">Se o Netlify pedir login da própria plataforma antes do aplicativo, confira Project visibility no painel: o projeto Private exige conta da equipe. Para acesso direto, a interface pode ser Public; o login Identity continua protegendo os WAVs e cadastros.</p>' : '<p class="warning">Este é um endereço local. Para usar no celular, publique no Netlify.</p>') +
-    '<label class="field"><span>Link do app no iPhone (endereço principal)</span><input readonly value="' + escape(stable.href) + '"></label>' +
-    (preview ? '<label class="field" style="margin-top:10px"><span>Link desta versão de teste (Permalink)</span><input readonly value="' + escape(url.href) + '"></label><p class="link-note">Para instalar definitivamente, use o endereço principal quando a V10 estiver publicada. O Permalink é uma prévia isolada.</p>' : '') +
-    '<div class="batch-footer" style="margin-top:14px">' + button('copy', 'Copiar app oficial', 'link', 'primary') +
-    (preview ? button('copy-preview', 'Copiar link de teste', 'link', 'ghost') : '') +
-    button('share', 'Compartilhar', 'share', 'ghost') +
-    '<a class="button ghost" href="' + escape(url.href) + '" target="_blank" rel="noopener noreferrer">Abrir link do músico</a>' +
-    '<button class="button ghost" id="close-link">Fechar</button></div>';
-  dialog.querySelector('#close-link').addEventListener('click', () => dialog.close());
-  dialog.querySelector('[data-action="copy"]').addEventListener('click', async () => {
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error('Clipboard indisponível');
-      await navigator.clipboard.writeText(stable.href);
-      notice('Link do músico copiado.');
-    } catch {
-      const field = dialog.querySelector('input');
-      field.focus(); field.select();
-      try { if (!document.execCommand('copy')) throw new Error('Falha ao copiar'); notice('Link do músico copiado.'); }
-      catch { notice('Selecione e copie o endereço do músico.'); }
-    }
+  const url=new URL(location.href);url.search='?modo=musico';url.hash='';
+  const preview=/^[a-f0-9]{12,}--.+\.netlify\.app$/i.test(location.hostname);
+  dialog.innerHTML='<section class="backup-dialog"><p class="eyebrow">ACESSO DO MÚSICO</p><h2>Link do aplicativo</h2>'+
+    '<p>Este link abre somente o player. '+(preview?'Você está no Permalink de teste; o link acompanha esta mesma versão.':'Você está na versão oficial.')+'</p>'+
+    '<label class="field"><span>Endereço para abrir no Safari</span><input id="musician-url" readonly value="'+escape(url.href)+'"></label>'+
+    '<p class="subtle">No iPhone: Safari → Compartilhar → Adicionar à Tela de Início. Mantenha o Netlify Identity protegendo a biblioteca.</p>'+
+    '<div class="batch-footer">'+button('copy','Copiar link do músico','link','primary')+
+      button('share','Compartilhar','share','ghost')+'<button class="button ghost" id="close-link">Fechar</button></div></section>';
+  dialog.querySelector('#close-link').addEventListener('click',()=>dialog.close());
+  dialog.querySelector('[data-action="copy"]').addEventListener('click',async()=>{
+    try {await navigator.clipboard.writeText(url.href);notice('Link do músico copiado.');}
+    catch {const input=dialog.querySelector('#musician-url');input.focus();input.select();notice('Selecione e copie o endereço.');}
   });
-  dialog.querySelector('[data-action="copy-preview"]')?.addEventListener('click', async () => {
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error('Indisponível');
-      await navigator.clipboard.writeText(url.href);
-      notice('Permalink de teste copiado.');
-    } catch {
-      const fields = dialog.querySelectorAll('input');
-      const input = fields[fields.length - 1];
-      input?.focus(); input?.select();
-      try { if (!document.execCommand('copy')) throw new Error('Cópia indisponível'); notice('Link de teste copiado.'); }
-      catch { notice('Selecione e copie o link de teste.'); }
-    }
-  });
-  dialog.querySelector('[data-action="share"]').addEventListener('click', async () => {
-    if (navigator.share) {
-      try { await navigator.share({ title: 'Loops Marks Pro', text: 'Abrir o Modo Live', url: stable.href }); }
-      catch (error) { if (error.name !== 'AbortError') notice('Não foi possível compartilhar o endereço.'); }
-    } else window.open('https://wa.me/?text=' + encodeURIComponent('Loops Marks Pro — Modo Live: ' + stable.href), '_blank', 'noopener,noreferrer');
+  dialog.querySelector('[data-action="share"]').addEventListener('click',async()=>{
+    if(navigator.share){try{await navigator.share({title:'Loops Marks Pro',url:url.href});}catch(e){if(e.name!=='AbortError')notice('Compartilhamento não concluído.');}}
+    else window.open('https://wa.me/?text='+encodeURIComponent('Loops Marks Pro: '+url.href),'_blank','noopener,noreferrer');
   });
   dialog.showModal();
 }
@@ -623,6 +642,9 @@ async function refreshLocal() {
   const rows = await current.catalog();
   if (repo !== current) return;
   state.songs = rows;
+  const previousLibrary=JSON.stringify(cleanLibrary(state.libraryData));
+  state.libraryData = await current.libraryState();
+  const libraryChanged=previousLibrary!==JSON.stringify(cleanLibrary(state.libraryData));
   const downloads = await Promise.all(rows.filter(row => !row.deleted).map(async row => [row.id, await current.offline(row.id)]));
   if (repo !== current) return;
   state.offline = new Map(downloads.filter(([, saved]) => saved));
@@ -645,6 +667,8 @@ async function refreshLocal() {
   const preferred = available.find(song => song.id === state.selected?.id) || available[0] || null;
   const latest = await preferDownloaded(preferred);
   if (repo !== current) return;
+  const editingLibrary=document.activeElement?.matches('[data-folder-name],[data-rep-field],[data-rep-bpm]');
+  if(libraryChanged&&state.view==='admin'&&['folders','repertoires'].includes(state.adminPanel)&&!editingLibrary){render();return;}
   if (!player.running && sortedSignature(latest) !== state.selectedSignature) {
     selectLive(latest);
   } else {
@@ -689,12 +713,12 @@ function requestSync() {
   syncTimer = setTimeout(() => { syncCatalog(); }, 650);
 }
 
-function selectLive(song) {
+function selectLive(song,bpmOverride=null) {
   currentGeneration++;
   clearTimeout(prepTimer);
   state.selected = song;
   state.selectedSignature = sortedSignature(song);
-  state.bpm = song?.bpm || 0;
+  state.bpm = bpmOverride || song?.bpm || 0;
   state.preparation = '';
   wavePeaks = [];
   player.cancelPreparation();
@@ -1213,8 +1237,121 @@ async function previewWav(part) {
   notice('Ouvindo ' + (slotInfo(state.admin, part)?.label || part) + '…');
 }
 
+async function saveLibraryData() {
+  state.libraryData=await repo.saveLibrary(state.libraryData);
+  requestSync();
+}
+function currentRepertoire(){return (state.libraryData.repertoires||[]).find(r=>r.id===state.repEditingId)||state.libraryData.repertoires?.[0]||null;}
+async function playRepertoire(id,index=0){
+  const rep=(state.libraryData.repertoires||[]).find(r=>r.id===id);
+  const entries=repertoireEntries(rep,songsFor('live'));
+  if(!entries.length){notice('Este repertório não possui músicas ou ritmos disponíveis.');return;}
+  if(player.running && !await confirmChoice('Trocar de música?','A bateria atual será interrompida.','Trocar'))return;
+  if(player.running)stopPlayback();
+  state.activeRepId=id;state.activeRepPos=Math.max(0,Math.min(index,entries.length-1));
+  const entry=entries[state.activeRepPos];
+  let tempo=entry.bpm;
+  if(tempo){const [min,max]=bpmRange(entry.song.bpm);if(tempo<min||tempo>max){tempo=Math.min(max,Math.max(min,tempo));notice('BPM do repertório ajustado ao limite de ±10 do arquivo original.');}}
+  selectLive(entry.song,tempo);
+  toggleLibrary(false);
+}
+async function mutateRepertoire(task){
+  const rep=currentRepertoire();if(!rep)return;
+  await task(rep);
+  await saveLibraryData();render();
+}
 async function handleAction(element) {
   const { action, id, part } = element.dataset;
+  if(action==='drawer-tab'){state.drawerTab=element.dataset.tab;updateLibrary();return;}
+  if(action==='choose-repertoire'){await playRepertoire(id);return;}
+  if(action==='rep-prev-live'||action==='rep-next-live'){
+    if(!state.activeRepId)return;
+    await playRepertoire(state.activeRepId,state.activeRepPos+(action==='rep-next-live'?1:-1));return;
+  }
+  if(action==='download-repertoire'){
+    if(!state.activeRepId||player.running||state.download)return;
+    const rep=(state.libraryData.repertoires||[]).find(r=>r.id===state.activeRepId);
+    const entries=repertoireEntries(rep,songsFor('live'));
+    state.download='Baixando repertório…';updateDownload();
+    try{for(let i=0;i<entries.length;i++){
+      const song=entries[i].song;if(song.demo)continue;
+      state.download='Baixando '+(i+1)+'/'+entries.length+': '+song.name;updateDownload();
+      await repo.download(song);
+      state.offline.set(song.id,song);
+    }notice(entries.length+' itens verificados para uso offline.');updateLibrary();}
+    catch(e){notice(e.message||'Falha ao baixar repertório.');}
+    finally{state.download='';updateDownload();}return;
+  }
+  if(action==='show-kind'||action==='select-folder'||action==='show-repertoires'||action==='show-folders'){
+    await saveBeforeLeaving();
+    if(action==='show-kind') {state.adminKind=element.dataset.kind;state.adminFolder='';state.adminPanel='editor';state.admin=null;}
+    if(action==='select-folder') {state.adminFolder=element.dataset.folder||'';state.adminPanel='editor';state.admin=null;}
+    if(action==='show-repertoires') {state.adminPanel='repertoires';state.repEditingId||=state.libraryData.repertoires?.[0]?.id||null;}
+    if(action==='show-folders')state.adminPanel='folders';
+    if(action==='show-kind'||action==='select-folder'){
+      const song=songsFor('admin').find(s=>inFolder(s,state.adminKind,state.adminFolder));
+      if(song)state.admin=structuredClone(song);
+    }
+    render();return;
+  }
+  if(action==='make-from-rhythm'){
+    if(!state.admin||songKind(state.admin)!=='rhythm')return;
+    await saveBeforeLeaving();
+    const template=structuredClone(state.admin);
+    state.admin={...template,id:crypto.randomUUID(),kind:'music',folderId:'',
+      name:('Música baseada em '+(template.name||'ritmo')).slice(0,90),revision:0,edit:undefined,dirty:true,conflict:null};
+    state.adminKind='music';state.adminFolder='';state.adminPanel='editor';
+    await persistDraft();render();notice('Música criada compartilhando os WAVs do ritmo.');return;
+  }
+  if(action==='new-repertoire'){
+    const rep={id:crypto.randomUUID(),name:'Novo repertório',date:'',items:[]};
+    state.libraryData.repertoires.push(rep);state.repEditingId=rep.id;
+    await saveLibraryData();render();return;
+  }
+  if(action==='edit-repertoire'){state.repEditingId=id;render();return;}
+  if(action==='rep-add'){
+    const selected=get('#rep-add-song')?.value;if(!selected)return;
+    await mutateRepertoire(rep=>{rep.items.push({songId:selected,bpm:null});});return;
+  }
+  if(['rep-up','rep-down','rep-remove'].includes(action)){
+    const index=Number(element.dataset.index);
+    await mutateRepertoire(rep=>{
+      if(!Number.isInteger(index)||index<0||index>=rep.items.length)return;
+      if(action==='rep-remove')rep.items.splice(index,1);
+      else {const next=index+(action==='rep-up'?-1:1);if(next<0||next>=rep.items.length)return;
+        [rep.items[index],rep.items[next]]=[rep.items[next],rep.items[index]];}
+    });return;
+  }
+  if(action==='duplicate-repertoire'){
+    const rep=currentRepertoire();if(!rep)return;
+    const clone=structuredClone(rep);clone.id=crypto.randomUUID();clone.name=(rep.name+' (cópia)').slice(0,90);
+    state.libraryData.repertoires.push(clone);state.repEditingId=clone.id;
+    await saveLibraryData();render();return;
+  }
+  if(action==='delete-repertoire'){
+    const rep=currentRepertoire();if(!rep)return;
+    if(!await confirmChoice('Excluir repertório?','As músicas e WAVs permanecerão na biblioteca.','Excluir repertório'))return;
+    state.libraryData.repertoires=state.libraryData.repertoires.filter(r=>r.id!==rep.id);
+    state.repEditingId=state.libraryData.repertoires[0]?.id||null;
+    await saveLibraryData();render();return;
+  }
+  if(action==='use-repertoire'){
+    const rep=currentRepertoire();if(!rep)return;
+    await changeView('live');await playRepertoire(rep.id);return;
+  }
+  if(action==='delete-folder'){
+    const folder=state.libraryData.folders.find(f=>f.id===id);if(!folder)return;
+    if(!await confirmChoice('Excluir pasta?','Os itens serão mantidos na biblioteca, sem pasta.','Excluir pasta'))return;
+    await saveBeforeLeaving();
+    for(const song of state.songs.filter(s=>!s.deleted&&s.folderId===id)) {
+      const saved=await repo.save({...song,folderId:''});replaceLocalSong(saved);
+    }
+    state.libraryData.folders=state.libraryData.folders.filter(f=>f.id!==id);
+    if(state.adminFolder===id)state.adminFolder='';
+    if(state.admin?.folderId===id)state.admin.folderId='';
+    await saveLibraryData();render();return;
+  }
+
   if (action === 'auth-check') {
     element.disabled=true;
     const result=get('#auth-check-message');
@@ -1226,7 +1363,10 @@ async function handleAction(element) {
   }
   if (action === 'open-library') { toggleLibrary(true); return; }
   if (action === 'close-library') { toggleLibrary(false); return; }
-  if (action === 'live' || action === 'admin') { await changeView(action); return; }
+  if (action === 'live' || action === 'admin') {
+    if(action==='admin'&&state.view==='admin'){state.adminPanel='editor';render();return;}
+    await changeView(action);return;
+  }
   if (action === 'link') { await copyMobile(); return; }
   if (action === 'backup') { await openBackupCenter(); return; }
   if (action === 'play') { await startPlayer(); return; }
@@ -1276,7 +1416,7 @@ async function handleAction(element) {
     state.offline.clear();
     state.admin = state.selected = null;
     state.selectedSignature = '';
-    state.errors = state.syncLabel = '';
+    state.errors=state.syncLabel='';state.libraryData=emptyLibrary();state.activeRepId=null;
     render();
     return;
   }
@@ -1290,11 +1430,13 @@ async function handleAction(element) {
       if (state.selected?.id === song.id || startPending || state.download) return;
       if (player.running && !await confirmChoice('Trocar de música?', 'A reprodução atual vai parar.', 'Trocar música')) return;
       if (player.running) stopPlayback();
+      state.activeRepId=null;state.activeRepPos=0;
       toggleLibrary(false);
       selectLive(await preferDownloaded(song));
     } else {
       await saveBeforeLeaving();
       state.admin = structuredClone(await repo.song(song.id) || song);
+      state.adminKind=songKind(song);state.adminFolder=state.admin.folderId||'';state.adminPanel='editor';
       state.editLabel = '';
       render();
     }
@@ -1302,7 +1444,8 @@ async function handleAction(element) {
   }
   if (action === 'new') {
     await saveBeforeLeaving();
-    state.admin = newSong();
+    state.admin = {...newSong(),kind:state.adminKind,folderId:state.adminFolder};
+    state.adminPanel='editor';
     state.editLabel = '';
     render();
     get('[data-field="name"]').focus();
@@ -1376,6 +1519,7 @@ app.addEventListener('click', event => {
 
 app.addEventListener('input', event => {
   const input = event.target;
+  if(input.id==='admin-search'){state.adminSearch=input.value;updateAdminSidebar();return;}
   if (input.id === 'search') {
     if (state.view === 'live') state.searchLive = input.value;
     else state.searchAdmin = input.value;
@@ -1395,6 +1539,10 @@ app.addEventListener('input', event => {
   }
   if (input.dataset.field) {
     const field = input.dataset.field;
+    if(field==='kind'){state.admin.kind=input.value==='rhythm'?'rhythm':'music';state.admin.folderId='';state.adminKind=state.admin.kind;state.adminFolder='';
+      persistDraft().then(()=>render()).catch(()=>{});return;}
+    if(field==='folderId'){state.admin.folderId=input.value;state.adminFolder=input.value;
+      persistDraft().then(()=>render()).catch(()=>{});return;}
     if (['bpm', 'beats'].includes(field)) {
       if (!input.value || !Number(input.value)) return;
       state.admin[field] = Number(input.value);
@@ -1414,11 +1562,35 @@ app.addEventListener('input', event => {
 });
 
 app.addEventListener('change', event => {
+  const el=event.target;
+  if(el.dataset.folderName){
+    const f=state.libraryData.folders.find(x=>x.id===el.dataset.folderName);
+    if(f){const name=el.value.trim().slice(0,70);if(!name){el.value=f.name;notice('Informe o nome da pasta.');return;}
+      f.name=name;saveLibraryData().then(()=>render()).catch(e=>notice(e.message));}return;
+  }
+  if(el.dataset.repField){
+    const rep=currentRepertoire();if(!rep)return;
+    rep[el.dataset.repField]=el.value.trim();saveLibraryData().then(()=>render()).catch(e=>notice(e.message));return;
+  }
+  if(el.dataset.repBpm!==undefined){
+    const rep=currentRepertoire();const entry=rep?.items[Number(el.dataset.repBpm)];if(!entry)return;
+    const n=Number(el.value);if(el.value&&!Number.isInteger(n)||el.value&&(n<30||n>280)){notice('BPM entre 30 e 280.');return;}
+    entry.bpm=el.value?n:null;saveLibraryData().then(()=>render()).catch(e=>notice(e.message));return;
+  }
   if (event.target.id === 'batch-files') { batchPreview(event.target); return; }
   if (event.target.dataset.file) importWav(event.target).catch(error => notice(error.message));
 });
 
 app.addEventListener('submit', async event => {
+  if(event.target.id==='create-folder-form'){
+    event.preventDefault();
+    const form=new FormData(event.target);const name=String(form.get('name')||'').trim().slice(0,70);
+    const kind=form.get('kind');if(!name||!['music','rhythm'].includes(kind))return;
+    if(state.libraryData.folders.some(f=>f.kind===kind&&normalized(f.name)===normalized(name))) {notice('Esta pasta já existe.');return;}
+    state.libraryData.folders.push({id:crypto.randomUUID(),name,kind});
+    try{await saveLibraryData();render();notice('Pasta criada e sincronização agendada.');}
+    catch(e){notice(e.message||'Não foi possível criar a pasta.');}return;
+  }
   if (event.target.id === 'request-recovery-form') {
     event.preventDefault();
     const form = event.target;
@@ -1515,7 +1687,7 @@ async function boot() {
   await refreshLocal();
   if (state.view === 'admin' && !state.admin) {
     const first = songsFor('admin')[0];
-    if (first) { state.admin = structuredClone(first); render(); }
+    if (first) { state.admin = structuredClone(first);state.adminKind=songKind(first);render(); }
   }
   if (state.view === 'live' && state.selected && !player.ready && !state.preparation) prepareLive();
   requestSync();

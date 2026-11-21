@@ -42,11 +42,14 @@ globalThis.__netlifyBlobs=(opts)=>{
 };
 globalThis.__netlifyIdentity={ getUser:async()=>loggedIn?({id:owner,email:'teste@example.com'}):null,
   verifyRequestOrigin:()=>{} };
+const libSrc=await readFile(new URL('../dist/library-model.js',import.meta.url),'utf8');
+const libUrl='data:text/javascript;base64,'+Buffer.from(libSrc).toString('base64');
 const source=(await readFile(new URL('../netlify/functions/loops-api.mjs',import.meta.url),'utf8'))
   .replace("import { getUser, verifyRequestOrigin } from '@netlify/identity';",
     'const {getUser,verifyRequestOrigin}=globalThis.__netlifyIdentity;')
   .replace("import { getStore } from '@netlify/blobs';",
-    'const getStore=globalThis.__netlifyBlobs;');
+    'const getStore=globalThis.__netlifyBlobs;')
+  .replace("from '../../dist/library-model.js';","from '"+libUrl+"';");
 const {default:handler}=await import('data:text/javascript;charset=utf-8,'+encodeURIComponent(source));
 function invoke(op,method='GET',body=null,type='application/json'){
   const request=new Request('https://loops-marks-pro.netlify.app/.netlify/functions/loops-api'+op,{method,
@@ -101,4 +104,23 @@ test('V7 session endpoint rejects anonymous requests and exposes only verified a
   assert.deepEqual(Object.keys(await response.json()),['user']);
   const invalidMethod=await module.default(new Request('https://loops.test/.netlify/functions/loops-session',{method:'POST'}));
   assert.equal(invalidMethod.status,405);
+});
+
+test('V11: pastas e repertórios no Netlify Blobs com autenticação e controle de revisão',async()=>{
+  const folder={id:crypto.randomUUID(),name:'Rock',kind:'rhythm'};
+  const repertoire={id:crypto.randomUUID(),name:'Casamento',date:'2026-11-21',items:[{songId,bpm:80}]};
+  loggedIn=false;
+  assert.equal((await invoke('?op=library')).status,401);
+  loggedIn=true;
+  const blank=await (await invoke('?op=library')).json();
+  assert.equal(blank.revision,0);assert.deepEqual(blank.content.folders,[]);
+  const content={folders:[folder],repertoires:[repertoire]};
+  const saved=await invoke('?op=library-save','POST',JSON.stringify({revision:0,content}));
+  assert.equal(saved.status,200);
+  const after=await (await invoke('?op=library')).json();
+  assert.equal(after.revision,1);assert.deepEqual(after.content,content);
+  const conflict=await invoke('?op=library-save','POST',JSON.stringify({revision:0,content}));
+  assert.equal(conflict.status,409);
+  const bad=await invoke('?op=library-save','POST',JSON.stringify({revision:1,content:{folders:[{...folder,name:''}],repertoires:[]}}));
+  assert.equal(bad.status,400);
 });

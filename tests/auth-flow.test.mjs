@@ -4,7 +4,9 @@ import { readFileSync } from 'node:fs';
 
 const path = new URL('../dist/data.js', import.meta.url);
 const original = readFileSync(path, 'utf8');
-const importedSDK = original.replace(/^import \{[^\n]+\} from '\.\/netlify-client\.js';/m,
+const libSource=readFileSync(new URL('../dist/library-model.js',import.meta.url),'utf8');
+const libUrl='data:text/javascript;base64,'+Buffer.from(libSource).toString('base64');
+const importedSDK = original.replace("from './library-model.js';","from '"+libUrl+"';").replace(/^import \{[^\n]+\} from '\.\/netlify-client\.js';/m,
   `const { login: identityLogin, logout: identityLogout, getUser: identityGetUser,\n    handleAuthCallback, acceptInvite: identityAcceptInvite, updateUser: identityUpdateUser,\n    requestPasswordRecovery: identityRequestRecovery, getSettings: identityGetSettings,
     refreshSession: identityRefreshSession } = globalThis.__authTestSDK;`);
 
@@ -95,14 +97,14 @@ test('invalid recovery link does not silently open the usual application', async
   }
 });
 
-test('V10 is identified on the login and brand UI', () => {
+test('V11 is identified on the login and brand UI', () => {
   const app = readFileSync(new URL('../dist/app.js', import.meta.url),'utf8');
   const html = readFileSync(new URL('../dist/index.html', import.meta.url),'utf8');
-  assert.match(app,/const APP_VERSION = 'V10'/);
+  assert.match(app,/const APP_VERSION = 'V11'/);
   assert.match(app,/class=\"login-footer\"/);
   assert.match(app,/brand-version/);
   assert.match(app,/settings-account/);
-  assert.match(html,/V10/);
+  assert.match(html,/V11/);
 });
 
 test('service worker checks the network first and retains offline fallback', () => {

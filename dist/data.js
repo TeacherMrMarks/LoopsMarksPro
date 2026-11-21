@@ -47,12 +47,13 @@ export function fillVariantId(base, beats) { return base + '__' + beats; }
 export function fillBase(id) { return id.match(FILL_VARIANT)?.[1] || id; }
 export const DEFAULT_FILLS = { a: 'fillA', b: 'fillB', c: 'fillC', pre: 'fillPre', chorus: 'fillChorus', low: 'fillLow', high: 'fillHigh' };
 export const MAX_FILE_BYTES = 32 * 1024 * 1024;
+import { emptyLibrary, cleanLibrary, validLibrary } from './library-model.js';
 import { login as identityLogin, logout as identityLogout, getUser as identityGetUser, getSettings as identityGetSettings, refreshSession as identityRefreshSession, handleAuthCallback, acceptInvite as identityAcceptInvite, updateUser as identityUpdateUser, requestPasswordRecovery as identityRequestRecovery } from './netlify-client.js';
 const KEY = 'loops-marks-last-user-v3';
 const STORE = 'dados';
 
 export function newSong() {
-  return { id: crypto.randomUUID(), name: '', occasion: '', bpm: 84, beats: 4, parts: {}, transitions: {}, customFills: [], fillMode: 'smart', repeatMode: 'fill', revision: 0 };
+  return { kind:'music', folderId:'', id: crypto.randomUUID(), name: '', occasion: '', bpm: 84, beats: 4, parts: {}, transitions: {}, customFills: [], fillMode: 'smart', repeatMode: 'fill', revision: 0 };
 }
 
 function openDB() {
@@ -345,9 +346,9 @@ export class Cloud {
   }
   catalog() { return this.request('?op=catalog'); }
   async save(owner, song) {
-    const { id, revision, name, occasion, bpm, beats, parts, transitions, customFills, fillMode, repeatMode, deleted, edit } = song;
+    const { id, revision, name, occasion, bpm, beats, parts, transitions, customFills, fillMode, repeatMode, kind, folderId, deleted, edit } = song;
     const content = deleted ? {deleted: true, edit} :
-      {name, occasion, bpm, beats, parts, transitions: transitions || {}, customFills: customFills || [], fillMode: fillMode || 'smart', repeatMode: repeatMode || 'fill', edit};
+      {name, occasion, bpm, beats, kind:kind||'music', folderId:folderId||'', parts, transitions: transitions || {}, customFills: customFills || [], fillMode: fillMode || 'smart', repeatMode: repeatMode || 'fill', edit};
     const data = await this.request('?op=save', { method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({id, revision, content}) });
@@ -382,6 +383,11 @@ export class Cloud {
     if (hash !== info.sha256) throw new Error('Integridade do WAV não confere. Baixe novamente.');
     return audio;
   }
+  library() { return this.request('?op=library'); }
+  saveLibrary(library) {
+    return this.request('?op=library-save',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({revision:library.revision||0,content:cleanLibrary(library)})});
+  }
   snapshots() { return this.request('?op=snapshots'); }
   restore(key) { return this.request('?op=restore', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})}); }
 }
@@ -394,6 +400,31 @@ export class Repository {
   }
   key(kind, id = '') { return this.owner + '/' + kind + '/' + id; }
   song(id) { return this.disk.get(this.key('song', id)); }
+  async libraryState() { return await this.disk.get(this.key('settings','library')) || emptyLibrary(); }
+  async saveLibrary(next) {
+    const saved=await this.libraryState();
+    const content={...cleanLibrary(next),revision:saved.revision||0,dirty:true};
+    if(!validLibrary(content)) throw new Error('Pastas ou repertórios inválidos.');
+    await this.disk.batch([[this.key('settings','library'),content]]);
+    return content;
+  }
+  async syncLibrary() {
+    const key=this.key('settings','library');
+    const local=await this.libraryState();
+    const remote=await this.cloud.library();
+    if(!local.dirty){
+      await this.disk.batch([[key,{...cleanLibrary(remote.content),revision:remote.revision||0,dirty:false}]]);
+      return;
+    }
+    if((remote.revision||0)!==(local.revision||0)) {
+      throw new Error('Pastas/repertórios alterados em outro aparelho. Reabra a Central antes de editar novamente; sua cópia local foi preservada.');
+    }
+    const saved=await this.cloud.saveLibrary(local);
+    const latest=await this.libraryState();
+    if(JSON.stringify(cleanLibrary(latest))===JSON.stringify(cleanLibrary(local)))
+      await this.disk.batch([[key,{...cleanLibrary(latest),revision:saved.revision,dirty:false}]]);
+    else await this.disk.batch([[key,{...latest,revision:saved.revision,dirty:true}]]);
+  }
   catalog() { return this.disk.list(this.key('song')); }
   offline(id) { return this.disk.get(this.key('offline', id)); }
   async save(song, newFiles = []) {
@@ -501,6 +532,7 @@ export class Repository {
       await this.finishSave(local, revision);
     }
     await this.disk.batch([...records.values()].map(row => [this.key('song', row.id), row]));
+    await this.syncLibrary();
   }
   async finishSave(local, revision) {
     const latest = await this.song(local.id);

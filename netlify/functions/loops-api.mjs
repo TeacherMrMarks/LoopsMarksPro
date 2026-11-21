@@ -1,6 +1,7 @@
 import { getUser, verifyRequestOrigin } from '@netlify/identity';
 import { getStore } from '@netlify/blobs';
 
+const libraryStore = () => getStore({name:'loops-v11-library',consistency:'strong'});
 const songStore = () => getStore({name: 'loops-v3-songs', consistency: 'strong'});
 const audioStore = () => getStore({name: 'loops-v3-wavs', consistency: 'strong'});
 const snapStore = () => getStore({name: 'loops-v3-history', consistency: 'strong'});
@@ -8,6 +9,7 @@ const MAX_AUDIO = 32 * 1024 * 1024;
 const CHUNK_LIMIT = 1_572_864;
 const json = (data, status=200) => Response.json(data, {status, headers:{'Cache-Control':'no-store'}});
 const fail = (message, status=400) => json({message},status);
+import { validLibrary, cleanLibrary } from '../../dist/library-model.js';
 const uuid = id => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f-]{26,38}$/i.test(id);
 function validAudio(path, owner) {
   return typeof path==='string' && path.startsWith(owner+'/') &&
@@ -21,6 +23,8 @@ function validateContent(content, owner) {
       !Number.isFinite(content.bpm) || content.bpm<30 || content.bpm>280 ||
       !Number.isInteger(content.beats) || content.beats<2 || content.beats>6 ||
       !content.parts || typeof content.parts!=='object' || Array.isArray(content.parts)) return false;
+  if ((content.kind && !['music','rhythm'].includes(content.kind)) ||
+      (content.folderId && !uuid(content.folderId))) return false;
   if (Object.keys(content.parts).length>250) return false;
   for (const [key, part] of Object.entries(content.parts)) {
     if (!/^[\w-]{1,80}$/.test(key) || !part || !validAudio(part.path, owner) ||
@@ -38,6 +42,23 @@ export default async function handler(req) {
     const owner = user.id;
     const url = new URL(req.url), op=url.searchParams.get('op') || '';
     if (req.method!=='GET') verifyRequestOrigin(req);
+    if (req.method==='GET' && op==='library') {
+      const doc=await libraryStore().get(owner+'/index',{type:'json',consistency:'strong'});
+      return json(doc || {revision:0,content:{folders:[],repertoires:[]}});
+    }
+    if (req.method==='POST' && op==='library-save') {
+      if(Number(req.headers.get('content-length')||0)>160000)return fail('Biblioteca muito grande.',413);
+      const {revision,content}=await req.json();
+      if(!Number.isSafeInteger(revision)||revision<0||!validLibrary(content)||
+        JSON.stringify(content).length>130000) return fail('Pastas e repertórios inválidos.',400);
+      const store=libraryStore(),key=owner+'/index';
+      const current=await store.getWithMetadata(key,{type:'json',consistency:'strong'});
+      if((current?.data?.revision||0)!==revision)return fail('Biblioteca alterada em outro aparelho.',409);
+      const row={revision:revision+1,content:cleanLibrary(content)};
+      const saved=await store.setJSON(key,row,current?{onlyIfMatch:current.etag}:{onlyIfNew:true});
+      if(!saved.modified)return fail('Biblioteca modificada. Sincronize novamente.',409);
+      return json({revision:row.revision});
+    }
     if (req.method==='GET' && op==='catalog') {
       const store = songStore();
       const list=await store.list({prefix:owner+'/',paginate:false});

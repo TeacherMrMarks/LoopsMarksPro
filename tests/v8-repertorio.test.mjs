@@ -41,7 +41,7 @@ test('V8 escolhe a primeira parte contínua e pode iniciar pelo Refrão sem Part
 
 test('V8 não deixa música incompleta desaparecer e informa o WAV faltante',()=>{
  const app=readFileSync(new URL('../dist/app.js',import.meta.url),'utf8');
- assert.match(app,/const rows = liveCatalog\(state.songs\)/);
+ assert.match(app,/const rows=liveCatalog\(state.songs\)/);
  assert.match(app,/Falta loop contínuo/);
  assert.match(app,/Cadastro encontrado/);
  assert.doesNotMatch(app,/rows\.filter\(song => song\.name && song\.parts\?\.a\)/);
