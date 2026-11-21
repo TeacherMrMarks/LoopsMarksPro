@@ -5,7 +5,7 @@ import { exampleSongs } from './demo.js';
 import { makeBackup, restoreBackup, triggerDownload } from './backup.js';
 import { emptyLibrary, cleanLibrary, songKind, inFolder, repertoireEntries } from './library-model.js';
 
-const APP_VERSION = 'V11';
+const APP_VERSION = 'V12';
 // O link do músico carrega exclusivamente o Modo Live.
 const musicianLink = new URL(location.href).searchParams.get('modo') === 'musico';
 const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
@@ -52,6 +52,7 @@ const icon = key => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" 
 const escape = text => String(text ?? '').replace(/[&<>"']/g, key =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[key]);
 const get = name => app.querySelector(name);
+const safeStored = key => { try{return localStorage.getItem(key);}catch{return null;} };
 const label = key => PARTS.find(item => item.id === fillBase(key))?.label || state.admin?.customFills?.find(item => item.id === fillBase(key))?.label || key;
 const idle = { running: false, beat: -1 };
 const state = {
@@ -61,6 +62,11 @@ const state = {
   selectedSignature: '', info: idle, download: '', capture: null, libraryOpen: false,
   libraryData:emptyLibrary(), adminKind:'music', adminFolder:'', adminPanel:'editor',
   adminSearch:'', drawerTab:'all', repEditingId:null, activeRepId:null, activeRepPos:0,
+  managementOpen:safeStored('loops-v12-management')!=='closed',
+  sidebarCollapsed:safeStored('loops-v12-sidebar')==='collapsed',
+  introOpen:safeStored('loops-v12-editor-intro')!=='closed',
+  pedalLearn:null,pedalMap:loadPedalMap(),pedalLastAt:0,
+
 };
 const player = new Player(() => { if (player.running) updatePlayback(); });
 let repo;
@@ -106,34 +112,29 @@ function statusText() {
   return ['Central online', 'cloud'];
 }
 
-function settingsMenu(user) {
-  return '<details class="settings-menu" id="settings-menu"><summary aria-label="Abrir configurações">' +
-    icon('settings') + '<span>Configurações</span></summary><div class="settings-panel">' +
-    '<p class="settings-title">PREFERÊNCIAS DA CENTRAL</p><div class="settings-account">' + icon('user') +
-    '<span title="' + escape(user) + '">' + escape(user) + '</span></div>' +
-    button('backup', 'Backup e restauração', 'download', 'settings-action') +
-    button('link', 'Gerar link do aplicativo', 'link', 'settings-action') +
-    button('logout', 'Sair da conta', 'exit', 'settings-action settings-logout') +
-    '</div></details>';
+function loadPedalMap(){
+  try{const data=JSON.parse(localStorage.getItem('loops-v12-pedal-map')||'{}');
+    return data&&typeof data==='object'&&!Array.isArray(data)?data:{};
+  }catch{return {};}
 }
-
+function settingsMenu(user){
+  return '<button class="nav-link v12-settings-btn" data-action="settings" title="Configurações">'+icon('settings')+'<span>Configurações</span></button>';
+}
 function adminSidebar() {
   const user=cloud.session()?.email||'Conta não conectada';
   const [status,statusIcon]=statusText();
-  const folderRows=(state.libraryData.folders||[]).filter(f=>f.kind===state.adminKind).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
-  return '<aside class="sidebar v11-sidebar">'+brand()+'<nav aria-label="Módulos">' +
-    '<button class="nav-link" data-action="admin" '+(state.adminPanel==='editor'?'aria-current="page"':'')+'>'+icon('grid')+'Central de loops</button>'+
-    '<button class="nav-link" data-action="show-kind" data-kind="music" '+(state.adminPanel==='editor'&&state.adminKind==='music'?'aria-current="page"':'')+'>'+icon('music')+'Músicas</button>'+
-    '<button class="nav-link" data-action="show-kind" data-kind="rhythm" '+(state.adminPanel==='editor'&&state.adminKind==='rhythm'?'aria-current="page"':'')+'>'+icon('wave')+'Ritmos</button>'+
-    '<button class="nav-link" data-action="show-repertoires" '+(state.adminPanel==='repertoires'?'aria-current="page"':'')+'>'+icon('list')+'Repertórios</button>'+
-    '<button class="nav-link" data-action="show-folders" '+(state.adminPanel==='folders'?'aria-current="page"':'')+'>'+icon('folder')+'Gerenciar pastas</button>'+
-    '<div class="sidebar-rule"></div><button class="nav-link" data-action="live">'+icon('current')+'Modo ao vivo</button></nav>'+
-    '<div class="sidebar-collections"><div class="sidebar-section-title"><strong>'+(state.adminKind==='rhythm'?'RITMOS':'MÚSICAS')+'</strong><span id="sidebar-count" class="count"></span></div>'+
-    '<label class="search">'+icon('search')+'<input type="search" id="admin-search" placeholder="Buscar na biblioteca" aria-label="Buscar música ou ritmo" value="'+escape(state.adminSearch)+'"></label>'+
-    '<div class="sidebar-folder-list"><button class="sidebar-folder" data-action="select-folder" data-folder="" '+(!state.adminFolder?'aria-current="true"':'')+'>'+icon('layers')+'Todas</button>'+
-    folderRows.map(f=>'<button class="sidebar-folder" data-action="select-folder" data-folder="'+escape(f.id)+'" '+(state.adminFolder===f.id?'aria-current="true"':'')+'>'+icon('folder')+escape(f.name)+'</button>').join('')+
-    '</div><div class="sidebar-song-list" id="sidebar-items"></div></div>'+
-    '<div class="sidebar-v11-actions"><button class="nav-link" data-action="sync" title="Sincronizar com o Netlify">'+icon(statusIcon)+'<span id="sync-label">'+escape(status)+'</span></button>'+settingsMenu(user)+'</div></aside>';
+  const expanded=state.managementOpen;
+  return '<aside class="sidebar v11-sidebar v12-sidebar">'+
+    '<div class="v12-brand-row">'+brand()+iconButton('collapse-sidebar',state.sidebarCollapsed?'Expandir lateral':'Recolher lateral','layers')+'</div>'+
+    '<nav aria-label="Navegação principal"><button type="button" class="nav-link v12-group" data-action="toggle-management" aria-expanded="'+expanded+'" title="Gerenciamento">'+icon('grid')+'<span>Gerenciamento</span>'+icon(expanded?'arrowup':'arrowdown')+'</button>'+
+    '<div class="v12-subnav" '+(expanded?'':'hidden')+'>'+
+    '<button type="button" class="nav-link" data-action="admin" title="Central de loops" '+(state.adminPanel==='editor'?'aria-current="page"':'')+'>'+icon('grid')+'<span>Central de loops</span></button>'+
+    '<button type="button" class="nav-link" data-action="show-kind" data-kind="music" title="Músicas" '+(state.adminKind==='music'&&state.adminPanel==='catalog'?'aria-current="page"':'')+'>'+icon('music')+'<span>Músicas</span></button>'+
+    '<button type="button" class="nav-link" data-action="show-kind" data-kind="rhythm" title="Ritmos" '+(state.adminKind==='rhythm'&&state.adminPanel==='catalog'?'aria-current="page"':'')+'>'+icon('wave')+'<span>Ritmos</span></button>'+
+    '<button type="button" class="nav-link" data-action="show-repertoires" title="Repertórios" '+(state.adminPanel==='repertoires'?'aria-current="page"':'')+'>'+icon('list')+'<span>Repertórios</span></button>'+
+    '<button type="button" class="nav-link" data-action="show-folders" title="Gerenciar pastas" '+(state.adminPanel==='folders'?'aria-current="page"':'')+'>'+icon('folder')+'<span>Gerenciar pastas</span></button></div>'+
+    '<div class="sidebar-rule"></div><button class="nav-link" data-action="live" title="Modo ao vivo">'+icon('current')+'<span>Modo ao vivo</span></button></nav>'+
+    '<div class="v12-sidebar-bottom"><button class="nav-link" data-action="sync" title="Estado da sincronização">'+icon(statusIcon)+'<span id="sync-label">'+escape(status)+'</span></button>'+settingsMenu(user)+'</div></aside>';
 }
 function shell() {
   const live=state.view==='live';
@@ -141,13 +142,17 @@ function shell() {
   if(live) return '<div class="stage-shell'+(musicianLink?' musician-shell':'')+'"><header class="stage-topbar">'+
     (musicianLink?'<span class="stage-top-left"></span>':iconButton('admin','Central Administrativa','grid','data-stage-back'))+
     brand('stage-brand')+'<div class="stage-tools"><span class="stage-connection" title="'+escape(status)+'" id="sync-label">'+icon(statusIcon)+'<span>'+escape(status)+'</span></span>'+
+    iconButton('pedal-setup','Configurar pedal Bluetooth','wave')+
     iconButton('open-library','Selecionar repertório','list','id="repertoire-toggle" aria-expanded="false" aria-controls="live-drawer"')+
     '</div></header><main class="stage-main">'+liveView()+'</main></div>';
-  return '<div class="shell admin-shell v11-shell">'+adminSidebar()+
+  return '<div class="shell admin-shell v11-shell v12-shell '+(state.sidebarCollapsed?'v12-collapsed':'')+'">'+adminSidebar()+
     '<main class="main admin-main v11-main">'+adminView()+'</main></div>';
 }
 
 function loginView() {
+  if(musicianLink)return '<main class="login"><section class="frame login-card">'+brand()+
+    '<h1>Acesso do músico</h1><p>'+escape(cloud.authError||'Abra o link individual que você recebeu do administrador.')+'</p>'+
+    '<p>O link de acesso pode ter sido revogado ou expirado.</p><div class="login-footer">Loops Marks Pro '+APP_VERSION+'</div></section></main>';
   return '<main class="login"><section class="frame login-card">' + brand() +
     '<h1>' + (musicianLink ? 'Entrar no Modo Live' : 'Entrar na central') + '</h1><p>Acesse com o e-mail convidado no Netlify Identity. No primeiro acesso, abra o convite para criar sua senha.</p>' +
     '<form id="login-form"><label class="field"><span>E-mail</span><input type="email" name="email" required autocomplete="username"></label>' +
@@ -256,7 +261,7 @@ function deck() {
     '<button type="button" class="mode-toggle" data-action="mode-toggle" id="fill-mode" title="Alternar motor de viradas" ' +
     'aria-label="Modo de virada: inteligente ou completa">' +
     icon('wave') + '<span>Virada: ' + (player.mode === 'full' ? 'PRÓXIMO 1' : 'INTELIGENTE') + '</span></button>' +
-    '</div></section>' +
+    '<span id="pedal-status-live" class="pedal-live-feedback" aria-live="polite"></span></div></section>' +
     '<section class="frame live-sections"><div class="section-head"><h2>Partes da música</h2><span>Entrada no tempo 1</span></div>' +
     '<div class="pads">' + parts.map(part => '<button type="button" class="pad" data-action="part" data-part="' + part.id +
     '" disabled>' + icon(part.icon) + '<strong>' + escape(part.label) + '</strong><small>' + (song.parts?.[part.id + 'Entry'] ? 'Entrada + contínuo' : 'Loop contínuo') + '</small></button>').join('') +
@@ -272,17 +277,27 @@ function deck() {
 }
 
 function adminView() {
-  const title=state.adminPanel==='folders'?'Organizar pastas':state.adminPanel==='repertoires'?'Meus repertórios':'Central Administrativa';
+  const title=state.adminPanel==='folders'?'Organizar pastas':state.adminPanel==='repertoires'?'Meus repertórios':state.adminPanel==='catalog'?(state.adminKind==='rhythm'?'Biblioteca de ritmos':'Biblioteca de músicas'):'Central Administrativa';
   const desc=state.adminPanel==='folders'?'Organize músicas e ritmos em pastas sem mover os WAVs.':
-    state.adminPanel==='repertoires'?'Monte apresentações com músicas e ritmos, na ordem que desejar.':
+    state.adminPanel==='repertoires'?'Monte apresentações com músicas e ritmos, na ordem que desejar.':state.adminPanel==='catalog'?'Escolha uma pasta e abra o cadastro que deseja editar.':
     'Seu repertório, seus loops e as regras de palco no mesmo lugar.';
   const action=state.adminPanel==='repertoires'?button('new-repertoire','Novo repertório','plus','primary'):
-    state.adminPanel==='editor'?button('new',state.adminKind==='rhythm'?'Novo ritmo':'Nova música','plus','primary'):'';
+    ['editor','catalog'].includes(state.adminPanel)?button('new',state.adminKind==='rhythm'?'Novo ritmo':'Nova música','plus','primary'):'';
   return '<div class="v11-heading"><div><h1>'+title+'</h1><p>'+desc+'</p></div><div class="admin-quick-actions">'+action+'</div></div>'+
     (state.errors?'<div class="warning" role="status">'+escape(state.errors)+' '+button('sync','Tentar sincronizar','refresh','ghost')+'</div>':'')+
-    '<section class="frame admin-editor v11-editor">'+(state.adminPanel==='folders'?foldersPanel():
+    '<section class="frame admin-editor v11-editor">'+(state.adminPanel==='folders'?foldersPanel():state.adminPanel==='catalog'?catalogPanel():
       state.adminPanel==='repertoires'?repertoiresPanel():state.admin?editor():
       '<div class="blank"><h2>Escolha um item na biblioteca</h2><p>Use o menu lateral para selecionar ou criar uma música ou um ritmo.</p></div>')+'</section>';
+}
+function catalogPanel(){
+  const kind=state.adminKind;
+  const folders=kindFolders(kind);
+  return '<div class="v12-catalog-head"><div><p class="eyebrow">BIBLIOTECA DE '+(kind==='rhythm'?'RITMOS':'MÚSICAS')+'</p><h2>Selecione para editar</h2><p>Biblioteca organizada por pasta, com edição em tela ampla.</p></div>'+
+    '<span class="count" id="catalog-count">0</span></div>'+
+    '<div class="v12-catalog-filters"><label class="search">'+icon('search')+'<input type="search" id="admin-search" aria-label="Pesquisar biblioteca" placeholder="Pesquisar por nome, momento ou BPM" value="'+escape(state.adminSearch)+'"></label>'+
+    '<div class="v12-folder-filters"><button class="sidebar-folder" data-action="select-folder" data-folder="" '+(!state.adminFolder?'aria-current="true"':'')+'>Todas</button>'+
+    folders.map(f=>'<button class="sidebar-folder" data-action="select-folder" data-folder="'+escape(f.id)+'" '+(state.adminFolder===f.id?'aria-current="true"':'')+'>'+icon('folder')+escape(f.name)+'</button>').join('')+'</div></div>'+
+    '<div class="v12-catalog-grid" id="catalog-items"></div>';
 }
 function kindFolders(kind){return (state.libraryData.folders||[]).filter(f=>f.kind===kind).sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));}
 function foldersPanel(){
@@ -389,6 +404,7 @@ function editor() {
     (song.conflict ? '<div class="warning" role="status">Esta música foi editada em outro aparelho.' +
       '<div>' + button('resolve-remote', 'Usar versão da central', 'cloud', 'ghost') +
       button('resolve-local', 'Publicar minha edição', 'check', 'ghost') + '</div></div>' : '') +
+    '<details class="v12-editor-intro" id="v12-editor-intro" '+(state.introOpen?'open':'')+'><summary>'+icon('settings')+'<strong>Dados e comportamento musical</strong><span>'+escape(song.bpm)+' BPM · '+escape(song.beats)+'/4 · '+(songKind(song)==='rhythm'?'Ritmo':'Música')+'</span></summary><div class="v12-editor-intro-body">'+
     '<div class="v11-classification"><label class="field"><span>Tipo de cadastro</span><select data-field="kind">' +
     ['music','rhythm'].map(k=>'<option value="'+k+'" '+(songKind(song)===k?'selected':'')+'>'+(k==='music'?'Música específica':'Ritmo reutilizável')+'</option>').join('')+'</select></label>' +
     '<label class="field"><span>Pasta</span><select data-field="folderId"><option value="">Sem pasta</option>' +
@@ -409,7 +425,7 @@ function editor() {
     '<label class="field"><span>Repetir a mesma parte</span><select data-field="repeatMode">' +
     '<option value="fill" ' + ((song.repeatMode || 'fill') === 'fill' ? 'selected' : '') + '>Com virada + crash</option>' +
     '<option value="direct" ' + (song.repeatMode === 'direct' ? 'selected' : '') + '>Direto ao loop de entrada com crash</option>' +
-    '</select></label></div>' +
+    '</select></label></div></div></details>' +
     '<div class="import-toolbar"><div><h2>03 · Biblioteca de áudios</h2><p>WAVs separados da sua DAW · Até 32 MB por arquivo</p></div>' +
     button('batch-import','Importar vários WAVs','plus','ghost') + '<input type="file" id="batch-files" accept=".wav,audio/wav,audio/x-wav" multiple hidden></div>' +
     editorSection(song, 'loops', 'Loops contínuos e introdução',
@@ -470,15 +486,14 @@ function normalized(value) {
 }
 
 function updateAdminSidebar(){
-  const container=get('#sidebar-items');if(!container)return;
+  const container=get('#catalog-items');if(!container)return;
   const rows=songsFor('admin').filter(song=>inFolder(song,state.adminKind,state.adminFolder))
-    .filter(song=>normalized(song.name+' '+song.occasion).includes(normalized(state.adminSearch)))
+    .filter(song=>normalized(song.name+' '+song.occasion+' '+song.bpm).includes(normalized(state.adminSearch)))
     .sort((a,b)=>(a.name||'').localeCompare(b.name||'','pt-BR'));
-  const counter=get('#sidebar-count');if(counter)counter.textContent=String(rows.length);
-  container.innerHTML=rows.map(song=>'<button type="button" class="item sidebar-song" data-action="song" data-id="'+escape(song.id)+'" aria-pressed="'+(state.admin?.id===song.id)+'">'+
-    '<span class="item-icon">'+icon(songKind(song)==='rhythm'?'wave':'music')+'</span><span><span class="item-title">'+escape(song.name||'Sem título')+
-    '</span><span class="item-meta">'+escape(song.occasion||'Sem categoria')+' · '+song.bpm+' BPM</span></span></button>').join('')||
-    '<p class="empty-list">Nenhum item nesta pasta.</p>';
+  const counter=get('#catalog-count');if(counter)counter.textContent=String(rows.length);
+  container.innerHTML=rows.map(song=>'<button type="button" class="v12-catalog-card" data-action="song" data-id="'+escape(song.id)+'">'+
+    '<span class="v12-catalog-symbol">'+icon(songKind(song)==='rhythm'?'wave':'music')+'</span><span><strong>'+escape(song.name||'Sem título')+'</strong><small>'+escape(song.occasion||'Sem categoria')+' · '+song.bpm+' BPM</small></span>'+icon('arrowdown')+'</button>').join('')||
+    '<p class="empty-list">Nenhum cadastro nesta pasta. Crie um item pelo botão acima.</p>';
 }
 function updateLibrary() {
   updateAdminSidebar();
@@ -531,34 +546,125 @@ function notice(message) {
 }
 
 function confirmChoice(title, description, ok) {
-  const safe = escape;
-  dialog.innerHTML = '<h2>' + safe(title) + '</h2><p>' + safe(description) + '</p>' +
-    '<form method="dialog"><menu><button class="button ghost" value="cancel">Cancelar</button>' +
-    '<button class="button primary" value="ok">' + safe(ok) + '</button></menu></form>';
-  dialog.returnValue = '';
-  dialog.showModal();
-  return new Promise(resolve => dialog.addEventListener('close', () => resolve(dialog.returnValue === 'ok'), { once: true }));
+  const ask=document.createElement('dialog');
+  ask.innerHTML='<h2>'+escape(title)+'</h2><p>'+escape(description)+'</p>'+
+    '<form method="dialog"><menu><button class="button ghost" value="cancel">Cancelar</button>'+
+    '<button class="button primary" value="ok">'+escape(ok)+'</button></menu></form>';
+  document.body.appendChild(ask);ask.showModal();
+  return new Promise(resolve=>ask.addEventListener('close',()=>{
+    const accepted=ask.returnValue==='ok';ask.remove();resolve(accepted);
+  },{once:true}));
 }
 
-async function copyMobile() {
-  const url=new URL(location.href);url.search='?modo=musico';url.hash='';
-  const preview=/^[a-f0-9]{12,}--.+\.netlify\.app$/i.test(location.hostname);
-  dialog.innerHTML='<section class="backup-dialog"><p class="eyebrow">ACESSO DO MÚSICO</p><h2>Link do aplicativo</h2>'+
-    '<p>Este link abre somente o player. '+(preview?'Você está no Permalink de teste; o link acompanha esta mesma versão.':'Você está na versão oficial.')+'</p>'+
-    '<label class="field"><span>Endereço para abrir no Safari</span><input id="musician-url" readonly value="'+escape(url.href)+'"></label>'+
-    '<p class="subtle">No iPhone: Safari → Compartilhar → Adicionar à Tela de Início. Mantenha o Netlify Identity protegendo a biblioteca.</p>'+
-    '<div class="batch-footer">'+button('copy','Copiar link do músico','link','primary')+
-      button('share','Compartilhar','share','ghost')+'<button class="button ghost" id="close-link">Fechar</button></div></section>';
-  dialog.querySelector('#close-link').addEventListener('click',()=>dialog.close());
-  dialog.querySelector('[data-action="copy"]').addEventListener('click',async()=>{
-    try {await navigator.clipboard.writeText(url.href);notice('Link do músico copiado.');}
-    catch {const input=dialog.querySelector('#musician-url');input.focus();input.select();notice('Selecione e copie o endereço.');}
-  });
-  dialog.querySelector('[data-action="share"]').addEventListener('click',async()=>{
-    if(navigator.share){try{await navigator.share({title:'Loops Marks Pro',url:url.href});}catch(e){if(e.name!=='AbortError')notice('Compartilhamento não concluído.');}}
-    else window.open('https://wa.me/?text='+encodeURIComponent('Loops Marks Pro: '+url.href),'_blank','noopener,noreferrer');
-  });
+async function copyMobile(){
+  if(!navigator.onLine){notice('Conecte-se para gerar ou revogar um link com segurança.');return;}
+  let link=await cloud.linkStatus();
+  function makeUrl(token,official=false){
+    const url=new URL(location.href);
+    if(official&&/^[a-f0-9]{12,}--/.test(location.hostname)){
+      url.hostname=location.hostname.replace(/^[a-f0-9]{12,}--/,'');
+    }
+    url.pathname='/';url.search='';url.searchParams.set('modo','musico');url.searchParams.set('chave',token);
+    url.hash='';return url.href;
+  }
+  function paint(){
+    const running=link?.active;
+    const preview=/^[a-f0-9]{12,}--/.test(location.hostname);
+    const permanent=running?makeUrl(link.token,true):'';
+    dialog.innerHTML='<section class="v12-settings-dialog"><p class="eyebrow">ACESSO DO MÚSICO</p><h2>Link do aplicativo</h2>'+
+      '<p>Link individual de leitura. Sem acesso à edição. Revogar impede novos downloads imediatamente quando o aparelho estiver online.</p>'+
+      (running?'<div class="v12-active-link"><strong>● Link ativo</strong><small>Válido até '+escape(new Date(link.expiresAt).toLocaleDateString('pt-BR'))+'</small></div><label class="field"><span>Link permanente (atualiza com a versão publicada)</span><input id="musician-url" readonly value="'+escape(permanent)+'"></label>':
+      '<div class="warning">Nenhum link ativo. Gere um novo para autorizar um músico.</div>')+
+      (running&&preview?'<p class="subtle">Para testar a V12 agora, use o endereço deste Permalink com a mesma chave. O endereço permanente recebe versões novas após publicar.</p>':'')+
+      '<div class="v12-modal-actions">'+(running?button('copy-link','Copiar link permanente','link','primary')+
+      (preview?button('copy-preview','Copiar link de teste','share','ghost'):'')+
+      button('revoke-link','Revogar acesso','trash','ghost danger')+button('renew-link','Gerar outro link','refresh','ghost'):
+      button('create-link','Gerar link seguro','plus','primary'))+
+      button('close-dialog','Fechar','x','ghost')+'</div></section>';
+    dialog.querySelector('[data-action="close-dialog"]').onclick=()=>dialog.close();
+    dialog.querySelector('[data-action="copy-link"]')?.addEventListener('click',()=>copyText(permanent));
+    dialog.querySelector('[data-action="copy-preview"]')?.addEventListener('click',()=>copyText(makeUrl(link.token,false)));
+    dialog.querySelector('[data-action="create-link"]')?.addEventListener('click',()=>mutate('create'));
+    dialog.querySelector('[data-action="renew-link"]')?.addEventListener('click',()=>mutate('renew'));
+    dialog.querySelector('[data-action="revoke-link"]')?.addEventListener('click',()=>mutate('revoke'));
+  }
+  async function copyText(text){try{await navigator.clipboard.writeText(text);notice('Link copiado.');}
+    catch{const box=dialog.querySelector('#musician-url');if(box){box.focus();box.select();}notice('Copie o endereço selecionado.');}}
+  async function mutate(action){
+    if(action==='revoke'||action==='renew'){
+      if(!await confirmChoice('Revogar link atual?','O link antigo deixa de funcionar online. Downloads anteriores podem continuar disponíveis por até 48 horas offline.','Revogar'))return;
+    }
+    try{link=action==='revoke'?await cloud.linkRevoke():await cloud.linkCreate();paint();
+      notice(action==='revoke'?'Link revogado.':'Novo link criado. O anterior não é mais autorizado.');}
+    catch(e){notice(e.message);}
+  }
+  paint();dialog.showModal();
+}
+
+async function openSettingsModal(){
+  const user=cloud.session()?.email||'Conta desconectada';
+  dialog.innerHTML='<section class="v12-settings-dialog"><div class="v12-settings-heading"><div><p class="eyebrow">STUDIO MARKS</p><h2>Configurações</h2></div>'+iconButton('close-settings','Fechar','x')+'</div>'+
+    '<div class="v12-setting-user">'+icon('user')+'<span>'+escape(user)+'</span></div>'+
+    '<div class="v12-settings-grid">'+
+      button('settings-backup','Backup e restauração','download','v12-setting-tile')+
+      button('settings-link','Gerenciar link do músico','link','v12-setting-tile')+
+      button('settings-pedal','Controle por pedal','wave','v12-setting-tile')+
+      button('settings-sync','Sincronizar agora','cloud','v12-setting-tile')+
+      button('settings-logout','Sair da conta','exit','v12-setting-tile danger')+'</div><p class="subtle">Versão '+APP_VERSION+' · Todas as alterações são salvas automaticamente.</p></section>';
+  dialog.querySelector('[data-action="close-settings"]').onclick=()=>dialog.close();
+  for(const [action,run] of [['settings-backup',()=>openBackupCenter()],['settings-link',()=>copyMobile()],
+    ['settings-pedal',()=>openPedalModal()],['settings-sync',()=>syncCatalog()],
+    ['settings-logout',()=>handleAction({dataset:{action:'logout'}})]]){
+    dialog.querySelector('[data-action="'+action+'"]').onclick=async()=>{
+      dialog.close();try{await run();}catch(e){notice(e.message);}
+    };
+  }
   dialog.showModal();
+}
+
+const pedalActions=[
+  ['play','Iniciar / Parar'],['stop','Parar'],
+  ...PLAY_PARTS.map(p=>['part:'+p.id,'Ir para '+p.label]),
+  ...MANUAL_PARTS.map(p=>['fill:'+p.id,'Virada: '+p.label]),
+  ...FINALES.map(p=>['part:'+p.id,'Encerramento: '+p.label]),
+  ['rep-prev-live','Música anterior'],['rep-next-live','Próxima música'],['open-library','Abrir repertório']
+];
+function pedalOptions(value){return '<option value="">Não atribuir</option>'+pedalActions.map(([id,txt])=>
+  '<option value="'+escape(id)+'" '+(id===value?'selected':'')+'>'+escape(txt)+'</option>').join('');}
+async function openPedalModal(){
+  state.pedalLearn=null;
+  dialog.innerHTML='<section class="v12-settings-dialog"><div class="v12-settings-heading"><div><p class="eyebrow">BLUETOOTH HID</p><h2>Controle por pedal</h2></div>'+iconButton('close-pedals','Fechar','x')+'</div>'+
+    '<p class="subtle">Conecte o pedal no Bluetooth do iPhone ou computador em modo teclado. Selecione a função e clique em Aprender: depois pise no pedal. Sem internet durante o show.</p>'+
+    '<div class="v12-pedal-list">'+Array.from({length:6},(_,i)=>{
+      const code=Object.keys(state.pedalMap).find(k=>state.pedalMap[k]?.slot===i);
+      const item=code?state.pedalMap[code]:{};
+      return '<div class="v12-pedal-row"><strong>Pedal '+(i+1)+'</strong><select data-pedal-action="'+i+'">'+pedalOptions(item.command)+'</select>'+
+        '<code data-pedal-key="'+i+'">'+escape(code||'Não associado')+'</code>'+button('learn-pedal','Aprender','wave','ghost','data-slot="'+i+'"')+'</div>';
+    }).join('')+'</div><div class="v12-modal-actions">'+button('clear-pedals','Limpar comandos','trash','ghost')+
+    button('close-pedals','Concluir','check','primary')+'</div><p class="subtle" id="pedal-status" aria-live="polite"></p></section>';
+  dialog.querySelectorAll('[data-action="close-pedals"]').forEach(el=>el.onclick=()=>{state.pedalLearn=null;dialog.close();});
+  dialog.querySelectorAll('[data-action="learn-pedal"]').forEach(el=>el.onclick=()=>{
+    state.pedalLearn=Number(el.dataset.slot);dialog.querySelector('#pedal-status').textContent='Agora pise no pedal '+(state.pedalLearn+1)+'…';
+  });
+  dialog.querySelectorAll('[data-pedal-action]').forEach(el=>el.onchange=()=>{
+    const slot=Number(el.dataset.pedalAction);const entry=Object.entries(state.pedalMap).find(([,v])=>v.slot===slot);
+    if(entry){state.pedalMap[entry[0]].command=el.value;persistPedals();}
+  });
+  dialog.querySelector('[data-action="clear-pedals"]').onclick=()=>{
+    state.pedalMap={};persistPedals();dialog.close();openPedalModal();
+  };
+  dialog.showModal();
+}
+function persistPedals(){try{localStorage.setItem('loops-v12-pedal-map',JSON.stringify(state.pedalMap));}catch{notice('Seu navegador não permitiu salvar o mapeamento local.');}}
+function receivePedal(code){
+  const entry=state.pedalMap[code];if(!entry||!entry.command||state.view!=='live'||!repo)return;
+  const now=Date.now();if(now-state.pedalLastAt<170)return;
+  state.pedalLastAt=now;
+  const [prefix,part]=entry.command.split(':');
+  const action=['part','fill'].includes(prefix)?prefix:entry.command;
+  handleAction({dataset:{action:action==='play'&&player.running?'stop':action,part}}).catch(e=>notice(e.message));
+  const label=pedalActions.find(([key])=>key===entry.command)?.[1]||entry.command;
+  const live=get('#pedal-status-live');if(live)live.textContent='Pedal: '+label;
 }
 
 // Central de Backup V3. O backup completo é independente da nuvem: inclui todos os WAVs.
@@ -695,6 +801,11 @@ async function syncCatalog() {
       await refreshLocal();
     } catch (error) {
       if (current !== repo) return;
+      if(cloud.musician && error.code===401){
+        stopPlayback();const oldRepo=repo;cloud.user=null;repo=null;state.songs=[];oldRepo?.purgeMusicianCache?.().catch(()=>{});
+        try{localStorage.removeItem('loops-v12-musician-verified');}catch{}
+        cloud.authError='Link do músico revogado ou expirado.';render();return;
+      }
       if (!cloud.session()) { stopPlayback(); repo = null; render(); return; }
       state.errors = error.code === 409 ? 'Mudança em outro aparelho. A central verificará a edição.' :
         (error.code === 0 ? error.message : 'Dados salvos neste aparelho. A central ainda não confirmou a sincronização.');
@@ -1262,6 +1373,13 @@ async function mutateRepertoire(task){
 }
 async function handleAction(element) {
   const { action, id, part } = element.dataset;
+  if(action==='toggle-management'){state.managementOpen=!state.managementOpen;
+    try{localStorage.setItem('loops-v12-management',state.managementOpen?'open':'closed');}catch{}render();return;}
+  if(action==='collapse-sidebar'){state.sidebarCollapsed=!state.sidebarCollapsed;
+    try{localStorage.setItem('loops-v12-sidebar',state.sidebarCollapsed?'collapsed':'open');}catch{}render();return;}
+  if(action==='settings'){await openSettingsModal();return;}
+  if(action==='pedal-setup'){await openPedalModal();return;}
+
   if(action==='drawer-tab'){state.drawerTab=element.dataset.tab;updateLibrary();return;}
   if(action==='choose-repertoire'){await playRepertoire(id);return;}
   if(action==='rep-prev-live'||action==='rep-next-live'){
@@ -1284,14 +1402,10 @@ async function handleAction(element) {
   }
   if(action==='show-kind'||action==='select-folder'||action==='show-repertoires'||action==='show-folders'){
     await saveBeforeLeaving();
-    if(action==='show-kind') {state.adminKind=element.dataset.kind;state.adminFolder='';state.adminPanel='editor';state.admin=null;}
-    if(action==='select-folder') {state.adminFolder=element.dataset.folder||'';state.adminPanel='editor';state.admin=null;}
+    if(action==='show-kind') {state.adminKind=element.dataset.kind;state.adminFolder='';state.adminPanel='catalog';state.admin=null;}
+    if(action==='select-folder') {state.adminFolder=element.dataset.folder||'';state.adminPanel='catalog';state.admin=null;}
     if(action==='show-repertoires') {state.adminPanel='repertoires';state.repEditingId||=state.libraryData.repertoires?.[0]?.id||null;}
     if(action==='show-folders')state.adminPanel='folders';
-    if(action==='show-kind'||action==='select-folder'){
-      const song=songsFor('admin').find(s=>inFolder(s,state.adminKind,state.adminFolder));
-      if(song)state.admin=structuredClone(song);
-    }
     render();return;
   }
   if(action==='make-from-rhythm'){
@@ -1508,6 +1622,27 @@ async function handleAction(element) {
 }
 
 document.addEventListener('keydown', event => {
+  if(state.pedalLearn!==null){
+    if(event.key==='Escape'){state.pedalLearn=null;return;}
+    if(event.repeat||['Shift','Control','Alt','Meta'].includes(event.key))return;
+    event.preventDefault();
+    const slot=state.pedalLearn;
+    for(const [key,val] of Object.entries(state.pedalMap))if(val.slot===slot)delete state.pedalMap[key];
+    const choice=dialog.querySelector('[data-pedal-action="'+slot+'"]')?.value||'';
+    if(choice){state.pedalMap[event.code||('key-'+event.key)]={slot,command:choice};persistPedals();}
+    state.pedalLearn=null;
+    dialog.close();openPedalModal();
+    return;
+  }
+  if(event.repeat||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey)return;
+  if(['INPUT','TEXTAREA','SELECT'].includes(event.target?.tagName)||dialog.open)return;
+  const code=event.code||('key-'+event.key);
+  if(state.pedalMap[code]&&state.view==='live'){
+    event.preventDefault();receivePedal(code);
+  }
+});
+
+document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && state.libraryOpen) { event.preventDefault(); toggleLibrary(false); }
 });
 
@@ -1516,6 +1651,13 @@ app.addEventListener('click', event => {
   if (!target || target.disabled) return;
   handleAction(target).catch(error => notice(error.message || 'Não foi possível concluir.'));
 });
+
+app.addEventListener('toggle',event=>{
+  if(event.target.id==='v12-editor-intro'){
+    state.introOpen=event.target.open;
+    try{localStorage.setItem('loops-v12-editor-intro',state.introOpen?'open':'closed');}catch{}
+  }
+},true);
 
 app.addEventListener('input', event => {
   const input = event.target;
@@ -1651,7 +1793,12 @@ app.addEventListener('submit', async event => {
 });
 
 window.addEventListener('resize', () => drawWave(lastProgress));
-window.addEventListener('online', () => { updateTop(); requestSync(); });
+window.addEventListener('online', () => {
+  if(cloud.musician&&cloud.session()){
+    cloud.initializeMusician().then(user=>{if(!user){stopPlayback();repo=null;render();}else requestSync();});
+  }else requestSync();updateTop();
+});
+
 window.addEventListener('offline', updateTop);
 window.addEventListener('storage', event => {
   if (event.key === 'loops-marks-last-user-v3' && !event.newValue && repo && cloud.enabled) {
@@ -1677,7 +1824,16 @@ document.addEventListener('visibilitychange', () => {
     keepScreen();
   } else requestSync();
 });
-setInterval(() => { if (document.visibilityState === 'visible') requestSync(); }, 20000);
+setInterval(() => {
+  if(document.visibilityState!=='visible')return;
+  if(cloud.musician&&navigator.onLine&&cloud.session()){
+    cloud.musicianRequest('?op=resolve').catch(error=>{
+      if(error.code===401){stopPlayback();const oldRepo=repo;cloud.user=null;repo=null;state.songs=[];oldRepo?.purgeMusicianCache?.().catch(()=>{});
+        try{localStorage.removeItem('loops-v12-musician-verified');}catch{}
+        cloud.authError='Acesso revogado. Solicite um novo link ao administrador.';render();}
+    });
+  } else requestSync();
+},20000);
 
 async function boot() {
   await cloud.initialize();
@@ -1693,6 +1849,10 @@ async function boot() {
   requestSync();
 }
 
+if(musicianLink&&cloud.musicianToken){
+  const manifest=document.querySelector('link[rel="manifest"]');
+  if(manifest)manifest.href='/.netlify/functions/loops-musician?op=manifest&chave='+encodeURIComponent(cloud.musicianToken);
+}
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {
   notice('Não foi possível ativar a abertura offline neste navegador.');
 });

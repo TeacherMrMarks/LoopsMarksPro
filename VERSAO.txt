@@ -1,3 +1,2 @@
-LOOPS MARKS PRO V11
-Biblioteca Músicas/Ritmos + pastas e repertórios + admin ampliada + Modo Live compacto.
-Netlify Identity e stores de WAVs da V10 preservados.
+LOOPS MARKS PRO V12
+Central + Modo Live + Pedal Bluetooth HID + Links revogáveis

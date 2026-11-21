@@ -16,25 +16,28 @@ function context(mode='central'){
     URL,crypto,structuredClone,
     document:{querySelector:()=>root},window:{LOOPS_CONFIG:{}},navigator:{onLine:true},
     console,setTimeout,clearTimeout,
+    localStorage:{getItem:()=>null,setItem:()=>{},removeItem:()=>{}},
   };
   vm.createContext(sandbox);
   vm.runInContext(source,sandbox);
   return sandbox;
 }
 const song=()=>{const x=data.newSong();x.name='Entrada da Noiva';x.occasion='Casamento';x.bpm=75;return x;};
-test('V11 renderiza menu lateral e editor amplo sem os cards repetidos',()=>{
+test('V12 renderiza gerenciamento recolhível e editor amplo sem cards repetidos',()=>{
  const ctx=context();
  const html=vm.runInContext('shell()',ctx);
  assert.match(html,/Central Administrativa/);
- assert.match(html,/sidebar-collections/);
+ assert.match(html,/v12-subnav/);
+ assert.match(html,/toggle-management/);
  assert.match(html,/Gerenciar pastas/);
  assert.match(html,/Repertórios/);
  assert.doesNotMatch(html,/admin-summary/);
 });
-test('V11 editor exibe tipo e pasta sem alterar as seções de viradas',()=>{
+test('V12 editor recolhe identificação e mantém as seções de viradas',()=>{
  const ctx=context(),s=song();
  ctx.testSong=s;
  const html=vm.runInContext('state.admin=testSong;state.songs=[testSong];adminView()',ctx);
+ assert.match(html,/v12-editor-intro/);
  assert.match(html,/Tipo de cadastro/);
  assert.match(html,/Música específica/);
  assert.match(html,/Ritmo reutilizável/);
@@ -42,7 +45,7 @@ test('V11 editor exibe tipo e pasta sem alterar as seções de viradas',()=>{
  assert.match(html,/Viradas automáticas/);
  assert.match(html,/Mapa de transições/);
 });
-test('V11 repertório renderiza itens mistos ordenados e BPM individual',()=>{
+test('V12 repertório renderiza itens mistos ordenados e BPM individual',()=>{
  const ctx=context();const music=song(),rhythm={...data.newSong(),kind:'rhythm',name:'Rock 4\/4',bpm:105};
  ctx.sampleSongs=[music,rhythm];
  ctx.metadata={folders:[{id:crypto.randomUUID(),name:'Casamentos',kind:'music'}],
@@ -50,7 +53,7 @@ test('V11 repertório renderiza itens mistos ordenados e BPM individual',()=>{
  const html=vm.runInContext('state.songs=sampleSongs;state.libraryData=metadata;state.adminPanel="repertoires";adminView()',ctx);
  assert.match(html,/Cerimônia/);assert.match(html,/Entrada da Noiva/);assert.match(html,/Rock 4/);assert.match(html,/Ordem de execução/);
 });
-test('V11 modo músico exibe somente a execução e acesso à gaveta, sem editor',()=>{
+test('V12 modo músico exibe somente a execução e acesso à gaveta, sem editor',()=>{
  const ctx=context('musico'),s=song();s.parts.a={path:'u/x/y.wav',bars:1,lengthBeats:4};ctx.testSong=s;
  const html=vm.runInContext('state.selected=testSong;state.songs=[testSong];state.bpm=75;shell()',ctx);
  assert.match(html,/stage-shell/);assert.match(html,/repertoire-toggle/);

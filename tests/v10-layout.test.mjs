@@ -17,21 +17,22 @@ test('V11 indicador mostra seção, crash, modo e fila de transição',()=>{
  assert.match(app,/playing\.entryAttack \? 'Entrada com crash'/);
  assert.match(app,/playing\.next \? 'PRÓXIMO/);
 });
-test('V11 central integra biblioteca lateral, pastas e repertórios sem cards duplicados',()=>{
+test('V12 central integra biblioteca ampla e configuração modal',()=>{
  assert.match(app,/function adminSidebar/);
  assert.match(app,/function foldersPanel/);
  assert.match(app,/function repertoiresPanel/);
- assert.match(app,/sidebar-song-list/);
+ assert.match(app,/v12-catalog-grid/);
+ assert.match(app,/function openSettingsModal/);
  assert.doesNotMatch(app,/class="admin-summary"/);
  assert.match(app,/settingsMenu\(user\)/);
  assert.match(app,/function copyMobile/);
  assert.doesNotMatch(app,/Copiar app oficial/);
- assert.doesNotMatch(app,/Copiar link de teste/);
+ assert.match(app,/Gerenciar link do músico/);
 });
 test('V11 preserva instalação PWA, Modo Live offline e nome da versão',()=>{
  assert.equal(manifest.start_url,'./?modo=musico');
  assert.equal(manifest.display,'standalone');
- assert.match(read('index.html'),/V11/);
+ assert.match(read('index.html'),/V12/);
  assert.match(read('sw.js'),/cache\.match/);
  assert.match(app,/await current\.download\(shown/);
  assert.match(app,/await player\.prepare\(shown/);

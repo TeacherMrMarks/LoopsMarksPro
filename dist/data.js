@@ -84,6 +84,15 @@ class Disk {
       request.onerror = () => reject(request.error);
     });
   }
+  async clearPrefix(prefix){
+    const db=await this.db;
+    return new Promise((resolve,reject)=>{
+      const tx=db.transaction(STORE,'readwrite');
+      const request=tx.objectStore(STORE).openCursor(IDBKeyRange.bound(prefix,prefix+'\uffff'));
+      request.onsuccess=()=>{const cursor=request.result;if(cursor){cursor.delete();cursor.continue();}};
+      tx.oncomplete=resolve;tx.onerror=tx.onabort=()=>reject(tx.error||new Error('Falha ao limpar a cópia local.'));
+    });
+  }
   async batch(entries) {
     if (!entries.length) return;
     const db = await this.db;
@@ -129,6 +138,46 @@ export function describeIdentityError(error, action = 'login') {
 
 export class Cloud {
   enabled = true;
+  constructor(){
+    this.musician = typeof location !== 'undefined' && new URLSearchParams(location.search).get('modo') === 'musico';
+    const requested = this.musician ? new URLSearchParams(location.search).get('chave') : null;
+    // Acesso de músico limitado a leitura; nenhum segredo do administrador é enviado ao player.
+    this.musicianToken = requested && /^[a-f0-9-]{36}\.[a-f0-9]{64}$/i.test(requested) ? requested : null;
+    if(this.musicianToken){
+      try {localStorage.setItem('loops-v12-musician-token',this.musicianToken);} catch {}
+    } else if(this.musician){
+      try {this.musicianToken=localStorage.getItem('loops-v12-musician-token')||null;}catch{}
+    }
+  }
+  async musicianRequest(op,{responseType='json'}={}){
+    if(!this.musicianToken)throw new CloudError('Link do músico ausente. Solicite um link novo ao administrador.',401);
+    const response=await fetch('/.netlify/functions/loops-musician'+op,{
+      cache:'no-store',headers:{Authorization:'Bearer '+this.musicianToken},credentials:'omit'});
+    if(!response.ok){const message=await response.json().catch(()=>({}));
+      throw new CloudError(message.message||'Link do músico não autorizado.',response.status);}
+    return responseType==='blob'?response.blob():response.json();
+  }
+  async initializeMusician(){
+    if(!this.musicianToken){this.authError='Link do músico incompleto ou revogado. Gere outro na Central Administrativa.';return null;}
+    const cacheKey='loops-v12-musician-verified';
+    if(typeof navigator!=='undefined'&&!navigator.onLine){
+      try {const saved=JSON.parse(localStorage.getItem(cacheKey)||'null');
+        if(saved?.token!==this.musicianToken||Date.now()-saved.at>48*3600000||
+          Date.now()>Date.parse(saved.expiresAt))throw new Error('expired');
+        this.user={id:'musician-'+this.musicianToken.split('.')[1].slice(0,20),email:'Músico autorizado',readonly:true};return this.user;
+      }catch{this.authError='A autorização offline não está válida. Conecte à internet para verificar o link.';return null;}
+    }
+    try{const valid=await this.musicianRequest('?op=resolve');
+      this.user={id:'musician-'+this.musicianToken.split('.')[1].slice(0,20),email:'Músico autorizado',readonly:true};
+      localStorage.setItem(cacheKey,JSON.stringify({token:this.musicianToken,at:Date.now(),expiresAt:valid.expiresAt}));
+      return this.user;
+    }catch(e){this.authError=e.message;this.user=null;
+      try{localStorage.removeItem(cacheKey);}catch{}return null;}
+  }
+  async linkStatus(){return this.request('?op=link-get');}
+  async linkCreate(){return this.request('?op=link-create',{method:'POST'});}
+  async linkRevoke(){return this.request('?op=link-revoke',{method:'POST'});}
+
   user = null;
   authFlow = null;
   authError = '';
@@ -181,6 +230,7 @@ export class Cloud {
     } catch { return false; }
   }
   async initialize() {
+    if(this.musician)return this.initializeMusician();
     const hash = typeof location === 'undefined' ? '' : location.hash || '';
     const expected = /(?:^#|&)recovery_token=/.test(hash) ? 'recovery' :
       /(?:^#|&)invite_token=/.test(hash) ? 'invite' : null;
@@ -334,6 +384,11 @@ export class Cloud {
   }
   async request(op, { method='GET',body,headers={},responseType='json' }={}) {
     await this.ready();
+    if(this.musician){
+      if(method!=='GET'||!/^\?op=(catalog|library|audio-info|audio-chunk)(?:&|$)/.test(op))
+        throw new CloudError('O acesso do músico permite somente reprodução e downloads.',403);
+      return this.musicianRequest(op,{responseType});
+    }
     const url='/.netlify/functions/loops-api'+op;
     let res;
     try {res=await fetch(url,{method,body,headers:{...headers},cache:'no-store',credentials:'same-origin'});}
@@ -399,6 +454,7 @@ export class Repository {
     this.owner = cloud.session()?.id || 'demo';
   }
   key(kind, id = '') { return this.owner + '/' + kind + '/' + id; }
+  async purgeMusicianCache(){if(this.cloud.musician)await this.disk.clearPrefix(this.owner+'/');}
   song(id) { return this.disk.get(this.key('song', id)); }
   async libraryState() { return await this.disk.get(this.key('settings','library')) || emptyLibrary(); }
   async saveLibrary(next) {
@@ -501,6 +557,12 @@ export class Repository {
     const rows = await this.cloud.catalog();
     const records = new Map(rows.map(row => [row.id,
       { ...row.content, id: row.id, revision: row.row_version }]));
+    if(this.cloud.musician){
+      await this.disk.batch([...records.values()].map(row => [this.key('song',row.id),{...row,dirty:false}]));
+      const library=await this.cloud.library();
+      await this.disk.batch([[this.key('settings','library'),{...cleanLibrary(library.content),revision:library.revision||0,dirty:false}]]);
+      return;
+    }
     for (const local of await this.catalog()) {
       const remote = records.get(local.id);
       records.delete(local.id);

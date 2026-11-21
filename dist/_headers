@@ -1,6 +1,6 @@
 /*
   X-Content-Type-Options: nosniff
-  Referrer-Policy: same-origin
+  Referrer-Policy: no-referrer
   X-Frame-Options: DENY
   Permissions-Policy: microphone=(), camera=(), geolocation=()
 /sw.js

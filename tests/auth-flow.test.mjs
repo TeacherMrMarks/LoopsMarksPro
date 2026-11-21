@@ -97,14 +97,14 @@ test('invalid recovery link does not silently open the usual application', async
   }
 });
 
-test('V11 is identified on the login and brand UI', () => {
+test('V12 is identified on the login and brand UI', () => {
   const app = readFileSync(new URL('../dist/app.js', import.meta.url),'utf8');
   const html = readFileSync(new URL('../dist/index.html', import.meta.url),'utf8');
-  assert.match(app,/const APP_VERSION = 'V11'/);
+  assert.match(app,/const APP_VERSION = 'V12'/);
   assert.match(app,/class=\"login-footer\"/);
   assert.match(app,/brand-version/);
-  assert.match(app,/settings-account/);
-  assert.match(html,/V11/);
+  assert.match(app,/v12-setting-user/);
+  assert.match(html,/V12/);
 });
 
 test('service worker checks the network first and retains offline fallback', () => {

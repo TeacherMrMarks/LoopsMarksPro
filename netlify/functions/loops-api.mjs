@@ -1,6 +1,8 @@
 import { getUser, verifyRequestOrigin } from '@netlify/identity';
 import { getStore } from '@netlify/blobs';
+import {randomBytes,createHash} from 'node:crypto';
 
+const accessStore = () => getStore({name:'loops-v12-access',consistency:'strong'});
 const libraryStore = () => getStore({name:'loops-v11-library',consistency:'strong'});
 const songStore = () => getStore({name: 'loops-v3-songs', consistency: 'strong'});
 const audioStore = () => getStore({name: 'loops-v3-wavs', consistency: 'strong'});
@@ -42,6 +44,24 @@ export default async function handler(req) {
     const owner = user.id;
     const url = new URL(req.url), op=url.searchParams.get('op') || '';
     if (req.method!=='GET') verifyRequestOrigin(req);
+    // Links de músico: token forte, somente leitura; revogação no servidor.
+    if(req.method==='GET' && op==='link-get'){
+      const row=await accessStore().get(owner+'/current',{type:'json',consistency:'strong'});
+      return json(row?.active&&Date.now()<Date.parse(row.expiresAt)?{
+        active:true,token:row.token,createdAt:row.createdAt,expiresAt:row.expiresAt}:{active:false});
+    }
+    if(req.method==='POST' && op==='link-create'){
+      const token=owner+'.'+randomBytes(32).toString('hex');
+      const row={active:true,token,sha256:createHash('sha256').update(token).digest('hex'),
+        createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+90*86400000).toISOString()};
+      await accessStore().setJSON(owner+'/current',row);
+      return json({active:true,token:row.token,createdAt:row.createdAt,expiresAt:row.expiresAt});
+    }
+    if(req.method==='POST' && op==='link-revoke'){
+      const row=await accessStore().get(owner+'/current',{type:'json',consistency:'strong'});
+      if(row){await accessStore().setJSON(owner+'/current',{...row,active:false,revokedAt:new Date().toISOString()});}
+      return json({active:false});
+    }
     if (req.method==='GET' && op==='library') {
       const doc=await libraryStore().get(owner+'/index',{type:'json',consistency:'strong'});
       return json(doc || {revision:0,content:{folders:[],repertoires:[]}});

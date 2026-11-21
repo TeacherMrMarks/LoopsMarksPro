@@ -1,39 +1,45 @@
-# Loops Marks Pro — V11
+# Loops Marks Pro — V12
 
-**Versão para GitHub + Netlify.** Base preservada da V10, com Netlify Identity, Netlify Blobs, download de WAVs e player de viradas inteligentes.
+Versão para o **mesmo GitHub e Netlify**. Criada a partir da V11, preservando os stores de WAVs, músicas, pastas e repertórios.
 
-## O que mudou
+## Novidades da V12
 
-- **Central Administrativa redesenhada**: não há mais os cartões redundantes de quantidade de músicas, nuvem e acesso ao músico. A navegação, busca, seleção de arquivos, sincronização e configurações estão na coluna esquerda; o editor ocupa toda a região direita.
-- **Bibliotecas separadas:** `Músicas` (baterias específicas) e `Ritmos` (levadas reutilizáveis), com pasta opcional por cadastro. Registros da V10 que ainda não têm tipo aparecem como Músicas.
-- **Pastas personalizadas:** criar, renomear, selecionar e excluir pastas por biblioteca. Excluir uma pasta **não exclui** músicas ou WAVs: os itens ficam sem pasta.
-- **Músicas baseadas em ritmos:** no editor de um ritmo, clique em “Criar música a partir deste ritmo”. Os novos cadastros reaproveitam as referências dos mesmos arquivos WAV sem duplicá-los na nuvem. O cadastro resultante pode ser editado separadamente.
-- **Repertórios:** criar, renomear, definir data, duplicar, excluir; misturar músicas e ritmos, definir a ordem (subir/descer) e um BPM opcional por item. O ajuste de BPM durante a apresentação fica limitado a ±10 BPM do original.
-- **Modo Live:** gaveta com abas `Tudo`, `Músicas`, `Ritmos` e `Repertórios`. Ao selecionar um repertório, o player abre seu primeiro item, mostra posição e permite avançar/voltar. A troca é confirmada se a música atual estiver tocando.
-- **Offline:** baixar a música selecionada ou todos os WAVs de um repertório, sem executar nenhum acesso à nuvem durante a reprodução. O arquivo `library-model.js` faz parte do cache do aplicativo.
-- **Gerar link do aplicativo:** um comando único no menu Configurações; no Permalink gera o link do próprio Permalink, em produção gera o link de produção. Não usa os três botões anteriores.
-- **Backup ZIP:** esquema V4 com tipo, pasta, repertórios e ordem, além dos WAVs. A restauração também lê os backups anteriores (esquema V3), sem substituir os cadastros existentes.
+- **Gerenciamento recolhível:** Central de Loops, Músicas, Ritmos, Repertórios e Pastas agrupados num menu. A barra lateral inteira também pode ser recolhida no computador.
+- **Biblioteca principal:** a lista e o campo de pesquisa saíram do menu estreito. As músicas e ritmos são apresentados em cartões no painel principal; clicar abre o editor em toda a largura disponível.
+- **Configurações em janela flutuante:** conta, Backup/Restauração, Gerenciar Link, Controle por Pedal, Sincronizar, Sair e X para fechar.
+- **Editor retrátil:** clique em **Dados e comportamento musical** para esconder/exibir tipo, pasta, BPM, identificação e regras de virada. O modo escolhido permanece no aparelho.
+- **Pedal Bluetooth HID:** seis comandos configuráveis, com botão **Aprender** para cada pedal, usando as teclas que a pedaleira realmente envia. Configure pelo menu da Central ou pelo pequeno ícone de pedal no Modo Live. O mapeamento fica salvo **localmente no aparelho** (inclusive offline). Ele deve ser ensinado novamente no iPhone caso tenha sido configurado em outro computador. Não foi necessário modificar o motor de viradas.
+- **Link pessoal e revogável de músico:** em Configurações, gere um link seguro de **somente leitura**, copie, renove ou revogue. A nuvem valida cada acesso antes de fornecer listas e WAVs. A revogação impede novos acessos online; o aplicativo verifica periodicamente a validade enquanto conectado e tenta limpar o cache do músico revogado. Uma cópia já baixada pode funcionar **até 48 horas offline**, pois a internet é necessária para receber uma revogação.
+- **Link permanente e atualizações:** o link principal `.netlify.app` permanece válido quando uma nova versão é publicada nesse domínio; o worker prioriza a versão nova quando o aparelho está online. O app nunca recarrega a interface durante a execução. O **Permalink de preview fica fixo** na versão testada, mas usa a mesma autorização e pode ser revogado. O atalho PWA do músico usa um manifesto personalizado para abrir diretamente no player, com a chave do link.
+- **Modo Live mantido:** logotipo, visor da parte atual, BPM, loops, crash, viradas, acabamento, finais, repertório e download offline. O pequeno ícone de pedal foi acrescentado no topo.
 
-## Segurança e compatibilidade
+## Seguranca e pré-requisitos
 
-- Os cadastros e WAVs já salvos nas versões anteriores permanecem nos stores `loops-v3-songs` e `loops-v3-wavs` do Netlify Blobs. **Não apague esses stores**.
-- Pastas e repertórios são armazenados separadamente no novo store `loops-v11-library`, sempre por usuário do Netlify Identity. Nenhum arquivo WAV é movido para o GitHub.
-- Todos os acessos ao banco, backup em nuvem e downloads continuam passando pela autenticação do Netlify Identity.
-- Se a mesma biblioteca de pastas/repertórios for editada simultaneamente em dois aparelhos, a aplicação mantém a edição local pendente e mostra uma mensagem de conflito em vez de sobrescrever silenciosamente a versão remota. Para evitar conflito, conclua a sincronização de um aparelho antes de editar no outro.
-- O modo músico `?modo=musico` continua **sem interface administrativa**. O próprio login Identity ainda é necessário para acessar dados protegidos.
+- A Central Administrativa continua usando **Netlify Identity**; não usamos a senha e as variáveis da V5.
+- O acesso do músico por link usa um token aleatório armazenado no novo store **`loops-v12-access`**. Ele tem validade de 90 dias e somente um link permanece ativo por conta. O token é sensível como uma senha: não o exponha publicamente.
+- O endpoint do músico (`netlify/functions/loops-musician.mjs`) permite **somente GET** de catálogo, repertório e áudio. Não tem operações de criação, exclusão ou edição. O endpoint administrativo ainda exige Netlify Identity.
+- Para que o link do músico abra sem **Sign in to Netlify**, o site/página de preview correspondente precisa permitir acesso dos visitantes (Project visibility/Deploy protection). A proteção dos dados fica nas Functions. Não confunda a proteção da plataforma com a autenticação do aplicativo.
+- Instale o PWA no Safari após abrir o **link permanente** e teste o atalho. Confirme que o manifesto personalizado foi aceito pelo iOS antes de depender dele.
+- **Pedal:** use um modelo Bluetooth HID em modo teclado, não MIDI puro. A resposta real depende do modelo e do Safari; teste com o iPhone 11 antes de apresentações.
 
-## Publicação no mesmo projeto
+## Atualização
 
-1. **Antes da atualização, exporte um backup completo na V10** e guarde o ZIP original da V10.
-2. Descompacte este pacote; envie **os arquivos internos diretamente à raiz** do mesmo repositório GitHub `LoopsMarksPro`.
-3. No Netlify: Base directory vazio, Build command `npm run build`, Publish directory `dist`, Functions directory `netlify/functions`.
-4. Deixe Auto Publishing Locked, se desejar. Abra o novo **Permalink** após concluir o deploy. Verifique o rodapé/cabeçalho `V11`.
-5. Entre no Identity com sua conta existente. Confirme que a música de teste da V10 ainda está em Músicas, teste a criação de um Ritmo, uma Pasta e um Repertório, confira `Sincronizado` e abra o app do músico pelo link gerado.
-6. No iPhone, abra no Safari, selecione um repertório, **baixe todos os seus WAVs** e teste em modo avião. Só então promova o deploy existente para produção.
+1. Salve um **backup completo** na V11, preservando os WAVs, e guarde o ZIP da V11.
+2. Extraia este pacote e envie **seu conteúdo, não o ZIP fechado**, para a raiz do **mesmo** repositório GitHub.
+3. No Netlify, mantenha: Base directory vazio, Build `npm run build`, Publish `dist`, Functions `netlify/functions`.
+4. Se a publicação automática estiver bloqueada, use o **novo Permalink da V12** para testar; não use `Trigger deploy` repetidamente.
+5. Teste as telas, o pedal no navegador e a geração/revogação de um link. Para testar a própria versão V12 no celular, copie **Link de teste**. Depois de aprovar e publicar a V12 no endereço principal, use **Copiar link permanente**.
+6. Teste primeiro com WAVs de demonstração. Confirme downloads, transições, repertórios, sessão offline e abertura pelo ícone no iPhone 11 em modo avião, antes de tocar uma cerimônia.
 
-## Testes
+## Persistência
 
-- `npm test`: 53 testes locais passando, cobrindo o motor de áudio anterior, autenticação, validações, armazenamento da biblioteca e renderização inicial dos painéis.
-- `node --check`: verificação sintática dos módulos JavaScript.
-- **Não foi possível executar o build npm completo ou a prévia em navegador nesta sessão**: as dependências npm não estavam instaladas e o navegador de testes local bloqueou a navegação. Valide o build no Netlify pelo Permalink antes de promover à produção.
-- **A reprodução real offline e a sincronização entre dois dispositivos ainda exigem teste no iPhone 11.** Não considerar a V11 aprovada para eventos ao vivo antes desses ensaios.
+- Músicas: `loops-v3-songs`; WAVs: `loops-v3-wavs`; histórico: `loops-v3-history`; pastas e repertórios: `loops-v11-library` — **preservados e sem migração destrutiva**.
+- Novo: `loops-v12-access` para a autorização do link do músico.
+- Preferências de layout e pedal: armazenamento local do próprio navegador/aplicativo (não substituem o backup do repertório).
+
+## Validação
+
+- Testes automatizados locais de autenticação, Cloud/Netlify Blobs simulado, link revogável, leitura do músico, viradas, biblioteca e interface.
+- Prévia estática da Central avaliada em 1440 × 900, sem rolagem horizontal.
+- O `npm run build` precisa baixar `esbuild` e outras dependências; o ambiente de montagem não tinha `node_modules`, portanto o build completo **não foi validado localmente**. Validar pelo Netlify.
+- **Ainda não testado com pedal físico nem com reprodução real no iPhone.** Os 53+ testes são automatizados, não substituem ensaio de áudio nem teste de revogação numa implantação real.

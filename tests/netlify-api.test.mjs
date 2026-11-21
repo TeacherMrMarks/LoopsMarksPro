@@ -124,3 +124,38 @@ test('V11: pastas e repertórios no Netlify Blobs com autenticação e controle 
   const bad=await invoke('?op=library-save','POST',JSON.stringify({revision:1,content:{folders:[{...folder,name:''}],repertoires:[]}}));
   assert.equal(bad.status,400);
 });
+
+test('V12: links pessoais são revogáveis e só permitem leitura de músicas e WAVs', async()=>{
+  loggedIn=false;
+  assert.equal((await invoke('?op=link-get')).status,401);
+  loggedIn=true;
+  assert.deepEqual(await (await invoke('?op=link-get')).json(),{active:false});
+  const created=await (await invoke('?op=link-create','POST')).json();
+  assert.equal(created.active,true);
+  assert.match(created.token,/^[a-f0-9-]{36}\.[a-f0-9]{64}$/);
+  const {default:musician}=await import('data:text/javascript;charset=utf-8,'+encodeURIComponent(
+    (await readFile(new URL('../netlify/functions/loops-musician.mjs',import.meta.url),'utf8'))
+      .replace("import {getStore} from '@netlify/blobs';","const getStore=globalThis.__netlifyBlobs;")
+  ));
+  const call=async(op,token=created.token,method='GET')=>musician(new Request(
+    'https://loops-marks-pro.netlify.app/.netlify/functions/loops-musician'+op,
+    {method,headers:{Authorization:'Bearer '+token}}));
+  assert.equal((await call('?op=resolve')).status,200);
+  assert.equal((await call('?op=catalog')).status,200);
+  assert.equal((await call('?op=library')).status,200);
+  assert.equal((await call('?op=audio-info&path='+encodeURIComponent(parts.a.path))).status,200);
+  assert.equal((await call('?op=audio-chunk&path='+encodeURIComponent(parts.a.path)+'&i=0')).status,200);
+  assert.equal((await call('?op=catalog','invalido')).status,401);
+  assert.equal((await call('?op=library','irrelevante','POST')).status,405);
+  const invalidPath=owner+'/'+songId+'/not-an-allowed-file.wav';
+  assert.equal((await call('?op=audio-info&path='+encodeURIComponent(invalidPath))).status,403);
+  const rev=await invoke('?op=link-revoke','POST');assert.equal(rev.status,200);
+  assert.equal((await call('?op=catalog')).status,401);
+  const newLink=await (await invoke('?op=link-create','POST')).json();
+  assert.notEqual(newLink.token,created.token);
+  assert.equal((await call('?op=resolve',newLink.token)).status,200);
+  assert.equal((await call('?op=resolve',created.token)).status,401);
+  const manifest=await musician(new Request('https://loops-marks-pro.netlify.app/.netlify/functions/loops-musician?op=manifest&chave='+encodeURIComponent(newLink.token)));
+  assert.equal(manifest.status,200);
+  assert.match((await manifest.json()).start_url,/modo=musico.*chave=/);
+});

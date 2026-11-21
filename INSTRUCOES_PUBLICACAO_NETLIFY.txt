@@ -1,9 +1,10 @@
-Loops Marks Pro V11 — mesma conta e mesmo projeto Netlify/GitHub.
-1. Exporte backup completo na V10.
-2. Extraia e envie o CONTEÚDO deste ZIP à raiz do repositório.
-3. Netlify Base directory: vazio | Build: npm run build | Publish: dist | Functions: netlify/functions.
-4. Mantenha publicação automática bloqueada e TESTE pelo novo Permalink.
-5. Login: o mesmo e-mail/senha do Netlify Identity (não precisa nova variável de senha).
-6. Crie pasta, ritmo, repertório; aguarde Sincronizado e confira no celular.
-7. Baixe repertório inteiro para offline e ensaie em Modo Avião antes de tocar.
-8. Promova o deploy testado quando estiver satisfeito (não rode novo build sem necessidade).
+Loops Marks Pro V12 — mesmo GitHub/Netlify.
+
+1) Faça backup V11.
+2) Extraia o ZIP V12; envie os arquivos para a RAIZ do repositório LoopsMarksPro.
+3) Netlify: Base vazio, Build npm run build, Publish dist, Functions netlify/functions.
+4) Abra o novo Permalink V12. Teste Músicas, Repertórios, Configurações, Pedal e um link de músico de teste.
+5) O link permanente só mostra a V12 após promover o deploy para produção.
+6) Não precisa configurar variáveis de senha da V5. Mantenha Identity.
+7) Para entrada no iPhone sem login da PLATAFORMA, publique a interface/preview como acessível aos visitantes e proteja dados via Identity/Functions.
+8) Teste OFFLINE em modo avião antes de tocar ao vivo.
