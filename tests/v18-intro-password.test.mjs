@@ -1,0 +1,46 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {newSong, PARTS, Cloud} from '../dist/data.js';
+import {Player} from '../dist/audio.js';
+const text = path=>readFileSync(new URL(path,import.meta.url),'utf8');
+const app=text('../dist/app.js'),audio=text('../dist/audio.js'),backup=text('../dist/backup.js');
+test('V18: preserva intro antiga e cria contagem independente',()=>{
+ assert.equal(PARTS[0].id,'countIntro');
+ assert.equal(PARTS[1].id,'intro');
+ assert.equal(newSong().introMode,'once');
+ assert.equal(newSong().countIntroEnabled,true);
+ assert.match(app,/data-field="introMode"/);
+ assert.match(app,/data-field="countIntroEnabled"/);
+ assert.match(text('../dist/data.js'),/Introdução 1 · Contagem de baquetas/);
+ assert.match(text('../dist/data.js'),/Introdução 2 · Musical/);
+});
+test('V18: player agenda contagem uma vez antes da introdução, que só repete sob comando',async()=>{
+ const events=[];
+ const pl=new Player(()=>{});
+ pl.ready=true;pl.running=false;pl.song={kind:'rhythm',beats:4,introMode:'repeat',countIntroEnabled:true};
+ pl.ctx={currentTime:5,resume:async()=>{}};
+ pl.context=()=>pl.ctx;
+ pl.buffers=new Map([['countIntro',{seconds:3,beats:4}],['intro',{seconds:6,beats:8}],['a',{seconds:3,beats:4}]]);
+ pl.initialPart='a';pl.loopKeys=new Set(['a','intro']);
+ pl.initSequence=()=>{};
+ pl.segment=(key,at)=>{events.push([key,at]);return {key,at,naturalEnd:at+pl.buffers.get(key).seconds}};
+ pl.scheduleDestination=(key,at)=>events.push([key,at]);
+ await pl.start();
+ assert.deepEqual(events.map(e=>e[0]),['countIntro','intro']);
+ assert.equal(events[1][1],events[0][1]+3);
+ pl.stop();events.length=0;
+ pl.song={kind:'music',beats:4,introMode:'once',countIntroEnabled:false};
+ await pl.start();
+ assert.deepEqual(events.map(e=>e[0]),['intro','a']);
+ assert.equal(events[1][1],events[0][1]+6);
+});
+test('V18: senha utiliza sessão Netlify Identity e não é armazenada localmente',()=>{
+ assert.match(app,/settings-password/);
+ assert.match(app,/cloud\.changePassword\(password\)/);
+ assert.match(text('../dist/data.js'),/async changePassword\(password\)/);
+ assert.match(text('../dist/data.js'),/identityUpdateUser\(\{password\}\)/);
+ assert.match(backup,/introMode:/);
+ assert.match(backup,/countIntroEnabled:/);
+ assert.doesNotMatch(backup,/password:/);
+});

@@ -6,7 +6,7 @@ import { exampleSongs } from './demo.js';
 import { makeBackup, restoreBackup, triggerDownload } from './backup.js';
 import { emptyLibrary, cleanLibrary, songKind, inFolder, repertoireEntries } from './library-model.js';
 
-const APP_VERSION = 'V17';
+const APP_VERSION = 'V18';
 // O link do músico carrega exclusivamente o Modo Live.
 const musicianLink = new URL(location.href).searchParams.get('modo') === 'musico';
 const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
@@ -383,7 +383,7 @@ function variantEditor(song) {
 }
 
 function transitionEditor(song) {
-  const loopOptions = [{id:'intro',label:'Introdução'}, ...playableParts(song)];
+  const loopOptions = [{id:'intro',label:'Introdução musical'}, ...playableParts(song)];
   const targetOptions = [...playableParts(song), ...FINALES];
   const fills = availableFillChoices(song);
   const rows = Object.entries(song.transitions || {});
@@ -410,7 +410,7 @@ function transitionEditor(song) {
 
 function sequenceEditor(song) {
   if(songKind(song)==='rhythm') return '<div class="v13-rhythm-map-note">Ritmo livre: controle as partes, viradas e o final diretamente no Modo Live ou pelo pedal.</div>';
-  const sections=[...(song.parts?.intro?[{id:'intro',label:'Introdução'}]:[]),...playableParts(song).filter(p=>song.parts?.[p.id]),...FINALES.filter(p=>song.parts?.[p.id]),...CRASH_STOPS.filter(p=>song.parts?.[p.id])];
+  const sections=[...(song.parts?.intro?[{id:'intro',label:'Introdução musical'}]:[]),...playableParts(song).filter(p=>song.parts?.[p.id]),...FINALES.filter(p=>song.parts?.[p.id]),...CRASH_STOPS.filter(p=>song.parts?.[p.id])];
   const stages=song.sequence||[];
   const lookup=id=>sections.find(p=>p.id===id)?.label || id;
   return '<details class="editor-group v13-sequence-editor" open><summary><span>'+icon('list')+'<strong>04 · Mapa da sequência musical</strong></span><small>'+stages.length+' etapas</small></summary>'+
@@ -475,10 +475,17 @@ function editor() {
     '<label class="field"><span>Repetir a mesma parte</span><select data-field="repeatMode">' +
     '<option value="fill" ' + ((song.repeatMode || 'fill') === 'fill' ? 'selected' : '') + '>Com virada + crash</option>' +
     '<option value="direct" ' + (song.repeatMode === 'direct' ? 'selected' : '') + '>Direto ao loop de entrada com crash</option>' +
-    '</select></label></div></div></details>' +
+    '</select></label></div>' +
+    '<div class="v18-intro-settings"><h3>Introduções</h3><p class="subtle">Contagem de baquetas e introdução musical independentes. WAV de vários compassos.</p>' +
+    '<label class="field"><span>Contagem de baquetas</span><select data-field="countIntroEnabled">' +
+    '<option value="true" '+(song.countIntroEnabled!==false?'selected':'')+'>Ativada se houver WAV</option>' +
+    '<option value="false" '+(song.countIntroEnabled===false?'selected':'')+'>Desativada</option></select></label>' +
+    '<label class="field"><span>Introdução musical</span><select data-field="introMode">' +
+    '<option value="once" '+(song.introMode!=='repeat'?'selected':'')+'>Tocar uma vez → parte inicial</option>' +
+    '<option value="repeat" '+(song.introMode==='repeat'?'selected':'')+'>Repetir até comando pelo celular / pedal</option></select></label></div></div></details>' +
     '<div class="import-toolbar"><div><h2>03 · Biblioteca de áudios</h2><p>WAVs separados da sua DAW · Até 32 MB por arquivo</p></div>' +
     button('batch-import','Importar vários WAVs','plus','ghost') + '<input type="file" id="batch-files" accept=".wav,audio/wav,audio/x-wav" multiple hidden></div>' +
-    editorSection(song, 'loops', 'Loops contínuos e introdução',
+    editorSection(song, 'loops', 'Loops contínuos e introduções',
       'O WAV contínuo NÃO deve ter crash de entrada repetido. Ele fica em repetição até a próxima troca.', true) +
     editorSection(song, 'entradas', 'Loop + Crash · Entradas por parte (opcional)',
       'WAV de um ou mais compassos com o prato de ataque. Toca UMA vez a cada entrada na parte; depois vem o loop contínuo. O WAV precisa ter o mesmo BPM e compasso.') +
@@ -732,16 +739,42 @@ async function openSettingsModal(){
       button('settings-backup','Backup e restauração','download','v12-setting-tile')+
       button('settings-link','Gerenciar link do músico','link','v12-setting-tile')+
       button('settings-pedal','Controle por pedal','wave','v12-setting-tile')+
+      (!cloud.musician ? button('settings-password','Redefinir minha senha','settings','v12-setting-tile') : '')+
       button('settings-sync','Sincronizar agora','cloud','v12-setting-tile')+
       button('settings-logout','Sair da conta','exit','v12-setting-tile danger')+'</div><p class="subtle">Versão '+APP_VERSION+' · Todas as alterações são salvas automaticamente.</p></section>';
   dialog.querySelector('[data-action="close-settings"]').onclick=()=>dialog.close();
   for(const [action,run] of [['settings-backup',()=>openBackupCenter()],['settings-link',()=>copyMobile()],
-    ['settings-pedal',()=>openPedalModal()],['settings-sync',()=>syncCatalog()],
+    ['settings-pedal',()=>openPedalModal()],['settings-password',()=>openPasswordSettingsModal()],['settings-sync',()=>syncCatalog()],
     ['settings-logout',()=>handleAction({dataset:{action:'logout'}})]]){
     dialog.querySelector('[data-action="'+action+'"]').onclick=async()=>{
       dialog.close();try{await run();}catch(e){notice(e.message);}
     };
   }
+  dialog.showModal();
+}
+
+async function openPasswordSettingsModal(){
+  if(cloud.musician || cloud.session()?.readonly){notice('Somente a conta administrativa pode redefinir sua própria senha.');return;}
+  if(!navigator.onLine){notice('Conecte à internet para alterar sua senha no Netlify Identity.');return;}
+  dialog.innerHTML='<section class="v12-settings-dialog"><div class="v12-settings-heading"><div><p class="eyebrow">SEGURANÇA DA CONTA</p><h2>Redefinir minha senha</h2></div>'+iconButton('close-password-settings','Fechar','x')+'</div>'+ 
+    '<p class="subtle">Esta opção altera a senha da sua conta administrativa no Netlify Identity, sem afetar os links dos músicos ou os arquivos. Sua sessão precisa estar autenticada e conectada.</p>'+ 
+    '<form id="v18-password-settings-form" class="v18-password-form">'+
+    '<label class="field"><span>Nova senha (mínimo 8 caracteres)</span><input name="password" type="password" minlength="8" required autocomplete="new-password"></label>'+ 
+    '<label class="field"><span>Confirmar nova senha</span><input name="confirmation" type="password" minlength="8" required autocomplete="new-password"></label>'+ 
+    '<p id="v18-password-error" role="alert" class="error"></p>'+ 
+    '<button type="submit" class="button primary">Salvar nova senha</button></form></section>';
+  dialog.querySelector('[data-action="close-password-settings"]').onclick=()=>dialog.close();
+  dialog.querySelector('#v18-password-settings-form').onsubmit=async(event)=>{
+    event.preventDefault();const form=event.currentTarget;
+    const password=String(new FormData(form).get('password')||'');
+    const confirmation=String(new FormData(form).get('confirmation')||'');
+    const error=form.querySelector('#v18-password-error');
+    if(password.length<8 || password!==confirmation){error.textContent=password!==confirmation?'As senhas não coincidem.':'Use pelo menos 8 caracteres.';return;}
+    const submit=form.querySelector('[type="submit"]');submit.disabled=true;error.textContent='';
+    try{await cloud.changePassword(password);form.reset();dialog.close();notice('Senha atualizada no Netlify Identity. Use a nova senha no próximo acesso.');}
+    catch(e){error.textContent=e.message||'Não foi possível alterar a senha.';}
+    finally{submit.disabled=false;}
+  };
   dialog.showModal();
 }
 
@@ -1104,7 +1137,7 @@ function updatePlayback(force = false) {
     const mode = !playing.running ? (player.ready ? 'Pronto para iniciar' : 'Preparando áudio') :
       CRASH_STOPS.some(p=>p.id===playing.active) ? 'Crash final · cauda do prato' :
       isFill ? 'Virada em execução' : playing.entryAttack ? 'Entrada com crash' :
-      playing.active === 'intro' ? 'Introdução' : 'Loop contínuo';
+      playing.active === 'countIntro' ? 'Contagem de baquetas' : playing.active === 'intro' ? 'Introdução musical' : 'Loop contínuo';
     const next = playing.next ? 'PRÓXIMO · ' + player.label(playing.next) : (playing.sequenceTotal ? 'MAPA · '+(playing.sequenceIndex+1)+'/'+playing.sequenceTotal : '');
     const mapStatus=get('#live-map-status');if(mapStatus&&playing.sequenceTotal)mapStatus.textContent='Mapa '+(playing.sequenceAuto?'automático':'assistido')+' · '+(playing.sequenceIndex+1)+'/'+playing.sequenceTotal;
     if (get('#stage-active').textContent !== name) get('#stage-active').textContent = name;
@@ -1886,6 +1919,7 @@ app.addEventListener('input', event => {
       persistDraft().then(()=>render()).catch(error=>notice(error.message));
       return;
     }
+    if(field==='countIntroEnabled'){state.admin.countIntroEnabled=input.value==='true';delayedSave();return;}
     if (['bpm', 'beats'].includes(field)) {
       if (!input.value || !Number(input.value)) return;
       state.admin[field] = Number(input.value);

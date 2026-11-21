@@ -1,1 +1,1 @@
-Loops Marks Pro V17 — Cadastro de ritmos com Nome do ritmo e Estilo musical; repertório associa ritmos reutilizáveis a músicas nomeadas com BPM próprio (limite seguro ±10 BPM), preservando WAVs, músicas, compassos V16, Modo Live, links, backup e Netlify.
+Loops Marks Pro V18 — Introdução 1: contagem de baquetas em WAV; Introdução 2: musical com reprodução única ou repetição até comando; contagem ativável por ritmo/música; alteração de senha administrativa nas Configurações via Netlify Identity; preserva recursos e dados V17.

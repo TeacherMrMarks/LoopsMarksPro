@@ -91,6 +91,7 @@ export class Player {
     const ratio = song.bpm / bpm;
     const supported = new Set([...PARTS.map(part => part.id),...extraSections(song).flatMap(s=>[s.id,s.id+'Entry'])]);
     this.loopKeys=new Set([...LOOPS,...extraSections(song).map(s=>s.id)]);
+    if(song.introMode==='repeat')this.loopKeys.add('intro');
     for (const [key, part] of Object.entries(song.parts || {})) {
       if (!supported.has(key) && !this.isFill(key)) continue;
       const audio = song.demo ? demoBuffer(context, song, key) : await load(part.path);
@@ -229,13 +230,19 @@ export class Player {
     this.pending = null;
     this.segments = [];
     this.initSequence();
+    // Contagem prévia independente; antigas introduções continuam em 'intro'.
+    const count = this.song.countIntroEnabled!==false && this.buffers.has('countIntro')
+      ? this.segment('countIntro', this.epoch) : null;
+    const musicalAt=count ? count.naturalEnd : this.epoch;
     if (this.buffers.has('intro')) {
-      const intro = this.segment('intro', this.epoch);
+      const intro = this.segment('intro', musicalAt);
       this.introduction(intro);
-    } else this.scheduleDestination(this.initialPart || 'a', this.epoch);
+    } else this.scheduleDestination(this.initialPart || 'a', musicalAt);
     this.sequenceEnteredAt=this.segments.find(seg=>this.baseFor(seg.key)===this.initialPart)?.at??this.sequenceEnteredAt;
   }
   introduction(intro) {
+    // Na repetição, a saída acontece somente quando o músico acionar outra parte.
+    if(this.song.introMode==='repeat')return;
     const fill = this.buffers.has('fillIntro') ? 'fillIntro' : null;
     if (fill) {
       const start = intro.end - this.buffers.get(fill).seconds;
@@ -256,6 +263,7 @@ export class Player {
     const key = this.baseFor(active?.key);
     if (this.loopKeys.has(key)) return key;
     if (active?.key === 'intro') return 'intro';
+    if (active?.key === 'countIntro') return 'intro';
     return this.pending?.dest || this.baseFor(this.segments.findLast(s => this.loopKeys.has(this.baseFor(s.key)))?.key) || this.initialPart || 'a';
   }
   autoFill(from, dest) {
@@ -368,9 +376,10 @@ export class Player {
       ...step,jumpTo:normalized.get(step.jumpTo)??-1,
     }));
     this.sequenceIndex=Math.max(0,this.sequenceSteps.findIndex(s=>this.loopKeys.has(s.part)));
-    this.sequenceEnteredAt=this.epoch+(this.buffers.get('intro')?.seconds||0);
+    const countSeconds=this.song.countIntroEnabled!==false?(this.buffers.get('countIntro')?.seconds||0):0;
+    this.sequenceEnteredAt=this.epoch+countSeconds+(this.buffers.get('intro')?.seconds||0);
     this.sequenceScheduled=null;
-    this.sequenceAuto=this.song.sequenceMode==='automatic';
+    this.sequenceAuto=this.song.sequenceMode==='automatic' && this.song.introMode!=='repeat';
     this.sequenceCount=0;
   }
   sequenceTarget(fromIndex) {

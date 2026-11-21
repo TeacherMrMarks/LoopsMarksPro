@@ -38,6 +38,7 @@ function roleSlot(text) {
     const match = text.match(/(?:parte_?)?([abc])(?:$|_)/);
     return match ? {a:'fillA',b:'fillB',c:'fillC'}[match[1]] : '';
   }
+  if (/(contagem|count_?in|count_?off|baquetas?|click_?intro|intro_?1|introducao_?1)/.test(text)) return 'countIntro';
   if (/(intro|introducao)/.test(text)) return 'intro';
   if (/(pre_refrao|pre_chorus)/.test(text)) return 'pre';
   if (/(refrao|chorus)/.test(text)) return 'chorus';

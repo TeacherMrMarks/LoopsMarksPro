@@ -1,5 +1,6 @@
 export const PARTS = [
-  { id: 'intro', label: 'Introdução', icon: 'spark', type: 'uma vez', group: 'loops' },
+  { id: 'countIntro', label: 'Introdução 1 · Contagem de baquetas', icon: 'wave', type: 'uma vez', group: 'loops' },
+  { id: 'intro', label: 'Introdução 2 · Musical', icon: 'spark', type: 'uma vez ou repetir', group: 'loops' },
   { id: 'a', label: 'Parte A', icon: 'a', type: 'loop', group: 'loops' },
   { id: 'aEntry', label: 'Entrada Parte A · com crash', icon: 'spark', type: 'entrada', group: 'entradas' },
   { id: 'b', label: 'Parte B', icon: 'b', type: 'loop', group: 'loops' },
@@ -60,7 +61,7 @@ const KEY = 'loops-marks-last-user-v3';
 const STORE = 'dados';
 
 export function newSong() {
-  return { kind:'music', folderId:'', id: crypto.randomUUID(), name: '', occasion: '', bpm: 84, beats: 4, meter: '4/4', parts: {}, transitions: {}, customFills: [], fillMode: 'smart', repeatMode: 'fill', customSections: [], sequence: [], sequenceMode:'assisted', revision: 0 };
+  return { kind:'music', folderId:'', id: crypto.randomUUID(), name: '', occasion: '', bpm: 84, beats: 4, meter: '4/4', parts: {}, transitions: {}, customFills: [], fillMode: 'smart', repeatMode: 'fill', introMode: 'once', countIntroEnabled: true, customSections: [], sequence: [], sequenceMode:'assisted', revision: 0 };
 }
 
 function openDB() {
@@ -322,6 +323,20 @@ export class Cloud {
     try { await identityRequestRecovery(email); }
     catch (error) { throw new CloudError(describeIdentityError(error,'reset'), Number(error?.status || 0)); }
     try { localStorage.setItem(RECOVERY_THROTTLE_KEY, String(Date.now())); } catch {}
+  }
+  async changePassword(password) {
+    if(this.musician || !this.session()?.id || this.session()?.readonly)
+      throw new CloudError('Entre na conta administrativa para alterar sua senha.',401);
+    if(typeof navigator!=='undefined'&&!navigator.onLine)
+      throw new CloudError('É necessária conexão com a internet para alterar a senha.',0);
+    if(typeof password!=='string'||password.length<8)
+      throw new CloudError('Use uma senha com pelo menos 8 caracteres.',400);
+    try{
+      const user=await identityGetUser();
+      if(!user?.id || user.id!==this.session().id)throw new CloudError('Sessão expirada. Entre novamente antes de alterar a senha.',401);
+      await identityUpdateUser({password});
+    }catch(error){throw new CloudError(describeIdentityError(error,'recovery'),Number(error?.status||0));}
+    return true;
   }
   async finishInvite(password) {
     if (this.authFlow?.type !== 'invite' || !this.authFlow.token)

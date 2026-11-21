@@ -7,7 +7,7 @@ function slim(song) {
   return { originalId:song.id, kind:song.kind||'music', folderId:song.folderId||'', name: song.name || '', occasion: song.occasion || '', bpm: song.bpm,
     beats: song.beats, meter: meterOf(song), beatUnit:song.beatUnit, parts: structuredClone(song.parts||{}),
     transitions: structuredClone(song.transitions||{}), customFills: structuredClone(song.customFills||[]),
-    fillMode: song.fillMode || 'smart', repeatMode: song.repeatMode || 'fill', customSections:structuredClone(song.customSections||[]), sequence:structuredClone(song.sequence||[]), sequenceMode:song.sequenceMode||'assisted' };
+    fillMode: song.fillMode || 'smart', repeatMode: song.repeatMode || 'fill', introMode:song.introMode==='repeat'?'repeat':'once', countIntroEnabled:song.countIntroEnabled!==false, customSections:structuredClone(song.customSections||[]), sequence:structuredClone(song.sequence||[]), sequenceMode:song.sequenceMode||'assisted' };
 }
 export async function makeBackup(repo, mode = 'completo', progress = () => {}) {
   const songs = (await repo.catalog()).filter(song => !song.deleted);
@@ -64,7 +64,7 @@ export async function restoreBackup(repo, file, progress = () => {}) {
     const id=crypto.randomUUID();if(song.originalId)idMap.set(song.originalId,id);
     const restored={id,kind:song.kind==='rhythm'?'rhythm':'music',folderId:folderMap.get(song.folderId)||'',name:song.name,occasion:String(song.occasion||'').slice(0,55),bpm:song.bpm,
       beats:song.beats,meter:meterOf(song),beatUnit:song.beatUnit,parts:{},transitions:song.transitions||{},customFills:song.customFills||[],
-      fillMode: song.fillMode || 'smart', repeatMode: song.repeatMode || 'fill',customSections:song.customSections||[],sequence:song.sequence||[],sequenceMode:song.sequenceMode||'assisted',revision:0};
+      fillMode: song.fillMode || 'smart', repeatMode: song.repeatMode || 'fill',introMode:song.introMode==='repeat'?'repeat':'once',countIntroEnabled:song.countIntroEnabled!==false,customSections:song.customSections||[],sequence:song.sequence||[],sequenceMode:song.sequenceMode||'assisted',revision:0};
     const files=[];
     for(const [part,meta] of Object.entries(song.parts)) {
       if(!/^[A-Za-z0-9_-]{1,80}$/.test(part)) continue;

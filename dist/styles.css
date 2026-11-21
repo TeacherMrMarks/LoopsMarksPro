@@ -1017,3 +1017,9 @@ body.drawer-visible {overflow:hidden}
 
 /* V17: instrução breve para músicas vinculadas a ritmos reutilizáveis. */
 .v17-rep-help{font-size:.78rem;line-height:1.5;color:var(--muted,#9eb7c5);margin:.65rem 0 1rem}
+
+/* V18: identificação das introduções e ajustes de segurança da conta */
+.v18-intro-settings{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-top:16px;padding:14px;border:1px solid rgba(98,205,184,.22);border-radius:12px}
+.v18-intro-settings h3,.v18-intro-settings p{flex-basis:100%;margin:0}
+.v18-intro-settings .field{flex:1 1 230px;min-width:0}
+.v18-password-form{display:grid;gap:14px;margin-top:15px}
