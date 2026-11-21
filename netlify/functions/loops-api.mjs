@@ -21,12 +21,14 @@ function validateContent(content, owner) {
       !Number.isFinite(content.bpm) || content.bpm<30 || content.bpm>280 ||
       !Number.isInteger(content.beats) || content.beats<2 || content.beats>6 ||
       !content.parts || typeof content.parts!=='object' || Array.isArray(content.parts)) return false;
-  if (Object.keys(content.parts).length>75) return false;
+  if (Object.keys(content.parts).length>250) return false;
   for (const [key, part] of Object.entries(content.parts)) {
     if (!/^[\w-]{1,80}$/.test(key) || !part || !validAudio(part.path, owner) ||
         !Number.isFinite(part.bars) || part.bars<0 || part.bars>128) return false;
   }
-  if (Object.keys(content.transitions||{}).length>140 || (content.customFills||[]).length>50) return false;
+  if (Object.keys(content.transitions||{}).length>140 || (content.customFills||[]).length>50 ||
+      (content.fillMode && !['smart','full'].includes(content.fillMode)) ||
+      (content.repeatMode && !['fill','direct'].includes(content.repeatMode))) return false;
   return true;
 }
 export default async function handler(req) {

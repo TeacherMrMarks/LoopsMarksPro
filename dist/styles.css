@@ -397,3 +397,31 @@ dialog:has(.batch-list) {width:min(calc(100vw - 28px),660px);}
 .recovery-help p { margin: 10px 0; }
 .recovery-help form { margin-top: 12px; }
 #recovery-message { font-size: .85rem; min-height: 1.1em; }
+
+/* V3.2 — identificação de versão em todas as telas */
+.version-tag { display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto; border:1px solid #466451; background:#25392e; color:#c8f59e; border-radius:7px; padding:3px 7px; font-weight:760; font-size:.70rem; white-space:nowrap;letter-spacing:.025em; }
+.session-line .account-name {flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.session-line .version-tag {margin-left:auto;}
+.version-on-mobile {display:none;}
+.login-footer {border-top:1px solid var(--line-soft);margin-top:19px;padding-top:12px;text-align:center;color:var(--muted);font-size:.78rem;font-weight:600;}
+@media(max-width:870px) {.version-on-mobile {display:inline-flex;align-items:center;} .version-on-mobile .version-tag{font-size:.67rem;padding:3px 6px;}}
+@media(max-width:370px) {.version-on-mobile .version-tag{font-size:.62rem;padding:3px 5px;}}
+
+/* V4 — Variantes e controles de palco sem aumentar a tela principal */
+.variant-groups {padding:0 12px 12px;display:grid;gap:8px;}
+.variant-family {background:#162c3a;border:1px solid #345263;border-radius:9px;overflow:hidden;}
+.variant-family > summary {display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;cursor:pointer;list-style:none;}
+.variant-family > summary::after {display:none;}
+.variant-family > summary strong {font-size:.78rem;color:#e3f6f4;}
+.variant-family > summary small {font-size:.68rem;color:#a2c2c8;}
+.variant-family > div {display:grid;gap:5px;padding:5px 8px 9px;}
+.variant-family .file-row {background:#102534;}
+.mode-toggle {display:inline-flex;align-items:center;gap:6px;border:1px solid #397d70;background:#193b3b;border-radius:8px;color:#99f0d3;font-size:.73rem;font-weight:800;padding:7px 10px;min-height:30px;cursor:pointer;}
+.mode-toggle svg {width:15px;height:15px;}
+.mode-toggle:focus-visible {outline:2px solid #9ef6db;outline-offset:3px;}
+.queue-tools {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;}
+@media(max-width:600px) {
+  .variant-groups {padding:0 6px 8px;}
+  .variant-family > div {padding:4px;}
+  .mode-toggle {font-size:.68rem;padding:6px;}
+}

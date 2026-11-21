@@ -4,7 +4,8 @@ const LIMIT = 420 * 1024 * 1024;
 function slim(song) {
   return { name: song.name || '', occasion: song.occasion || '', bpm: song.bpm,
     beats: song.beats, parts: structuredClone(song.parts||{}),
-    transitions: structuredClone(song.transitions||{}), customFills: structuredClone(song.customFills||[]) };
+    transitions: structuredClone(song.transitions||{}), customFills: structuredClone(song.customFills||[]),
+    fillMode: song.fillMode || 'smart', repeatMode: song.repeatMode || 'fill' };
 }
 export async function makeBackup(repo, mode = 'completo', progress = () => {}) {
   const songs = (await repo.catalog()).filter(song => !song.deleted);
@@ -44,7 +45,8 @@ export async function restoreBackup(repo, file, progress = () => {}) {
        !song.parts || typeof song.parts!=='object') throw new Error('Dados inválidos no backup.');
     const id=crypto.randomUUID();
     const restored={id,name:song.name,occasion:String(song.occasion||'').slice(0,55),bpm:song.bpm,
-      beats:song.beats,parts:{},transitions:song.transitions||{},customFills:song.customFills||[],revision:0};
+      beats:song.beats,parts:{},transitions:song.transitions||{},customFills:song.customFills||[],
+      fillMode: song.fillMode || 'smart', repeatMode: song.repeatMode || 'fill',revision:0};
     const files=[];
     for(const [part,meta] of Object.entries(song.parts)) {
       if(!/^[A-Za-z0-9_-]{1,80}$/.test(part)) continue;

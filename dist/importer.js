@@ -5,6 +5,17 @@ const norm = value => String(value).normalize('NFD').replace(/[\u0300-\u036f]/g,
 
 export function suggestSlot(filename) {
   const text = norm(filename);
+  // Ex.: Virada_Refrão_2T.wav -> fillChorus__2; Refrão_Entrada.wav -> chorusEntry.
+  const duration = text.match(/(?:_|^)([1-9]\d?)(?:t|tempo|tempos)(?:_|$)/)?.[1];
+  const entry = /(entrada|com_crash|crash|ataque|primeiro_loop|loop_1)(?:_|$)/.test(text);
+  const base = text.replace(/(?:_|^)[1-9]\d?(?:t|tempo|tempos)(?:_|$)/g, '_')
+    .replace(/(?:_|^)(entrada|com_crash|crash|ataque|primeiro_loop|loop_1)(?:_|$)/g, '_');
+  const role = roleSlot(base);
+  if (entry && ['a','b','c','pre','chorus','low','high'].includes(role)) return role + 'Entry';
+  if (duration && role?.startsWith('fill')) return role + '__' + Number(duration);
+  return role;
+}
+function roleSlot(text) {
   if (/(acabamento|fechamento|ending_curto|final_curto|saida_curta)/.test(text)) return 'finish';
   if (/(final|outro|encerramento|saida_final)/.test(text)) return 'outro';
   const fill = /(virada|fill|passagem|transicao)/.test(text);

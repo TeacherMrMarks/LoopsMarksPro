@@ -1,4 +1,4 @@
-LOOPS MARKS PRO — V3
+LOOPS MARKS PRO — V4
 
 1. EXTRAIA o ZIP e faça upload de todos os arquivos da raiz para GitHub.
 2. No Netlify, importe este repositório GitHub (não use Netlify Drop nesta versão).

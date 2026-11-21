@@ -26,7 +26,7 @@ function setupSDK(auth) {
     requestPasswordRecovery: async email => { assert.equal(email, 'user@test.com'); },
   };
   if (auth?.type === 'recovery') current = {id:'u1', email:'user@test.com'};
-  return { current: () => current, storage };
+  return { current: () => current, setCurrent: value => { current = value; }, storage };
 }
 
 async function makeCloud() {
@@ -61,4 +61,44 @@ test('request password reset checks email and dispatches to identity', async () 
   const cloud = await makeCloud();
   await assert.rejects(() => cloud.sendPasswordReset('invalid-address'), /e-mail válido/);
   await cloud.sendPasswordReset('user@test.com');
+});
+
+
+test('invalid recovery link does not silently open the usual application', async () => {
+  const sdk = setupSDK(null);
+  sdk.setCurrent({id:'u1',email:'user@test.com'});
+  const previousLocation = globalThis.location;
+  const previousHistory = globalThis.history;
+  const cleared = [];
+  globalThis.location = {hash:'#recovery_token=mock-token',pathname:'/',search:''};
+  globalThis.history = {replaceState(_a,_b,url){cleared.push(url);}};
+  try {
+    const cloud = await makeCloud();
+    await cloud.initialize();
+    assert.equal(cloud.authFlow?.type,'invalid');
+    assert.match(cloud.authError,/Netlify não confirmou/);
+    assert.equal(cloud.session()?.email,'user@test.com');
+    assert.deepEqual(cleared, ['/']);
+  } finally {
+    if (previousLocation === undefined) delete globalThis.location;
+    else globalThis.location = previousLocation;
+    if (previousHistory === undefined) delete globalThis.history;
+    else globalThis.history = previousHistory;
+  }
+});
+
+test('V4 version marker is present on login and account UI', () => {
+  const app = readFileSync(new URL('../dist/app.js', import.meta.url),'utf8');
+  const html = readFileSync(new URL('../dist/index.html', import.meta.url),'utf8');
+  assert.match(app,/const APP_VERSION = 'V4'/);
+  assert.match(app,/class=\"login-footer\"/);
+  assert.match(app,/version-on-mobile/);
+  assert.match(app,/session-line/);
+  assert.match(html,/V4/);
+});
+
+test('service worker checks the network first and retains offline fallback', () => {
+  const sw = readFileSync(new URL('../dist/sw.js', import.meta.url),'utf8');
+  assert.ok(sw.indexOf('await fetch(request)') < sw.indexOf('await cache.match('));
+  assert.match(sw,/skipWaiting/);
 });

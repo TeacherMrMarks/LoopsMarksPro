@@ -1,12 +1,19 @@
 export const PARTS = [
   { id: 'intro', label: 'Introdução', icon: 'spark', type: 'uma vez', group: 'loops' },
   { id: 'a', label: 'Parte A', icon: 'a', type: 'loop', group: 'loops' },
+  { id: 'aEntry', label: 'Entrada Parte A · com crash', icon: 'spark', type: 'entrada', group: 'entradas' },
   { id: 'b', label: 'Parte B', icon: 'b', type: 'loop', group: 'loops' },
+  { id: 'bEntry', label: 'Entrada Parte B · com crash', icon: 'spark', type: 'entrada', group: 'entradas' },
   { id: 'c', label: 'Parte C', icon: 'layers', type: 'loop', group: 'loops' },
+  { id: 'cEntry', label: 'Entrada Parte C · com crash', icon: 'spark', type: 'entrada', group: 'entradas' },
   { id: 'pre', label: 'Pré-refrão', icon: 'wave', type: 'loop', group: 'loops' },
+  { id: 'preEntry', label: 'Entrada Pré-refrão · com crash', icon: 'spark', type: 'entrada', group: 'entradas' },
   { id: 'chorus', label: 'Refrão', icon: 'layers', type: 'loop', group: 'loops' },
+  { id: 'chorusEntry', label: 'Entrada Refrão · com crash', icon: 'spark', type: 'entrada', group: 'entradas' },
   { id: 'low', label: 'Parte baixa', icon: 'minus', type: 'loop', group: 'loops' },
+  { id: 'lowEntry', label: 'Entrada Parte baixa · com crash', icon: 'spark', type: 'entrada', group: 'entradas' },
   { id: 'high', label: 'Parte alta', icon: 'current', type: 'loop', group: 'loops' },
+  { id: 'highEntry', label: 'Entrada Parte alta · com crash', icon: 'spark', type: 'entrada', group: 'entradas' },
   { id: 'fillIntro', label: 'Virada da introdução', icon: 'wave', type: 'virada', group: 'automaticas' },
   { id: 'fillA', label: 'Virada para Parte A', icon: 'wave', type: 'virada', group: 'automaticas' },
   { id: 'fillB', label: 'Virada para Parte B', icon: 'wave', type: 'virada', group: 'automaticas' },
@@ -25,6 +32,11 @@ export const PLAY_PARTS = PARTS.filter(part => part.group === 'loops' && part.id
 export const MANUAL_PARTS = PARTS.filter(part => part.group === 'manuais');
 export const FINALES = PARTS.filter(part => part.group === 'finais');
 export const FILL_IDS = new Set(PARTS.filter(part => part.type === 'virada').map(part => part.id));
+export const ENTRY_OF = Object.fromEntries(PLAY_PARTS.map(part => [part.id, part.id + 'Entry']));
+export const BASE_OF_ENTRY = Object.fromEntries(Object.entries(ENTRY_OF).map(([base, entry]) => [entry, base]));
+export const FILL_VARIANT = /^([\w-]+)__(\d{1,3})$/;
+export function fillVariantId(base, beats) { return base + '__' + beats; }
+export function fillBase(id) { return id.match(FILL_VARIANT)?.[1] || id; }
 export const DEFAULT_FILLS = { a: 'fillA', b: 'fillB', c: 'fillC', pre: 'fillPre', chorus: 'fillChorus', low: 'fillLow', high: 'fillHigh' };
 export const MAX_FILE_BYTES = 32 * 1024 * 1024;
 import { login as identityLogin, logout as identityLogout, getUser as identityGetUser, handleAuthCallback, acceptInvite as identityAcceptInvite, updateUser as identityUpdateUser, requestPasswordRecovery as identityRequestRecovery } from './netlify-client.js';
@@ -32,7 +44,7 @@ const KEY = 'loops-marks-last-user-v3';
 const STORE = 'dados';
 
 export function newSong() {
-  return { id: crypto.randomUUID(), name: '', occasion: '', bpm: 84, beats: 4, parts: {}, transitions: {}, customFills: [], revision: 0 };
+  return { id: crypto.randomUUID(), name: '', occasion: '', bpm: 84, beats: 4, parts: {}, transitions: {}, customFills: [], fillMode: 'smart', repeatMode: 'fill', revision: 0 };
 }
 
 function openDB() {
@@ -97,20 +109,34 @@ export class Cloud {
   constructor() {}
   session() { return this.user; }
   async initialize() {
-    // The Identity links contain short-lived invite/recovery tokens in the URL hash.
-    // Consume on load and *keep the action visible* until the user sets their password.
-    // Never store tokens in localStorage or send them to the server logs.
+    // Primeiro identificamos o tipo de token, mas nunca guardamos o valor.
+    // Um link de redefinição inválido não pode abrir diretamente a Central.
+    const hash = typeof location === 'undefined' ? '' : location.hash || '';
+    const expected = /(?:^#|&)recovery_token=/.test(hash) ? 'recovery' :
+      /(?:^#|&)invite_token=/.test(hash) ? 'invite' : null;
     this.authError = '';
+    this.authFlow = null;
     try {
       const callback = await handleAuthCallback();
       if (callback?.type === 'invite' && callback.token) {
         this.authFlow = { type: 'invite', token: callback.token };
       } else if (callback?.type === 'recovery') {
         this.authFlow = { type: 'recovery' };
-      } else this.authFlow = null;
+      } else if (expected) {
+        this.authError = 'O Netlify não confirmou o link de ' + (expected === 'recovery' ? 'redefinição' : 'convite') +
+          '. Ele pode ter expirado ou já ter sido utilizado. Solicite um novo link pelo aplicativo.';
+        this.authFlow = { type: 'invalid' };
+      }
     } catch (e) {
-      this.authError = 'O link de acesso não pôde ser validado. Solicite um novo e-mail no painel Netlify.';
+      this.authError = expected
+        ? 'Não foi possível validar o link. Ele pode ter expirado ou já ter sido utilizado. Solicite outro link.'
+        : 'Falha ao verificar a sessão. Confira sua conexão e tente entrar novamente.';
+      if (expected) this.authFlow = { type: 'invalid' };
       console.warn('Identity callback não concluído:', e?.name || 'falha');
+    }
+    if (expected && this.authFlow?.type === 'invalid' && typeof history !== 'undefined') {
+      // Limpe o fragmento sensível após falha de validação, sem registrar o token.
+      history.replaceState(null, '', location.pathname + location.search);
     }
     try {
       const user = await identityGetUser();
@@ -120,7 +146,7 @@ export class Cloud {
       } else if (!navigator.onLine) this.restoreOfflineUser();
       else { this.user = null; localStorage.removeItem(KEY); }
     } catch (e) {
-      if (!this.restoreOfflineUser()) throw new CloudError('Não foi possível validar o login. Verifique a conexão.', 0);
+      if (!this.restoreOfflineUser() && !this.authFlow) throw new CloudError('Não foi possível validar o login. Verifique a conexão.', 0);
     }
     return this.user;
   }
@@ -194,9 +220,9 @@ export class Cloud {
   }
   catalog() { return this.request('?op=catalog'); }
   async save(owner, song) {
-    const { id, revision, name, occasion, bpm, beats, parts, transitions, customFills, deleted, edit } = song;
+    const { id, revision, name, occasion, bpm, beats, parts, transitions, customFills, fillMode, repeatMode, deleted, edit } = song;
     const content = deleted ? {deleted: true, edit} :
-      {name, occasion, bpm, beats, parts, transitions: transitions || {}, customFills: customFills || [], edit};
+      {name, occasion, bpm, beats, parts, transitions: transitions || {}, customFills: customFills || [], fillMode: fillMode || 'smart', repeatMode: repeatMode || 'fill', edit};
     const data = await this.request('?op=save', { method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({id, revision, content}) });

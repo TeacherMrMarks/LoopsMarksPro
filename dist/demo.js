@@ -8,7 +8,7 @@ export const exampleSongs = demos.map(([name, occasion, bpm, beats], i) => ({
   name, occasion, bpm, beats, id: 'demo-' + i, demo: true, revision: 1,
   transitions: { 'a>chorus': 'fillStrong', 'b>finish': 'fillLight' }, customFills: [],
   parts: Object.fromEntries([
-    ['intro', 2], ['a', 2], ['b', 2], ['c', 2], ['pre', 2], ['chorus', 2],
+    ['intro', 2], ['a', 2], ['aEntry', 1], ['b', 2], ['c', 2], ['pre', 2], ['chorus', 2], ['chorusEntry', 1],
     ['low', 2], ['high', 2], ['fillIntro', 1], ['fillA', 1], ['fillB', 1], ['fillChorus', 1],
     ['fillLight', 0.5], ['fillStrong', 1], ['fillSpecial', 0.5], ['finish', 1], ['outro', 1],
   ].map(([key, bars]) => [key, { bars, lengthBeats: bars * beats, name: key + '.wav' }])),
@@ -56,13 +56,15 @@ export function demoBuffer(ctx, song, part) {
     for (let i = 0; i < beats * 2; i++) hit(i / 2, i >= 4 ? 'tom' : 'snare', 0.19 + i * 0.019);
     hit(0, 'kick', 0.62);
   } else {
+    const section = part.endsWith('Entry') ? part.slice(0, -5) : part;
+    if (part.endsWith('Entry')) hit(0, 'crash', 0.30);
     for (let i = 0; i < beats; i++) {
       const strong = i % 4 === 0;
-      const chorus = part === 'chorus' || part === 'high';
+      const chorus = section === 'chorus' || section === 'high';
       hit(i, 'hat', strong ? 0.23 : 0.15);
       hit(i + 0.5, 'hat', chorus ? 0.18 : 0.095);
-      if (strong || i % 4 === 2 || ((part === 'b' || part === 'c') && i % 4 === 3)) hit(i, 'kick', strong ? 0.69 : 0.51);
-      if (i % 2 && part !== 'intro' && part !== 'low') hit(i, 'snare', chorus ? 0.49 : 0.29);
+      if (strong || i % 4 === 2 || ((section === 'b' || section === 'c') && i % 4 === 3)) hit(i, 'kick', strong ? 0.69 : 0.51);
+      if (i % 2 && section !== 'intro' && section !== 'low') hit(i, 'snare', chorus ? 0.49 : 0.29);
       if (chorus && i % 4 === 2) hit(i + 0.5, 'kick', 0.43);
     }
   }

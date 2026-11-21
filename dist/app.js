@@ -1,9 +1,11 @@
-import { Cloud, Repository, PARTS, PLAY_PARTS, MANUAL_PARTS, FINALES, newSong, MAX_FILE_BYTES } from './data.js';
+import { Cloud, Repository, PARTS, PLAY_PARTS, MANUAL_PARTS, FINALES, newSong, MAX_FILE_BYTES, fillBase, fillVariantId } from './data.js';
 import { suggestSlot } from './importer.js';
 import { Player, bpmRange } from './audio.js';
 import { exampleSongs } from './demo.js';
 import { makeBackup, restoreBackup, triggerDownload } from './backup.js';
 
+const APP_VERSION = 'V4';
+const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#dialog');
 const toast = document.querySelector('#toast');
@@ -42,7 +44,7 @@ const icon = key => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" 
 const escape = text => String(text ?? '').replace(/[&<>"']/g, key =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[key]);
 const get = name => app.querySelector(name);
-const label = key => PARTS.find(item => item.id === key)?.label || state.admin?.customFills?.find(item => item.id === key)?.label || key;
+const label = key => PARTS.find(item => item.id === fillBase(key))?.label || state.admin?.customFills?.find(item => item.id === fillBase(key))?.label || key;
 const idle = { running: false, beat: -1 };
 const state = {
   view: new URL(location.href).searchParams.get('modo') === 'central' ? 'admin' : 'live',
@@ -100,14 +102,14 @@ function shell() {
     '<button class="nav-link" data-action="admin" ' + (!live ? 'aria-current="page"' : '') + '>' + icon('grid') + 'Central de loops</button>' +
     '</nav><div class="sidebar-foot">' +
     (cloud.enabled ? '<button class="nav-link" data-action="logout">' + icon('exit') + 'Sair da conta</button>' : '') +
-    '<div class="session-line">' + icon('user') + '<span title="' + escape(user) + '">' + escape(user) + '</span></div></div></aside>' +
+    '<div class="session-line">' + icon('user') + '<span class="account-name" title="' + escape(user) + '">' + escape(user) + '</span>' + versionTag() + '</div></div></aside>' +
     '<div class="workspace"><header class="topbar">' + brand('mobile-only') +
     '<div class="breadcrumb">' + icon(live ? 'current' : 'grid') + '<span>' + (live ? 'Modo ao vivo' : 'Central de loops') + '</span></div>' +
     '<div class="top-actions"><span class="sync' + (state.errors ? ' warn' : '') + '" id="sync-label">' +
     icon(statusIcon) + '<span>' + escape(status) + '</span></span>' +
     button('link', 'Gerar link do app', 'device', 'ghost') + iconButton(live ? 'admin' : 'live',
       live ? 'Central de loops' : 'Modo ao vivo', live ? 'grid' : 'current', 'data-mobile-toggle') +
-    locker + '</div></header><main class="main">' + (live ? liveView() : adminView()) + '</main></div></div>';
+    '<span class="version-on-mobile">' + versionTag() + '</span>' + locker + '</div></header><main class="main">' + (live ? liveView() : adminView()) + '</main></div></div>';
 }
 
 function loginView() {
@@ -122,6 +124,7 @@ function loginView() {
     '<form id="request-recovery-form"><label class="field"><span>E-mail da conta</span><input type="email" name="email" required autocomplete="email"></label>' +
     '<button class="button ghost" type="submit">Enviar link de recuperação</button>' +
     '<p id="recovery-message" role="status"></p></form></details>' +
+    '<div class="login-footer">Loops Marks Pro ' + APP_VERSION + '</div>' +
     '</section></main>';
 }
 
@@ -138,7 +141,16 @@ function passwordView() {
     '<button class="button primary" type="submit">' + icon('user') +
     (isInvite ? 'Ativar minha conta' : 'Salvar nova senha') + '</button>' +
     '<p class="error" id="password-error" role="alert"></p></form>' +
+    '<div class="login-footer">Loops Marks Pro ' + APP_VERSION + '</div>' +
     '</section></main>';
+}
+
+function authLinkErrorView() {
+  return '<main class="login"><section class="frame login-card">' + brand() +
+    '<h1>Link de acesso não validado</h1>' +
+    '<p>' + escape(cloud.authError || 'O link pode ter expirado ou já ter sido usado. Solicite um novo link de recuperação pelo aplicativo.') + '</p>' +
+    '<button type="button" class="button ghost" data-action="auth-back">Voltar ao login</button>' +
+    '<div class="login-footer">Loops Marks Pro ' + APP_VERSION + '</div></section></main>';
 }
 
 function songsFor(view) {
@@ -168,7 +180,7 @@ function deck() {
   if (!song) return '<div class="frame blank"><h2>Seu repertório começa aqui</h2><p>Cadastre uma música com o WAV da Parte A para tocar.</p>' +
     button('admin', 'Abrir central', 'grid', 'primary') + '</div>';
   const parts = PLAY_PARTS.filter(part => song.parts?.[part.id]);
-  const manual = MANUAL_PARTS.filter(part => song.parts?.[part.id]);
+  const manual = MANUAL_PARTS.filter(part => Object.keys(song.parts || {}).some(id => fillBase(id) === part.id));
   const endings = FINALES.filter(part => song.parts?.[part.id]);
   return '<section class="frame"><div class="deck-header"><div><h2>' + escape(song.name) + '</h2><p class="track-meta">' +
     (song.occasion ? escape(song.occasion) + ' · ' : '') + escape(song.bpm) + ' BPM original · ' + escape(song.beats) +
@@ -185,10 +197,14 @@ function deck() {
     '</div></div><div class="deck-line"><p class="player-message" id="player-message" aria-live="polite"></p>' +
     '<label class="vol" title="Volume">' + icon('volume') + '<input type="range" id="volume" aria-label="Volume" min="0" max="1" step="0.01" value="' +
     escape(state.volume) + '"></label></div>' +
-    '<div class="queue-tools">' + button('cancel-queue', 'Cancelar troca agendada', 'x', 'ghost', 'id="cancel-btn" disabled hidden') + '</div></section>' +
+    '<div class="queue-tools">' + button('cancel-queue', 'Cancelar troca agendada', 'x', 'ghost', 'id="cancel-btn" disabled hidden') +
+    '<button type="button" class="mode-toggle" data-action="mode-toggle" id="fill-mode" title="Alternar motor de viradas" ' +
+    'aria-label="Modo de virada: inteligente ou completa">' +
+    icon('wave') + '<span>Virada: ' + (player.mode === 'full' ? 'PRÓXIMO 1' : 'INTELIGENTE') + '</span></button>' +
+    '</div></section>' +
     '<section class="frame live-sections"><div class="section-head"><h2>Partes da música</h2><span>Entrada no tempo 1</span></div>' +
     '<div class="pads">' + parts.map(part => '<button type="button" class="pad" data-action="part" data-part="' + part.id +
-    '" disabled>' + icon(part.icon) + '<strong>' + escape(part.label) + '</strong><small>Loop contínuo</small></button>').join('') +
+    '" disabled>' + icon(part.icon) + '<strong>' + escape(part.label) + '</strong><small>' + (song.parts?.[part.id + 'Entry'] ? 'Entrada + contínuo' : 'Loop contínuo') + '</small></button>').join('') +
     '</div>' + (manual.length ? '<div class="section-head live-subsection"><h2>Viradas manuais</h2><span>Retorna ao loop</span></div>' +
     '<div class="pads manual-pads">' + manual.map(part => '<button type="button" class="pad fill-pad" data-action="fill" data-part="' +
     part.id + '" disabled>' + icon(part.icon) + '<strong>' + escape(part.label) + '</strong><small>Virada avulsa</small></button>').join('') +
@@ -235,7 +251,25 @@ function editorSection(song, group, title, helper, open = false) {
 
 function availableFillChoices(song) {
   return [...PARTS.filter(p => p.type === 'virada'), ...(song.customFills || [])]
-    .filter(part => song.parts?.[part.id]);
+    .filter(part => Object.keys(song.parts || {}).some(id => fillBase(id) === part.id));
+}
+
+function variantEditor(song) {
+  const variants = [...PARTS.filter(p => p.type === 'virada'), ...(song.customFills || [])];
+  const count = Object.keys(song.parts || {}).filter(id => /__\d+$/.test(id)).length;
+  return '<details class="editor-group"><summary><span>' + icon('wave') +
+    '<strong>Variações de virada (opcional)</strong></span><small>' + count + ' WAVs</small></summary>' +
+    '<p class="group-hint">Suba uma virada curta de 1, 2, 3 ou mais tempos. O player procura primeiro a duração gravada; ' +
+    'se não existir, aproveita a parte final da virada longa da mesma família. Não precisa cadastrar variações.</p>' +
+    '<div class="variant-groups">' + variants.map(part => {
+      const entries = Array.from({length:song.beats},(_,i) => i + 1).map(beats => {
+        const id = fillVariantId(part.id, beats);
+        return fileRow({...part, id, label:beats + (beats === 1 ? ' tempo' : ' tempos'),type:'virada'},song.parts?.[id],song);
+      });
+      const amount = Array.from({length:song.beats},(_,i) => fillVariantId(part.id,i+1)).filter(key=>song.parts?.[key]).length;
+      return '<details class="variant-family"><summary><strong>' + escape(part.label) +
+        '</strong><small>' + amount + ' variações</small></summary><div>' + entries.join('') + '</div></details>';
+    }).join('') + '</div></details>';
 }
 
 function transitionEditor(song) {
@@ -279,11 +313,24 @@ function editor() {
     '<label class="field"><span>Tempos / compasso</span><select data-field="beats">' +
     [2,3,4,5,6].map(beats => '<option ' + (beats === song.beats ? 'selected' : '') + '>' + beats + '</option>').join('') +
     '</select></label></div>' +
-    '<div class="import-toolbar"><div><h2>02 · Biblioteca de áudios</h2><p>WAVs separados da sua DAW · Até 32 MB por arquivo</p></div>' +
+    '<div class="section-head"><h2>02 · Comportamento musical</h2><span>Personalizado por música</span></div>' +
+    '<div class="form-grid">' +
+    '<label class="field"><span>Troca de parte / virada</span><select data-field="fillMode">' +
+    '<option value="smart" ' + ((song.fillMode || 'smart') === 'smart' ? 'selected' : '') + '>Inteligente · próximo tempo 1</option>' +
+    '<option value="full" ' + (song.fillMode === 'full' ? 'selected' : '') + '>Completa · próxima entrada segura</option></select></label>' +
+    '<label class="field"><span>Repetir a mesma parte</span><select data-field="repeatMode">' +
+    '<option value="fill" ' + ((song.repeatMode || 'fill') === 'fill' ? 'selected' : '') + '>Com virada + crash</option>' +
+    '<option value="direct" ' + (song.repeatMode === 'direct' ? 'selected' : '') + '>Direto ao loop de entrada com crash</option>' +
+    '</select></label></div>' +
+    '<div class="import-toolbar"><div><h2>03 · Biblioteca de áudios</h2><p>WAVs separados da sua DAW · Até 32 MB por arquivo</p></div>' +
     button('batch-import','Importar vários WAVs','plus','ghost') + '<input type="file" id="batch-files" accept=".wav,audio/wav,audio/x-wav" multiple hidden></div>' +
-    editorSection(song, 'loops', 'Loops e introdução', 'Cada loop se repete até você escolher outra parte. A introdução toca só uma vez.', true) +
+    editorSection(song, 'loops', 'Loops contínuos e introdução',
+      'O WAV contínuo NÃO deve ter crash de entrada repetido. Ele fica em repetição até a próxima troca.', true) +
+    editorSection(song, 'entradas', 'Primeira entrada com crash (opcional)',
+      'WAV de um ou mais compassos com o prato de ataque. Toca UMA vez a cada entrada na parte; depois vem o loop contínuo. O WAV precisa ter o mesmo BPM e compasso.') +
     editorSection(song, 'automaticas', 'Viradas automáticas', 'Opcional: entram no tempo certo quando você pede outra parte.', true) +
-    editorSection(song, 'manuais', 'Viradas manuais', 'Toque uma virada sem sair do loop ou use-a antes da troca de parte.') +
+    editorSection(song, 'manuais', 'Viradas manuais', 'Uma virada selecionada manualmente substitui a automática antes da parte desejada.') +
+    variantEditor(song) +
     '<details class="editor-group"><summary><span>' + icon('wave') + '<strong>Viradas específicas</strong></span><small>' +
     customized.length + ' cadastradas</small></summary><p class="group-hint">Crie quantas viradas exclusivas precisar e vincule-as ao mapa de transições.</p>' +
     '<div class="custom-list">' + customized.map(part => '<div class="custom-fill-item">' +
@@ -293,21 +340,23 @@ function editor() {
     '</div>' + button('add-custom', 'Adicionar virada específica', 'plus', 'ghost') + '</details>' +
     editorSection(song, 'finais', 'Acabamento e final', 'Arquivos de encerramento de execução única, inclusive cauda do prato.') +
     transitionEditor(song) +
-    '<div class="footer-actions"><small class="subtle">Para tocar, cadastre pelo menos a Parte A. Os arquivos ficam disponíveis no celular após sincronizar e baixar.</small>' +
+    '<div class="footer-actions"><small class="subtle">Para tocar, cadastre pelo menos o WAV contínuo da Parte A. Depois sincronize e baixe no celular. As entradas com crash são opcionais.</small>' +
     button('link', 'Gerar link do aplicativo', 'link', 'ghost') + '</div>';
 }
 
 function fileRow(part, audio, song = state.admin) {
   const finishing = part.group === 'finais' || ['finish','outro'].includes(part.id);
   const filling = part.type === 'virada';
+  const variant = part.id.match(/__(\d+)$/);
   const unit = filling ? 'tempos' : 'comp.';
-  const count = filling ? (audio?.lengthBeats || (audio?.bars || 1) * song.beats) : (audio?.bars || 1);
+  const count = variant ? Number(variant[1]) : filling ?
+    (audio?.lengthBeats || (audio?.bars || 1) * song.beats) : (audio?.bars || 1);
   return '<div class="file-row" data-row="' + escape(part.id) + '">' + icon(part.icon || 'wave') + '<div><strong>' + escape(part.label) +
     '</strong><small title="' + escape(audio?.name) + '">' + escape(audio?.name || 'Sem arquivo') + '</small></div>' +
     (finishing ? '<span class="subtle"><small>Uma vez</small></span>' :
       '<label class="field length-field"><input type="number" min="1" max="' + (filling ? 128 : 64) + '" data-length="' + escape(part.id) + '" ' +
       'data-unit="' + (filling ? 'beats' : 'bars') + '" aria-label="' + unit + ' de ' + escape(part.label) + '" value="' + escape(count) + '" ' +
-      (audio ? '' : 'disabled') + '><span>' + unit + '</span></label>') +
+      (audio && !variant ? '' : 'disabled') + '><span>' + unit + '</span></label>') +
     '<input type="file" accept=".wav,audio/wav,audio/x-wav" data-file="' + escape(part.id) + '" hidden>' +
     button('browse', audio ? 'Trocar' : 'Importar', audio ? 'refresh' : 'plus', 'ghost',
       'data-part="' + escape(part.id) + '" aria-label="Importar WAV de ' + escape(part.label) + '"') +
@@ -316,6 +365,7 @@ function fileRow(part, audio, song = state.admin) {
 }
 
 function render() {
+  if (cloud.enabled && cloud.authFlow?.type === 'invalid') { app.innerHTML = authLinkErrorView(); return; }
   if (cloud.enabled && cloud.authFlow) { app.innerHTML = passwordView(); return; }
   if (cloud.enabled && !cloud.session()) { app.innerHTML = loginView(); return; }
   app.innerHTML = shell();
@@ -679,14 +729,15 @@ function updatePlayback(force = false) {
   const [min, max] = bpmRange(state.selected.bpm);
   const preparation = state.preparation;
   const queued = playing.next ?
-    ('Agendado: ' + (playing.fill ? player.label(playing.fill) + ' → ' : '') + player.label(playing.next)) : '';
+    ('Agendado: ' + (playing.fill ? player.label(playing.fill) +
+    (playing.offsetBeats ? ' (últimos ' + playing.fillBeats + 'T)' : '') + ' → ' : '') + player.label(playing.next)) : '';
   const message = playing.interrupted ? 'Áudio suspenso · toque em Retomar' :
-    playing.running ? (queued || (playing.active ? player.label(playing.active) + ' tocando' : 'Iniciando…')) :
+    playing.running ? (queued || (playing.active ? player.label(playing.active) + (playing.entryAttack ? ' · entrada com crash' : ' · contínuo') : 'Iniciando…')) :
     (preparation || (player.ready ? 'Todos os áudios preparados · Pronto para tocar' : 'Selecione os áudios para tocar.'));
   const chip = playing.running ? (playing.interrupted ? 'Interrompido' : 'Tocando') : player.ready ? 'Pronto para tocar' : 'Aguardando áudio';
   const closing = ['finish','outro'].includes(playing.next) || ['finish','outro'].includes(playing.active);
   if (force || previous.running !== playing.running || previous.next !== playing.next ||
-      previous.fill !== playing.fill || previous.active !== playing.active || previous.canCancel !== playing.canCancel || previous.interrupted !== playing.interrupted) {
+      previous.fill !== playing.fill || previous.active !== playing.active || previous.entryAttack !== playing.entryAttack || previous.canCancel !== playing.canCancel || previous.interrupted !== playing.interrupted) {
     const text = get('#player-message');
     if (text && text.textContent !== message) text.textContent = message;
     const chipElement = get('#player-chip');
@@ -706,17 +757,20 @@ function updatePlayback(force = false) {
       const inQueue = playing.next === key || playing.fill === key;
       pad.classList.toggle('active', current);
       pad.classList.toggle('queued', inQueue);
-      pad.disabled = !playing.running || !player.buffers.has(key) || closing;
+      pad.disabled = !playing.running || (pad.dataset.action === 'fill' ? !player.fillExists(key) : !player.buffers.has(key)) || closing;
       const info = pad.querySelector('small');
-      if (info) info.textContent = current ? 'Tocando' : inQueue ? 'Na fila' :
-        pad.dataset.action === 'fill' ? 'Virada avulsa' : ['finish','outro'].includes(key) ? 'Finalizar' : 'Loop contínuo';
+      if (info) info.textContent = current ? (playing.entryAttack ? 'Com crash' : 'Tocando') : inQueue ? 'Na fila' :
+        pad.dataset.action === 'fill' ? 'Virada avulsa' : ['finish','outro'].includes(key) ? 'Finalizar' :
+        (state.selected.parts?.[key + 'Entry'] ? 'Entrada + contínuo' : 'Loop contínuo');
     }
     const cancel = get('#cancel-btn');
     if (cancel) { cancel.hidden = !playing.canCancel; cancel.disabled = !playing.canCancel; }
-    get('#wave-caption').textContent = playing.active ? player.label(playing.active) : 'Parte A';
+    get('#wave-caption').textContent = playing.active ? player.label(playing.active) + (playing.entryAttack ? ' · Crash' : '') : 'Parte A';
     if (previous.active !== playing.active && player.ready) computePeaks(playing.active || 'a');
     updateDownload();
   }
+  const modeLabel = get('#fill-mode span');
+  if (modeLabel) modeLabel.textContent = 'Virada: ' + (player.mode === 'smart' ? 'INTELIGENTE' : 'PRÓXIMO 1');
   if (force || playing.beat !== previous.beat) {
     Array.from(app.querySelectorAll('.pulse')).forEach((tempo, i) => tempo.classList.toggle('on', i === playing.beat));
   }
@@ -885,12 +939,17 @@ async function inspectWav(file, part, song) {
   catch { throw new Error(file.name + ': não foi possível ler o WAV. Tente PCM 16/24 bits.'); }
   const secondsPerBeat = 60 / song.bpm;
   const ending = ['outro','finish'].includes(part);
-  const fill = slotInfo(song,part)?.type === 'virada' || part.startsWith('fillCustom_');
+  const variant = part.match(/__(\d+)$/);
+  const fill = slotInfo(song,fillBase(part))?.type === 'virada';
+  if (variant && (!fill || Number(variant[1]) > song.beats)) throw new Error('Variação inválida para o compasso atual.');
   if (!ending) {
     const estimatedBeats = duration / secondsPerBeat;
     const beats = Math.max(1, Math.round(estimatedBeats));
     if (Math.abs(beats * secondsPerBeat - duration) > 0.085) {
       throw new Error(file.name + ': duração não encaixa em tempos inteiros a ' + song.bpm + ' BPM.');
+    }
+    if (variant && beats !== Number(variant[1])) {
+      throw new Error(file.name + ': esta variação deve ter exatamente ' + variant[1] + ' tempos.');
     }
     if (!fill && beats % song.beats !== 0) {
       throw new Error(file.name + ': o loop deve conter compassos completos (' + song.beats + '/4).');
@@ -934,7 +993,10 @@ function batchPreview(source) {
   source.value = '';
   if (!batchFiles.length) return;
   const song = state.admin;
-  const slots = [...PARTS, ...(song.customFills || [])];
+  const fills = [...PARTS.filter(p=>p.type==='virada'), ...(song.customFills || [])];
+  const variants = fills.flatMap(fill => Array.from({length:song.beats}, (_,index) => ({
+    id:fillVariantId(fill.id,index+1),label:fill.label+' · '+(index+1)+'T',type:'virada'})));
+  const slots = [...PARTS, ...(song.customFills || []), ...variants];
   dialog.innerHTML = '<h2>Importar WAVs em lote</h2><p>Identificamos os arquivos pelo nome. Confira os destinos antes de salvar.</p>' +
     '<div class="batch-list">' + batchFiles.map((file,index) => {
       const suggestion = suggestSlot(file.name);
@@ -973,6 +1035,14 @@ async function handleAction(element) {
   if (action === 'stop') { stopPlayback(); return; }
   if (action === 'part') { player.go(part); updatePlayback(true); return; }
   if (action === 'fill') { player.fill(part); updatePlayback(true); return; }
+  if (action === 'mode-toggle') {
+    if (player.pending) { notice('Aguarde ou cancele a troca agendada para mudar o modo.'); return; }
+    player.setMode(player.mode === 'smart' ? 'full' : 'smart');
+    const mode = get('#fill-mode span');
+    if (mode) mode.textContent = 'Virada: ' + (player.mode === 'smart' ? 'INTELIGENTE' : 'PRÓXIMO 1');
+    notice(player.mode === 'smart' ? 'Viradas adaptativas ativadas.' : 'Viradas completas ativadas.');
+    return;
+  }
   if (action === 'cancel-queue') { if (player.cancel()) notice('Troca cancelada.'); updatePlayback(true); return; }
   if (action === 'download') { await download(); return; }
   if (action === 'sync') { await syncCatalog(); render(); return; }
@@ -986,6 +1056,11 @@ async function handleAction(element) {
     clearTimeout(prepTimer);
     updatePlayback(true);
     prepTimer = setTimeout(() => prepareLive(), 190);
+    return;
+  }
+  if (action === 'auth-back') {
+    cloud.authFlow = null; cloud.authError = '';
+    render();
     return;
   }
   if (action === 'logout') {
@@ -1042,6 +1117,7 @@ async function handleAction(element) {
     if (!await confirmChoice('Excluir virada específica?', 'As regras que usam essa virada também serão removidas.', 'Excluir')) return;
     state.admin.customFills = (state.admin.customFills || []).filter(item => item.id !== part);
     delete state.admin.parts[part];
+    for (const key of Object.keys(state.admin.parts)) if (fillBase(key) === part) delete state.admin.parts[key];
     for (const [key, value] of Object.entries(state.admin.transitions || {})) {
       if (value === part) delete state.admin.transitions[key];
     }

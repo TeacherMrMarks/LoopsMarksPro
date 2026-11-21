@@ -1,1 +1,2 @@
-Loops Marks Pro V3.1 — correção de recuperação de senha e aceite do convite Netlify Identity. Preserva integralmente a V3.
+Loops Marks Pro V4 (4.0.0)
+Motor inteligente de viradas, entradas com crash e continuidade sem crash.

@@ -1,4 +1,4 @@
-const VERSION = 'loops-marks-7f556f868bac';
+const VERSION = 'loops-marks-v4-20261120';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './netlify-client.js', './backup.js', './data.js',
   './audio.js', './stretch.js', './demo.js', './importer.js', './manifest.webmanifest',
@@ -7,7 +7,11 @@ const SHELL = [
 const scope = new URL(self.registration.scope);
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(VERSION).then(cache => cache.addAll(SHELL)));
+  event.waitUntil((async () => {
+    const cache = await caches.open(VERSION);
+    await cache.addAll(SHELL);
+    await self.skipWaiting();
+  })());
 });
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
@@ -18,16 +22,25 @@ self.addEventListener('activate', event => {
   })());
 });
 self.addEventListener('fetch', event => {
-  const { request } = event;
+  const request = event.request;
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== scope.origin) return;
-  if (request.mode === 'navigate' && url.pathname.startsWith(scope.pathname)) {
-    // One complete release serves all its assets, even during a deployment.
-    event.respondWith(caches.open(VERSION).then(async cache =>
-      (await cache.match(new URL('./index.html', scope))) || fetch(request)));
-    return;
-  }
-  if (!SHELL.some(file => new URL(file, scope).pathname === url.pathname)) return;
-  event.respondWith(caches.open(VERSION).then(async cache =>
-    (await cache.match(url.href, { ignoreSearch: true })) || fetch(request)));
+  const navigating = request.mode === 'navigate' && url.pathname.startsWith(scope.pathname);
+  const shellAsset = SHELL.some(file => new URL(file, scope).pathname === url.pathname);
+  if (!navigating && !shellAsset) return;
+  event.respondWith((async () => {
+    const cache = await caches.open(VERSION);
+    try {
+      // Atualizações online têm prioridade; a cópia offline é reserva.
+      const response = await fetch(request);
+      if (response.ok && response.type !== 'opaque') {
+        await cache.put(navigating ? new URL('./index.html', scope) : request, response.clone());
+      }
+      return response;
+    } catch (error) {
+      const fallback = await cache.match(navigating ? new URL('./index.html', scope) : request);
+      if (fallback) return fallback;
+      throw error;
+    }
+  })());
 });

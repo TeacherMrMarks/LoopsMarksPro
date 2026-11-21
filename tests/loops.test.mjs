@@ -60,9 +60,10 @@ test('quantized requests are aligned to target beat one',()=>{
  const player = new Player();
  player.song=song;
  player.bpm=song.bpm;
+ player.beatSeconds=60/song.bpm;
  player.bar=song.beats*60/song.bpm;
  player.buffers=new Map(Object.entries(song.parts).map(([key,part])=>
-   [key,{buffer:new FakeAudioBuffer(1,1000,11025),seconds:key==='outro'||key==='finish'?2:part.lengthBeats*60/song.bpm}]));
+   [key,{buffer:new FakeAudioBuffer(1,1000,11025),seconds:key==='outro'||key==='finish'?2:part.lengthBeats*60/song.bpm,beats:part.lengthBeats}]));
  player.ready=true;
  player.context();
  return (async()=>{
