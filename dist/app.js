@@ -4,9 +4,8 @@ import { Player, bpmRange } from './audio.js';
 import { exampleSongs } from './demo.js';
 import { makeBackup, restoreBackup, triggerDownload } from './backup.js';
 
-const APP_VERSION = 'V4';
-const TEST_MODE = true;
-const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + ' de teste" title="Versão ' + APP_VERSION + ' · Teste sem login">' + APP_VERSION + ' TESTE</span>';
+const APP_VERSION = 'V5';
+const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#dialog');
 const toast = document.querySelector('#toast');
@@ -87,7 +86,7 @@ function iconButton(action, text, sign, props = '') {
 }
 
 function statusText() {
-  if (!cloud.enabled) return ['TESTE SEM LOGIN · salvamento local', 'headphones'];
+  if (!cloud.enabled) return ['Modo demonstração', 'headphones'];
   if (!navigator.onLine) return ['Offline', 'device'];
   if (state.syncLabel) return [state.syncLabel, state.errors ? 'device' : 'cloud'];
   return ['Central online', 'cloud'];
@@ -95,16 +94,16 @@ function statusText() {
 
 function shell() {
   const live = state.view === 'live';
-  const user = cloud.session()?.email || 'Teste local · sem conta';
+  const user = cloud.session()?.email || 'Conta não conectada';
   const [status, statusIcon] = statusText();
   const locker = cloud.enabled ? button('logout', '', 'exit', 'mobile-only ghost', 'aria-label="Sair"') : '';
-  return '<div class="shell test-mode"><aside class="sidebar">' + brand() + '<nav aria-label="Seções">' +
+  return '<div class="shell"><aside class="sidebar">' + brand() + '<nav aria-label="Seções">' +
     '<button class="nav-link" data-action="live" ' + (live ? 'aria-current="page"' : '') + '>' + icon('current') + 'Modo ao vivo</button>' +
     '<button class="nav-link" data-action="admin" ' + (!live ? 'aria-current="page"' : '') + '>' + icon('grid') + 'Central de loops</button>' +
     '</nav><div class="sidebar-foot">' +
     (cloud.enabled ? '<button class="nav-link" data-action="logout">' + icon('exit') + 'Sair da conta</button>' : '') +
     '<div class="session-line">' + icon('user') + '<span class="account-name" title="' + escape(user) + '">' + escape(user) + '</span>' + versionTag() + '</div></div></aside>' +
-    '<div class="workspace"><div class="test-banner">V4 · AMBIENTE DE TESTE SEM LOGIN · Arquivos salvos apenas neste navegador. Não envie áudios particulares sem necessidade.</div><header class="topbar">' + brand('mobile-only') +
+    '<div class="workspace"><header class="topbar">' + brand('mobile-only') +
     '<div class="breadcrumb">' + icon(live ? 'current' : 'grid') + '<span>' + (live ? 'Modo ao vivo' : 'Central de loops') + '</span></div>' +
     '<div class="top-actions"><span class="sync' + (state.errors ? ' warn' : '') + '" id="sync-label">' +
     icon(statusIcon) + '<span>' + escape(status) + '</span></span>' +
@@ -115,43 +114,14 @@ function shell() {
 
 function loginView() {
   return '<main class="login"><section class="frame login-card">' + brand() +
-    '<h1>Entrar na central</h1><p>Entre com a mesma conta no computador e no celular. Primeiro acesso? Abra o convite recebido por e-mail.</p>' +
-    '<form id="login-form"><label class="field"><span>E-mail</span><input type="email" name="email" required autocomplete="username"></label>' +
+    '<h1>Entrar na central</h1><p>Seu usuário e sua senha funcionam no computador e no celular, sem convites por e-mail.</p>' +
+    '<form id="login-form"><label class="field"><span>Usuário</span><input type="text" name="username" required autocomplete="username" value="marks"></label>' +
     '<label class="field"><span>Senha</span><input type="password" name="password" required autocomplete="current-password"></label>' +
     '<button class="button primary" type="submit">' + icon('user') + 'Entrar</button>' +
     '<p class="error" id="login-error" role="alert">' + escape(cloud.authError) + '</p></form>' +
-    '<details class="recovery-help"><summary>Esqueci minha senha</summary>' +
-    '<p>Enviaremos um link para você definir uma nova senha.</p>' +
-    '<form id="request-recovery-form"><label class="field"><span>E-mail da conta</span><input type="email" name="email" required autocomplete="email"></label>' +
-    '<button class="button ghost" type="submit">Enviar link de recuperação</button>' +
-    '<p id="recovery-message" role="status"></p></form></details>' +
+    '<p class="login-help">Senha administrada com segurança no Netlify, sem link de redefinição por e-mail.</p>' +
     '<div class="login-footer">Loops Marks Pro ' + APP_VERSION + '</div>' +
     '</section></main>';
-}
-
-function passwordView() {
-  const isInvite = cloud.authFlow?.type === 'invite';
-  return '<main class="login"><section class="frame login-card">' + brand() +
-    '<h1>' + (isInvite ? 'Criar senha de acesso' : 'Definir nova senha') + '</h1>' +
-    '<p>' + (isInvite ? 'Seu convite foi reconhecido. Escolha a senha para acessar o Loops Marks Pro.' :
-      'Seu link de recuperação foi reconhecido. Digite uma nova senha para concluir.') + '</p>' +
-    '<form id="password-form"><label class="field"><span>Nova senha (mínimo 8 caracteres)</span>' +
-    '<input type="password" name="password" required minlength="8" autocomplete="new-password"></label>' +
-    '<label class="field"><span>Confirmar nova senha</span>' +
-    '<input type="password" name="confirmation" required minlength="8" autocomplete="new-password"></label>' +
-    '<button class="button primary" type="submit">' + icon('user') +
-    (isInvite ? 'Ativar minha conta' : 'Salvar nova senha') + '</button>' +
-    '<p class="error" id="password-error" role="alert"></p></form>' +
-    '<div class="login-footer">Loops Marks Pro ' + APP_VERSION + '</div>' +
-    '</section></main>';
-}
-
-function authLinkErrorView() {
-  return '<main class="login"><section class="frame login-card">' + brand() +
-    '<h1>Link de acesso não validado</h1>' +
-    '<p>' + escape(cloud.authError || 'O link pode ter expirado ou já ter sido usado. Solicite um novo link de recuperação pelo aplicativo.') + '</p>' +
-    '<button type="button" class="button ghost" data-action="auth-back">Voltar ao login</button>' +
-    '<div class="login-footer">Loops Marks Pro ' + APP_VERSION + '</div></section></main>';
 }
 
 function songsFor(view) {
@@ -226,8 +196,8 @@ function adminView() {
     '<div class="admin-summary">' +
     '<div class="mini-stat"><small>MÚSICAS</small><strong>' + amount + '</strong><span>Na biblioteca</span></div>' +
     '<div class="mini-stat"><small>SALVAMENTO</small><strong>' + (cloud.enabled ? 'Nuvem' : 'Local') + '</strong><span>' +
-      (cloud.enabled ? 'Netlify Blobs + aparelho' : 'Salvo somente neste aparelho') + '</span></div>' +
-    '<div class="access-shortcut"><div><small>LINK DE TESTE</small><strong>Modo Live no celular</strong><span>Sem login · Biblioteca local de cada aparelho</span></div>' +
+      (cloud.enabled ? 'Netlify Blobs + aparelho' : 'Demonstração sem nuvem') + '</span></div>' +
+    '<div class="access-shortcut"><div><small>ACESSO DO MÚSICO</small><strong>Aplicativo no celular</strong><span>Link direto · Mesmo login · Loops offline</span></div>' +
     button('link', 'Gerar link', 'link', 'primary') + '</div></div>' +
     (state.errors ? '<div class="warning" role="status">' + escape(state.errors) + ' ' +
       button('sync', 'Tentar sincronizar', 'refresh', 'ghost') + '</div>' : '') +
@@ -366,8 +336,6 @@ function fileRow(part, audio, song = state.admin) {
 }
 
 function render() {
-  if (cloud.enabled && cloud.authFlow?.type === 'invalid') { app.innerHTML = authLinkErrorView(); return; }
-  if (cloud.enabled && cloud.authFlow) { app.innerHTML = passwordView(); return; }
   if (cloud.enabled && !cloud.session()) { app.innerHTML = loginView(); return; }
   app.innerHTML = shell();
   updateLibrary();
@@ -438,7 +406,7 @@ async function copyMobile() {
   url.hash = '';
   const published = !['localhost', '127.0.0.1', '0.0.0.0'].includes(url.hostname) && url.protocol === 'https:';
   dialog.innerHTML = '<h2>Link do aplicativo · Modo Live</h2>' +
-    '<p>Abra sem login no celular. ATENÇÃO: os WAVs cadastrados no computador não são enviados para o celular neste modo; cada aparelho tem sua biblioteca local. No iPhone, use Safari → Compartilhar → Adicionar à Tela de Início.</p>' +
+    '<p>Abra no celular, entre com a mesma conta e baixe os loops. No iPhone, use Safari → Compartilhar → Adicionar à Tela de Início.</p>' +
     (published ? '' : '<p class="warning">Este é um endereço de teste local. Publique no Netlify antes de usar o link em outro aparelho.</p>') +
     '<label class="field"><span>Endereço de acesso</span><input readonly value="' + escape(url.href) + '"></label>' +
     '<div class="batch-footer" style="margin-top:14px">' + button('copy', 'Copiar link', 'link', 'primary') +
@@ -465,7 +433,7 @@ async function openBackupCenter() {
   await saveBeforeLeaving();
   dialog.innerHTML = '<section class="backup-dialog"><p class="eyebrow">PROTEÇÃO DO REPERTÓRIO</p>'+
     '<h2>Backup e restauração</h2>'+
-    '<p>O backup completo reúne músicas, viradas, regras e áudios WAV. Salve o ZIP fora do navegador: esta prévia não sincroniza com a nuvem.</p>'+
+    '<p>Escolha uma cópia para guardar fora do Netlify. O backup completo reúne músicas, viradas, regras e áudios WAV.</p>'+
     '<div class="backup-choices">'+
     '<button type="button" class="button primary" data-backup="completo">' + icon('download') + 'Backup completo</button>'+
     '<button type="button" class="button ghost" data-backup="configuracoes">' + icon('cloud') + 'Só configurações</button>'+
@@ -473,7 +441,8 @@ async function openBackupCenter() {
     '<div class="backup-divider"></div><label class="field"><span>Importar e restaurar backup ZIP</span>'+
     '<input id="restore-file" type="file" accept=".zip,application/zip"></label>'+
     '<p class="subtle backup-small">A restauração adiciona novas cópias das músicas, sem sobrescrever as existentes.</p>'+
-    ''+
+    '<div class="backup-divider"></div><div class="backup-row"><button type="button" class="button ghost" id="list-history">' +
+    icon('layers') + 'Versões automáticas</button><button type="button" class="button ghost" id="migrate-v2">Importar cadastros locais V2</button></div>'+
     '<div id="backup-history"></div><p class="backup-progress" id="backup-progress" role="status"></p>'+
     '<menu><button class="button ghost" id="backup-close">Fechar</button></menu></section>';
   const message=dialog.querySelector('#backup-progress');
@@ -490,7 +459,7 @@ async function openBackupCenter() {
     message.textContent='Preparando backup…';
     const blob=await makeBackup(repo,mode,(n,total)=>{message.textContent='Incluindo WAV '+n+'/'+total;});
     const stamp=new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
-    triggerDownload(blob,'Loops-Marks-Pro-V4-TESTE-'+mode+'-'+stamp+'.zip');
+    triggerDownload(blob,'Loops-Marks-Pro-V5-'+mode+'-'+stamp+'.zip');
     message.textContent='Backup criado: '+(blob.size/1024/1024).toFixed(1)+' MB. Guarde este ZIP em local seguro.';
   })));
   dialog.querySelector('#restore-file').addEventListener('change',e=>{
@@ -500,9 +469,30 @@ async function openBackupCenter() {
       message.textContent='Restaurando…';
       const result=await restoreBackup(repo,file,(n,total)=>{message.textContent='Restaurando '+n+'/'+total;});
       await refreshLocal();requestSync();
-      message.textContent=result.imported+' músicas restauradas neste navegador.';
+      message.textContent=result.imported+' músicas restauradas. A sincronização será feita com o Netlify.';
     });
   });
+  dialog.querySelector('#migrate-v2').addEventListener('click',()=>lock(async()=>{
+    message.textContent='Importando rascunhos locais da versão anterior…';
+    const n=await repo.importV2Demo(); await refreshLocal();requestSync();
+    message.textContent=n ? n+' música(s) importada(s) da V2.' : 'Nenhum cadastro local da V2 encontrado neste aparelho.';
+  }));
+  dialog.querySelector('#list-history').addEventListener('click',()=>lock(async()=>{
+    if(!navigator.onLine)throw new Error('Para recuperar versões da nuvem, conecte-se à internet.');
+    const entries=await cloud.snapshots();
+    const list=dialog.querySelector('#backup-history');
+    list.innerHTML='<h3>Versões anteriores</h3>'+(entries.length ? entries.map((r,i)=>
+      '<div class="history-row"><span>'+escape(r.title)+'</span><button type="button" class="button ghost" data-history="'+i+'">Restaurar</button></div>').join(''):
+      '<p class="subtle backup-small">Nenhuma versão anterior na nuvem.</p>');
+    list.querySelectorAll('[data-history]').forEach(b=>b.addEventListener('click',()=>lock(async()=>{
+      const selected=entries[Number(b.dataset.history)];
+      if(!confirm('Restaurar esta versão da música? A versão atual também ficará guardada.'))return;
+      await cloud.restore(selected.key);
+      await refreshLocal(); await syncCatalog();
+      message.textContent='Versão recuperada na nuvem. Confira o repertório.';
+    })));
+    message.textContent=entries.length+' versões automáticas encontradas.';
+  }));
   dialog.showModal();
 }
 async function confirmBackupRestore(file) {
@@ -1037,14 +1027,9 @@ async function handleAction(element) {
     prepTimer = setTimeout(() => prepareLive(), 190);
     return;
   }
-  if (action === 'auth-back') {
-    cloud.authFlow = null; cloud.authError = '';
-    render();
-    return;
-  }
   if (action === 'logout') {
     if (state.capture) return;
-    if (!await confirmChoice('Sair da conta?', 'Para entrar novamente neste aparelho, use seu e-mail e senha.', 'Sair')) return;
+    if (!await confirmChoice('Sair da conta?', 'Para entrar novamente neste aparelho, use seu usuário e senha.', 'Sair')) return;
     await saveBeforeLeaving();
     stopPlayback();
     currentGeneration++;
@@ -1190,46 +1175,6 @@ app.addEventListener('change', event => {
 });
 
 app.addEventListener('submit', async event => {
-  if (event.target.id === 'request-recovery-form') {
-    event.preventDefault();
-    const form = event.target;
-    const button = form.querySelector('[type="submit"]');
-    const message = form.querySelector('#recovery-message');
-    button.disabled = true;
-    message.textContent = 'Solicitando link…';
-    try {
-      await cloud.sendPasswordReset(new FormData(form).get('email').trim());
-      message.textContent = 'Se o e-mail estiver cadastrado, confira sua caixa de entrada e spam.';
-    } catch (error) {
-      message.textContent = error.message || 'Não foi possível solicitar o link.';
-    } finally { button.disabled = false; }
-    return;
-  }
-  if (event.target.id === 'password-form') {
-    event.preventDefault();
-    const form = event.target;
-    const data = new FormData(form);
-    const password = String(data.get('password'));
-    const confirmation = String(data.get('confirmation'));
-    const output = form.querySelector('#password-error');
-    const submit = form.querySelector('[type="submit"]');
-    if (password.length < 8 || password !== confirmation) {
-      output.textContent = password !== confirmation ? 'As senhas não coincidem.' : 'Use pelo menos 8 caracteres.';
-      return;
-    }
-    submit.disabled = true;
-    output.textContent = 'Confirmando acesso…';
-    try {
-      if (cloud.authFlow?.type === 'invite') await cloud.finishInvite(password);
-      else await cloud.finishRecovery(password);
-      output.textContent = '';
-      await boot();
-      notice('Senha configurada. Bem-vindo ao Loops Marks Pro.');
-    } catch (error) {
-      output.textContent = error.message || 'Não foi possível concluir. Solicite outro link.';
-    } finally { submit.disabled = false; }
-    return;
-  }
   if (event.target.id !== 'login-form') return;
   event.preventDefault();
   const form = event.target;
@@ -1238,12 +1183,12 @@ app.addEventListener('submit', async event => {
   get('#login-error').textContent = '';
   submit.disabled = true;
   try {
-    await cloud.signIn(String(data.get('email')).trim(), String(data.get('password')));
+    await cloud.signIn(String(data.get('username')).trim(), String(data.get('password')));
     await boot();
   } catch (error) {
     const errorOutput = get('#login-error');
     const message = error.code === 400 || error.code === 401
-      ? 'E-mail ou senha incorretos. Confira os dados e tente novamente.' : (error.message || 'Falha de autenticação. Ative Netlify Identity no painel do projeto.');
+      ? 'Usuário ou senha incorretos. Confira os dados e tente novamente.' : (error.message || 'Falha de autenticação. Confira as variáveis seguras no painel Netlify.');
     if (errorOutput) errorOutput.textContent = message;
     else notice(message);
   } finally { submit.disabled = false; }
@@ -1253,7 +1198,7 @@ window.addEventListener('resize', () => drawWave(lastProgress));
 window.addEventListener('online', () => { updateTop(); requestSync(); });
 window.addEventListener('offline', updateTop);
 window.addEventListener('storage', event => {
-  if (event.key === 'loops-marks-last-user-v3' && !event.newValue && repo && cloud.enabled) {
+  if (event.key === 'loops-marks-last-user-v5' && !event.newValue && repo && cloud.enabled) {
     stopPlayback();
     currentGeneration++;
     player.cancelPreparation();

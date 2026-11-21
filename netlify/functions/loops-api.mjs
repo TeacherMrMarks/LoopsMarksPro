@@ -1,4 +1,5 @@
-import { getUser, verifyRequestOrigin } from '@netlify/identity';
+import { sessionUser, sameOrigin } from '../lib/auth.mjs';
+import { createHash } from 'node:crypto';
 import { getStore } from '@netlify/blobs';
 
 const songStore = () => getStore({name: 'loops-v3-songs', consistency: 'strong'});
@@ -33,11 +34,11 @@ function validateContent(content, owner) {
 }
 export default async function handler(req) {
   try {
-    const user = await getUser();
-    if (!user?.id) return fail('Entre na sua conta do Netlify Identity.',401);
+    const user = sessionUser(req);
+    if (!user?.id) return fail('Entre com o usuário e a senha do Loops Marks Pro.',401);
     const owner = user.id;
     const url = new URL(req.url), op=url.searchParams.get('op') || '';
-    if (req.method!=='GET') verifyRequestOrigin(req);
+    if (req.method!=='GET' && !sameOrigin(req)) return fail('Origem não autorizada.',403);
     if (req.method==='GET' && op==='catalog') {
       const store = songStore();
       const list=await store.list({prefix:owner+'/',paginate:false});
@@ -84,13 +85,13 @@ export default async function handler(req) {
       const {path,chunks,bytes,sha256}=await req.json();
       if (!validAudio(path,owner) || !Number.isSafeInteger(bytes) || bytes<44 || bytes>MAX_AUDIO ||
           !Number.isInteger(chunks)||chunks<1||chunks>22|| !/^[a-f0-9]{64}$/.test(sha256)) return fail('Manifesto inválido.',400);
-      const store=audioStore(); let sum=0;
+      const store=audioStore(); let sum=0; const digest=createHash('sha256');
       for(let i=0;i<chunks;i++) {
         const binary=await store.get(path+'/part-'+i,{type:'arrayBuffer',consistency:'strong'});
         if (!binary || !binary.byteLength || binary.byteLength>CHUNK_LIMIT) return fail('Falta enviar um dos blocos do WAV.',409);
-        sum+=binary.byteLength;
+        sum+=binary.byteLength; digest.update(Buffer.from(binary));
       }
-      if (sum!==bytes) return fail('O tamanho dos blocos não confere.',409);
+      if (sum!==bytes || digest.digest('hex')!==sha256) return fail('WAV recebido com tamanho ou integridade incorretos.',409);
       await store.setJSON(path+'/manifest',{path,chunks,bytes,sha256});
       return json({ok:true});
     }

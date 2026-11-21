@@ -1,1 +1,1 @@
-V4 TESTE SEM LOGIN — prévia isolada. V4 oficial não modificada.
+V5 — login próprio com usuário e senha no Netlify Functions, sincronização via Blobs, backup, motor musical V4.

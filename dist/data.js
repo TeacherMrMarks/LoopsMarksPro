@@ -39,8 +39,7 @@ export function fillVariantId(base, beats) { return base + '__' + beats; }
 export function fillBase(id) { return id.match(FILL_VARIANT)?.[1] || id; }
 export const DEFAULT_FILLS = { a: 'fillA', b: 'fillB', c: 'fillC', pre: 'fillPre', chorus: 'fillChorus', low: 'fillLow', high: 'fillHigh' };
 export const MAX_FILE_BYTES = 32 * 1024 * 1024;
-import { login as identityLogin, logout as identityLogout, getUser as identityGetUser, handleAuthCallback, acceptInvite as identityAcceptInvite, updateUser as identityUpdateUser, requestPasswordRecovery as identityRequestRecovery } from './netlify-client.js';
-const KEY = 'loops-marks-last-user-v3';
+const KEY = 'loops-marks-last-user-v5';
 const STORE = 'dados';
 
 export function newSong() {
@@ -49,7 +48,7 @@ export function newSong() {
 
 function openDB() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('loops-marks-v4-teste-data', 1);
+    const request = indexedDB.open('loops-marks-data', 1);
     request.onupgradeneeded = () => request.result.createObjectStore(STORE);
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
@@ -99,118 +98,88 @@ export class CloudError extends Error {
   }
 }
 
-// V3: Login do Netlify Identity e armazenamento exclusivamente no Netlify Blobs.
-// Os cookies de sessão são controlados pelo SDK oficial do Identity.
+// V5: Autenticação própria por cookie HttpOnly do servidor. Nenhuma senha no navegador.
+// Dados locais continuam disponíveis offline depois de um login válido neste aparelho.
 export class Cloud {
-  enabled = false;
+  enabled = true;
   user = null;
   authFlow = null;
   authError = '';
-  constructor() {}
   session() { return this.user; }
-  async initialize() {
-    // MODO TESTE: não processar tokens, Identity nem acessar a nuvem.
-    this.user = null; this.authFlow = null; this.authError = '';
-    return null;
-    // Primeiro identificamos o tipo de token, mas nunca guardamos o valor.
-    // Um link de redefinição inválido não pode abrir diretamente a Central.
-    const hash = typeof location === 'undefined' ? '' : location.hash || '';
-    const expected = /(?:^#|&)recovery_token=/.test(hash) ? 'recovery' :
-      /(?:^#|&)invite_token=/.test(hash) ? 'invite' : null;
-    this.authError = '';
-    this.authFlow = null;
-    try {
-      const callback = await handleAuthCallback();
-      if (callback?.type === 'invite' && callback.token) {
-        this.authFlow = { type: 'invite', token: callback.token };
-      } else if (callback?.type === 'recovery') {
-        this.authFlow = { type: 'recovery' };
-      } else if (expected) {
-        this.authError = 'O Netlify não confirmou o link de ' + (expected === 'recovery' ? 'redefinição' : 'convite') +
-          '. Ele pode ter expirado ou já ter sido utilizado. Solicite um novo link pelo aplicativo.';
-        this.authFlow = { type: 'invalid' };
-      }
-    } catch (e) {
-      this.authError = expected
-        ? 'Não foi possível validar o link. Ele pode ter expirado ou já ter sido utilizado. Solicite outro link.'
-        : 'Falha ao verificar a sessão. Confira sua conexão e tente entrar novamente.';
-      if (expected) this.authFlow = { type: 'invalid' };
-      console.warn('Identity callback não concluído:', e?.name || 'falha');
-    }
-    if (expected && this.authFlow?.type === 'invalid' && typeof history !== 'undefined') {
-      // Limpe o fragmento sensível após falha de validação, sem registrar o token.
-      history.replaceState(null, '', location.pathname + location.search);
-    }
-    try {
-      const user = await identityGetUser();
-      if (user?.id) {
-        this.user = { id: user.id, email: user.email, roles: user.roles || [] };
-        localStorage.setItem(KEY, JSON.stringify(this.user));
-      } else if (!navigator.onLine) this.restoreOfflineUser();
-      else { this.user = null; localStorage.removeItem(KEY); }
-    } catch (e) {
-      if (!this.restoreOfflineUser() && !this.authFlow) throw new CloudError('Não foi possível validar o login. Verifique a conexão.', 0);
-    }
-    return this.user;
-  }
   restoreOfflineUser() {
     try {
       const saved = JSON.parse(localStorage.getItem(KEY));
-      if (saved?.id && saved?.email) { this.user = saved; return true; }
+      if (saved?.id === 'marks-pro-admin' && saved?.email) {
+        this.user = saved;
+        return true;
+      }
     } catch {}
     return false;
   }
-  async sendPasswordReset(email) {
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      throw new CloudError('Digite um endereço de e-mail válido.', 400);
-    }
-    await identityRequestRecovery(email);
-  }
-  async finishInvite(password) {
-    if (this.authFlow?.type !== 'invite' || !this.authFlow.token) {
-      throw new CloudError('Convite não disponível. Abra novamente o link recebido por e-mail.', 400);
-    }
-    const user = await identityAcceptInvite(this.authFlow.token, password);
-    if (!user?.id) throw new CloudError('Não foi possível concluir o convite.', 400);
-    this.user = { id: user.id, email: user.email, roles: user.roles || [] };
-    localStorage.setItem(KEY, JSON.stringify(this.user));
+  async initialize() {
     this.authFlow = null;
     this.authError = '';
-    return this.user;
-  }
-  async finishRecovery(password) {
-    if (this.authFlow?.type !== 'recovery') {
-      throw new CloudError('Solicite um novo link para alterar sua senha.', 400);
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      this.restoreOfflineUser();
+      return this.user;
     }
-    const user = await identityUpdateUser({ password });
-    const current = user?.id ? user : await identityGetUser();
-    if (!current?.id) throw new CloudError('Senha alterada, mas a sessão precisa ser confirmada. Entre com sua nova senha.', 401);
-    this.user = { id: current.id, email: current.email, roles: current.roles || [] };
-    localStorage.setItem(KEY, JSON.stringify(this.user));
-    this.authFlow = null;
-    this.authError = '';
+    try {
+      const response = await fetch('/.netlify/functions/loops-auth?op=session', {
+        method: 'GET', credentials: 'same-origin', cache: 'no-store'
+      });
+      if (!response.ok) throw new CloudError('Não foi possível consultar a sessão.', response.status);
+      const data = await response.json();
+      if (data.user?.id === 'marks-pro-admin') {
+        this.user = data.user;
+        localStorage.setItem(KEY, JSON.stringify(this.user));
+      } else {
+        this.user = null;
+        localStorage.removeItem(KEY);
+        if (!data.configured) this.authError = 'Configure a conta na área Environment variables do Netlify para liberar o acesso.';
+      }
+    } catch {
+      // Se houver instabilidade da rede, preservar apenas a biblioteca local do dispositivo.
+      if (!this.restoreOfflineUser()) this.authError = 'Sem acesso ao servidor de login. Verifique a conexão.';
+    }
     return this.user;
   }
-  async signIn(email, password) {
-    const user = await identityLogin(email, password);
-    if (!user?.id) throw new CloudError('Não foi possível confirmar o login do Netlify Identity.', 401);
-    this.user = { id: user.id, email: user.email, roles: user.roles || [] };
-    localStorage.setItem(KEY, JSON.stringify(this.user));
+  async signIn(username, password) {
+    let response;
+    try {
+      response = await fetch('/.netlify/functions/loops-auth?op=login', {
+        method:'POST', credentials:'same-origin', cache:'no-store',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({username,password})
+      });
+    } catch { throw new CloudError('Não foi possível falar com o Netlify. Verifique a conexão.',0); }
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new CloudError(data.message || 'Não foi possível entrar.',response.status);
+    if (data.user?.id !== 'marks-pro-admin') throw new CloudError('Servidor não confirmou o usuário.',401);
+    this.user = data.user;
+    localStorage.setItem(KEY,JSON.stringify(this.user));
     return this.user;
   }
   async signOut() {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      throw new CloudError('Conecte-se à internet para encerrar a sessão com segurança.',0);
+    }
+    let response;
+    try {
+      response = await fetch('/.netlify/functions/loops-auth?op=logout', {
+        method:'POST',credentials:'same-origin',cache:'no-store'
+      });
+    } catch { throw new CloudError('Não foi possível confirmar a saída. Tente novamente com internet.',0); }
+    if (!response.ok) throw new CloudError('Servidor não confirmou a saída.',response.status);
     this.authFlow = null;
     this.authError = '';
     this.user = null;
     localStorage.removeItem(KEY);
-    await identityLogout().catch(e => console.warn('Logout remoto:',e));
   }
   async ready() {
-    if (!this.user) throw new CloudError('Entre para acessar sua biblioteca.', 401);
+    if (!this.user) throw new CloudError('Entre para acessar sua biblioteca.',401);
     return this.user;
   }
   async request(op, { method = 'GET', body, headers = {}, responseType = 'json' } = {}) {
-    if (!this.enabled) throw new CloudError('Este modo teste não acessa a nuvem.', 403);
     await this.ready();
     const url = '/.netlify/functions/loops-api' + op;
     let res;
@@ -269,7 +238,7 @@ export class Repository {
   disk = new Disk();
   constructor(cloud) {
     this.cloud = cloud;
-    this.owner = 'v4-teste-local';
+    this.owner = cloud.session()?.id || 'demo';
   }
   key(kind, id = '') { return this.owner + '/' + kind + '/' + id; }
   song(id) { return this.disk.get(this.key('song', id)); }
