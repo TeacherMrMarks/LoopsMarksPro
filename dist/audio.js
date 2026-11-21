@@ -3,7 +3,8 @@ import { demoBuffer } from './demo.js';
 import { meterOf } from './meter.js';
 
 const LOOPS = new Set(Object.keys(ENTRY_OF)); // Somente partes contínuas, nunca a contagem
-const ENDINGS = new Set(['outro', 'finish', ...CRASH_STOPS.map(part => part.id)]);
+const ENDINGS = new Set(['outro', 'finish']);
+const CRASHES = new Set(CRASH_STOPS.map(part => part.id));
 const LEAD = 0.075;           // antecedência para agendamento no relógio Web Audio
 const FADE = 0.004;
 const EPS = 0.0002;
@@ -47,6 +48,9 @@ export class Player {
   buffers = new Map();
   preparation = 0;
   segments = [];
+  overlays = []; // Ataques adicionais: nunca modificam a linha principal da música.
+  countEnabled = true;
+  countBars = 1;
   running = false;
   pending = null;
   ready = false;
@@ -80,6 +84,10 @@ export class Player {
   entryFor(key) { const target=this.song?.customSections?.some(s=>s.id===key) ? key+'Entry' : ENTRY_OF[key]; return target&&this.buffers.has(target) ? target : null; }
   baseFor(key) { const base=key?.endsWith('Entry')?key.slice(0,-5):''; return this.song?.customSections?.some(s=>s.id===base)?base:(BASE_OF_ENTRY[key]||key); }
   setMode(mode) { this.mode = mode === 'full' ? 'full' : 'smart'; }
+  setCountControl(enabled, bars=1) {
+    this.countEnabled = Boolean(enabled);
+    this.countBars = bars === 2 ? 2 : 1;
+  }
 
   async prepare(song, bpm, load) {
     this.cancelPreparation();
@@ -101,7 +109,7 @@ export class Player {
         .catch(() => { throw new Error('Não foi possível ler o WAV de ' + this.label(key) + '.'); });
       if (this.preparation !== version) return false;
       const beats = partBeats(part, song.beats);
-      if (!ENDINGS.has(key)) {
+      if (!ENDINGS.has(key) && !CRASHES.has(key)) {
         if (!Number.isInteger(beats) || beats < 1) {
           throw new Error(this.label(key) + ': configure a duração em tempos inteiros.');
         }
@@ -118,13 +126,13 @@ export class Player {
             ' s. Para ' + beats + ' pulsos em ' + meterOf(song) + ' deve medir ' + expected.toFixed(2) + ' s. Confira o BPM, o compasso e o corte na DAW.');
         }
       }
-      const target = ENDINGS.has(key) ? decoded.duration * ratio : beats * (60 / bpm);
+      const target = (ENDINGS.has(key) || CRASHES.has(key)) ? decoded.duration * ratio : beats * (60 / bpm);
       const frames = Math.max(1, Math.round(target * context.sampleRate));
       const adjusted = Math.abs(ratio - 1) < 0.00001
         ? decoded : await this.stretch(decoded, frames, decoded.length);
       if (this.preparation !== version) return false;
       const buffer = adjusted.length >= frames ? adjusted : this.copyWithPadding(adjusted, frames);
-      buffers.set(key, { buffer, seconds: ENDINGS.has(key) ? buffer.duration : target, beats });
+      buffers.set(key, { buffer, seconds: (ENDINGS.has(key) || CRASHES.has(key)) ? buffer.duration : target, beats });
     }
     this.initialPart = (song.sequence||[]).map(s=>s.part).find(k=>this.loopKeys.has(k)&&buffers.has(k)) || firstPlayablePart(song);
     this.armedPart = null;
@@ -235,13 +243,25 @@ export class Player {
     this.running = true;
     this.pending = null;
     this.segments = [];
+    this.overlays = [];
     this.initSequence();
     try {
       // Reinício de ensaio: a parte armada toca DEPOIS da mesma contagem do início.
       const selected = this.armedPart && this.buffers.has(this.armedPart) ? this.armedPart : null;
-      const count = this.song.countIntroEnabled!==false && this.buffers.has('countIntro')
-        ? this.segment('countIntro', this.epoch) : null;
-      const openingAt = count ? count.naturalEnd : this.epoch;
+      // Contagem escolhida no palco: 1 ou 2 compassos, sem modificar o WAV original.
+      // Se o WAV tiver 1 compasso, reproduz duas vezes; se tiver 2, usa só o
+      // primeiro quando a escolha for 1. Cada trecho é one-shot, nunca um loop infinito.
+      let openingAt = this.epoch;
+      const countMeta = this.countEnabled && this.buffers.get('countIntro');
+      if (countMeta) {
+        let remain = this.countBars * this.song.beats;
+        while (remain > 0) {
+          const lengthBeats = Math.min(remain, countMeta.beats);
+          this.segment('countIntro', openingAt, {lengthBeats});
+          openingAt += lengthBeats * this.beatSeconds;
+          remain -= lengthBeats;
+        }
+      }
       if (selected && selected !== 'intro') {
         this.scheduleDestination(selected, openingAt);
         this.sequenceAuto = false;
@@ -319,12 +339,10 @@ export class Player {
     if (this.pending && ENDINGS.has(this.pending.dest) && !ENDINGS.has(dest)) return false;
     if (this.pending && now >= this.pending.changeAt - LEAD && !ENDINGS.has(dest)) return false;
     const from = this.pending && now < this.pending.changeAt - LEAD ? this.pending.from : this.fromKey();
-    // Ataque final de bumbo + prato: nenhuma virada, nem mesmo uma já enfileirada.
-    // O ataque começa no próximo tempo 1 e sua cauda WAV termina naturalmente.
-    const isolatedCrash = CRASH_STOPS.some(part => part.id === dest);
-    const chosenManual = isolatedCrash ? null : (manual || (this.pending?.manual && this.pending.changeAt > now + LEAD
-      ? this.pending.family : null));
-    let family = isolatedCrash ? null : (chosenManual || this.autoFill(from, dest));
+    // Só trocas de partes e encerramentos passam por aqui; crashes são camadas separadas.
+    const chosenManual = manual || (this.pending?.manual && this.pending.changeAt > now + LEAD
+      ? this.pending.family : null);
+    let family = chosenManual || this.autoFill(from, dest);
     if (this.loopKeys.has(dest) && dest === from && !chosenManual && this.song.repeatMode === 'direct') family = null;
     if (family && !this.fillExists(family)) return false;
     this.clearPlan();
@@ -362,6 +380,7 @@ export class Player {
     return true;
   }
   go(dest) {
+    if (CRASHES.has(dest)) return this.crash(dest); // Compatibilidade com pedais antigos 'part:crashStop'.
     if (!this.running) return this.arm(dest);
     if(this.sequenceAuto)this.sequenceAuto=false;
     const active = this.fromKey();
@@ -375,6 +394,34 @@ export class Player {
       if(index>=0)this.sequenceScheduled={index,entry:this.pending?.entry??this.ctx.currentTime};
     }
     return changed;
+  }
+  // Crash de ataque: agendamento paralelo no próximo tempo 1, sem silenciar,
+  // cortar, substituir ou atrasar o loop, as viradas ou a fila de partes.
+  crash(key) {
+    if (!CRASHES.has(key) || !this.running || !this.buffers.has(key)) return false;
+    const now = this.ctx.currentTime;
+    const current = this.current(now);
+    if (this.pending && ENDINGS.has(this.pending.dest)) return false;
+    if (!current || !this.loopKeys.has(this.baseFor(current.key))) return false;
+    const at = nextBoundary(this.epoch, this.bar, now);
+    if (!Number.isFinite(at)) return false;
+    // Evita duplicar acidentalmente o mesmo prato no mesmo tempo 1.
+    if (this.overlays.some(item => item.key===key && Math.abs(item.at-at)<EPS)) return true;
+    const source = this.ctx.createBufferSource();
+    const gate = this.ctx.createGain();
+    const meta = this.buffers.get(key);
+    source.buffer = meta.buffer;
+    source.loop = false;
+    source.connect(gate).connect(this.mix);
+    source.start(at); // WAV completo, com possível cauda; mixado em paralelo.
+    const overlay = {key,at,end:at+meta.seconds,source,gate};
+    this.overlays.push(overlay);
+    source.onended = () => {
+      this.overlays = this.overlays.filter(item=>item!==overlay);
+      try {source.disconnect();gate.disconnect();} catch {}
+    };
+    this.onState?.();
+    return true;
   }
   fill(key) {
     if(this.sequenceAuto)this.sequenceAuto=false;
@@ -393,6 +440,10 @@ export class Player {
     this.pending = null;
     this.sequenceSteps=[];this.sequenceScheduled=null;
     for (const segment of this.segments) this.discard(segment);
+    for (const overlay of this.overlays) {
+      try {overlay.source.stop();overlay.source.disconnect();overlay.gate.disconnect();} catch {}
+    }
+    this.overlays = [];
     this.segments = [];
   }
   initSequence() {
@@ -404,7 +455,7 @@ export class Player {
       ...step,jumpTo:normalized.get(step.jumpTo)??-1,
     }));
     this.sequenceIndex=Math.max(0,this.sequenceSteps.findIndex(s=>this.loopKeys.has(s.part)));
-    const countSeconds=this.song.countIntroEnabled!==false?(this.buffers.get('countIntro')?.seconds||0):0;
+    const countSeconds=this.countEnabled && this.buffers.has('countIntro') ? this.countBars*this.bar : 0;
     this.sequenceEnteredAt=this.epoch+countSeconds+(this.buffers.get('intro')?.seconds||0);
     this.sequenceScheduled=null;
     this.sequenceAuto=this.song.sequenceMode==='automatic' && this.song.introMode!=='repeat';
@@ -473,6 +524,7 @@ export class Player {
       return false;
     });
     if (this.pending && now >= this.pending.entry + EPS) this.pending = null;
+    this.overlays = this.overlays.filter(effect => effect.end > now-EPS);
     const active = this.current(now);
     if (!active && !this.segments.some(seg => seg.at > now)) {
       this.stop();
@@ -489,6 +541,8 @@ export class Player {
       canCancel: Boolean(this.pending && this.pending.changeAt > now + LEAD),
       nextIn: this.pending ? Math.max(0, this.pending.entry - now) : 0,
       progress: activePosition,
+      crashQueued: this.overlays.filter(effect=>effect.at>now).map(effect=>effect.key),
+      crashPlaying: this.overlays.filter(effect=>effect.at<=now).map(effect=>effect.key),
       armed: this.armedPart || null,
       interrupted: !['running', 'closed'].includes(this.ctx.state),
       sequenceIndex:this.sequenceSteps?.length?this.sequenceIndex:null,

@@ -26,9 +26,9 @@ export const PARTS = [
   { id: 'fillLight', label: 'Virada leve', icon: 'wave', type: 'virada', group: 'manuais' },
   { id: 'fillStrong', label: 'Virada forte', icon: 'wave', type: 'virada', group: 'manuais' },
   { id: 'fillSpecial', label: 'Virada especial', icon: 'wave', type: 'virada', group: 'manuais' },
-  { id: 'crashStop', label: 'Crash 1 · Bumbo + prato', icon: 'spark', type: 'uma vez', group: 'crashstops' },
-  { id: 'crashStop2', label: 'Crash 2 · Bumbo + prato', icon: 'spark', type: 'uma vez', group: 'crashstops' },
-  { id: 'crashStop3', label: 'Crash 3 · Bumbo + prato', icon: 'spark', type: 'uma vez', group: 'crashstops' },
+  { id: 'crashStop', label: 'Crash 1 · Ataque adicional', icon: 'spark', type: 'uma vez', group: 'crashstops' },
+  { id: 'crashStop2', label: 'Crash 2 · Ataque adicional', icon: 'spark', type: 'uma vez', group: 'crashstops' },
+  { id: 'crashStop3', label: 'Crash 3 · Ataque adicional', icon: 'spark', type: 'uma vez', group: 'crashstops' },
   { id: 'finish', label: 'Acabamento', icon: 'check', type: 'uma vez', group: 'finais' },
   { id: 'outro', label: 'Final', icon: 'flag', type: 'uma vez', group: 'finais' },
 ];

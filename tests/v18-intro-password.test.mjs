@@ -20,6 +20,7 @@ test('V18: player agenda contagem uma vez antes da introdução, que só repete 
  const pl=new Player(()=>{});
  pl.ready=true;pl.running=false;pl.song={kind:'rhythm',beats:4,introMode:'repeat',countIntroEnabled:true};
  pl.ctx={currentTime:5,resume:async()=>{}};
+ pl.beatSeconds=.75; pl.bar=3;
  pl.context=()=>pl.ctx;
  pl.buffers=new Map([['countIntro',{seconds:3,beats:4}],['intro',{seconds:6,beats:8}],['a',{seconds:3,beats:4}]]);
  pl.initialPart='a';pl.loopKeys=new Set(['a','intro']);
@@ -31,6 +32,7 @@ test('V18: player agenda contagem uma vez antes da introdução, que só repete 
  assert.equal(events[1][1],events[0][1]+3);
  pl.stop();events.length=0;
  pl.song={kind:'music',beats:4,introMode:'once',countIntroEnabled:false};
+ pl.setCountControl(false,1);
  await pl.start();
  assert.deepEqual(events.map(e=>e[0]),['intro','a']);
  assert.equal(events[1][1],events[0][1]+6);

@@ -1037,3 +1037,14 @@ body.drawer-visible {overflow:hidden}
   .file-row [data-action="reuse-wav"] {padding:6px;display:flex;align-items:center;justify-content:center;}
   .file-row [data-action="reuse-wav"] span {display:none;}
 }
+
+/* V20 — controles de contagem e crashes paralelos no palco */
+.queue-tools { display:flex;flex-wrap:wrap;align-items:center;gap:8px; }
+.count-live-toggle[aria-pressed="true"] { border-color:#65dfbb;background:rgba(29,137,108,.25); }
+.count-live-toggle[aria-pressed="false"] { border-color:#596b80;background:rgba(43,57,72,.4); }
+.live-count-bars {display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#b8d7dd;}
+.live-count-bars select {background:#112c3b;color:#d9fef3;border:1px solid #44667b;border-radius:8px;padding:7px;min-height:32px;}
+.live-count-bars select:disabled {opacity:.55;}
+.crash-pads .pad.queued {border-color:#efbb5a;box-shadow:0 0 0 1px #efbb5a inset;}
+.crash-pads .pad.active {border-color:#67e1bd;}
+@media(max-width:600px){.live-count-bars {flex-basis:auto;} .queue-tools .mode-toggle {font-size:12px;} }

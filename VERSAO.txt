@@ -1,2 +1,4 @@
-Loops Marks Pro V19 · 21/11/2026
-Contagem one-shot e celular, virada no mesmo botão, ensaio com seleção de parte, WAVs reutilizáveis, progresso do Modo Live e sincronização da introdução.
+Loops Marks Pro — V20
+Base: V19
+Mudancas: Contagem Live ligada/desligada, escolha de 1 ou 2 compassos, Crash 1/2/3 em sobreposicao ao loop no proximo tempo 1, compatibilidade de pedais e preservacao de dados.
+Status: 105/105 testes automatizados locais aprovados; aguardando compilacao de producao pelo Netlify e testes com WAVs reais.

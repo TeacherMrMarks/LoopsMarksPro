@@ -6,7 +6,7 @@ import { exampleSongs } from './demo.js';
 import { makeBackup, restoreBackup, triggerDownload } from './backup.js';
 import { emptyLibrary, cleanLibrary, songKind, inFolder, repertoireEntries } from './library-model.js';
 
-const APP_VERSION = 'V19';
+const APP_VERSION = 'V20';
 // O link do músico carrega exclusivamente o Modo Live.
 const musicianLink = new URL(location.href).searchParams.get('modo') === 'musico';
 const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
@@ -69,6 +69,7 @@ const state = {
   editorTab:(()=>{const remembered=safeStored('loops-v15-editor-tab') || (safeStored('loops-v14-editor-tab')==='crash'?'loopcrash':safeStored('loops-v14-editor-tab'));return ['dados','loops','loopcrash','crash','viradas','mapa','finais'].includes(remembered)?remembered:'dados';})(),
   catalogView:safeStored('loops-v14-catalog-view')==='lista'?'lista':'cards',
   pedalLearn:null,pedalMap:loadPedalMap(),pedalLastAt:0,
+  liveCountEnabled:true,liveCountBars:1,
 
 };
 const player = new Player(() => { if (player.running) updatePlayback(); });
@@ -237,9 +238,10 @@ function deck() {
     '</h2><p>Cadastro encontrado. Para reproduzir, importe pelo menos um WAV no campo <strong>Loop contínuo</strong> (Parte A, Refrão ou outra parte). Entradas com prato e viradas não substituem o loop contínuo.</p>' +
     (musicianLink ? '' : button('admin', 'Completar cadastro', 'grid', 'primary')) + '</div>';
   const parts = playableParts(song).filter(part => song.parts?.[part.id]);
-  const countReady = Boolean(song.parts?.countIntro?.path) && song.countIntroEnabled!==false;
+  const countPresent = Boolean(song.parts?.countIntro?.path);
+  const countReady = countPresent && state.liveCountEnabled;
   const introReady = Boolean(song.parts?.intro?.path);
-  const openingLabel = (countReady ? 'Contagem de baquetas ('+(song.parts.countIntro.bars||1)+' comp.) → ' : '') +
+  const openingLabel = (countReady ? 'Contagem de baquetas ('+state.liveCountBars+' comp.) → ' : '') +
     (introReady ? 'Introdução musical ('+(song.introMode==='repeat'?'repete até comando':'uma vez')+') → ' : '') + 'Parte escolhida';
   const manual = MANUAL_PARTS.filter(part => Object.keys(song.parts || {}).some(id => fillBase(id) === part.id));
   const endings = FINALES.filter(part => song.parts?.[part.id]);
@@ -269,6 +271,8 @@ function deck() {
     '<button type="button" class="mode-toggle" data-action="mode-toggle" id="fill-mode" title="Alternar motor de viradas" ' +
     'aria-label="Modo de virada: inteligente ou completa">' +
     icon('wave') + '<span>Virada: ' + (player.mode === 'full' ? 'PRÓXIMO 1' : 'INTELIGENTE') + '</span></button>' +
+    '<button type="button" class="mode-toggle count-live-toggle" id="live-count-toggle" data-action="toggle-live-count" aria-pressed="'+countReady+'" '+(!countPresent?'disabled title="Importe um WAV de contagem primeiro"':'title="Ativar ou desativar contagem antes de Iniciar"')+'>'+icon('wave')+'<span>Contagem: '+(countReady?'LIGADA':'DESLIGADA')+'</span></button>'+
+    '<label class="live-count-bars" for="live-count-bars" title="Compassos da contagem inicial">Compassos <select id="live-count-bars" aria-label="Compassos da contagem inicial" '+(!countPresent?'disabled':'')+'><option value="1" '+(state.liveCountBars===1?'selected':'')+'>1 comp.</option><option value="2" '+(state.liveCountBars===2?'selected':'')+'>2 comp.</option></select></label>'+
     '<span id="pedal-status-live" class="pedal-live-feedback" aria-live="polite"></span></div></section>' +
     '<section class="frame live-sections"><div class="section-head"><h2>Partes da música</h2><span>Entrada no tempo 1</span></div>' +
     '<div class="pads">' + parts.map(part => '<button type="button" class="pad" data-action="part" data-part="' + part.id +
@@ -276,9 +280,9 @@ function deck() {
     '</div><p class="v19-opening-hint" id="opening-path">'+icon('music')+' <strong>Abertura:</strong> '+escape(openingLabel)+'</p>' + (song.kind!=='rhythm'&&(song.sequence||[]).length ? '<div class="live-map-toolbar"><span id="live-map-status">Mapa musical · '+escape(song.sequenceMode==='automatic'?'Automático':'Assistido')+'</span>'+iconButton('map-previous','Etapa anterior','arrowup')+button('map-next','Próxima parte','arrowdown','ghost')+'</div>':'') + (manual.length ? '<div class="section-head live-subsection"><h2>Viradas manuais</h2><span>Retorna ao loop</span></div>' +
     '<div class="pads manual-pads">' + manual.map(part => '<button type="button" class="pad fill-pad" data-action="fill" data-part="' +
     part.id + '" disabled>' + icon(part.icon) + '<strong>' + escape(part.label) + '</strong><small>Virada avulsa</small></button>').join('') +
-    '</div>' : '') + (crashStops.length ? '<div class="section-head live-subsection"><h2>Crash</h2><span>Bumbo + prato · sem virada</span></div>' +
-    '<div class="pads crash-pads">' + crashStops.map(part => '<button type="button" class="pad crash-stop-pad" data-action="part" data-part="' + part.id + '" disabled>' +
-    icon('spark') + '<strong>' + escape(part.label) + '</strong><small>Parada com cauda do prato</small></button>').join('') + '</div>' : '') +
+    '</div>' : '') + (crashStops.length ? '<div class="section-head live-subsection"><h2>Crash · Ataques adicionais</h2><span>Tocam no próximo tempo 1, sem parar a bateria</span></div>' +
+    '<div class="pads crash-pads">' + crashStops.map(part => '<button type="button" class="pad crash-stop-pad" data-action="crash" data-part="' + part.id + '" disabled>' +
+    icon('spark') + '<strong>' + escape(part.label) + '</strong><small>Prato sobre o loop</small></button>').join('') + '</div>' : '') +
     (endings.length ? '<div class="section-head live-subsection"><h2>Encerramentos</h2><span>Toque uma vez</span></div>' +
     '<div class="pads end-pads">' + endings.map(part => '<button type="button" class="pad final ' + (part.id === 'finish' ? 'finish' : '') +
     '" data-action="part" data-part="' + part.id + '" disabled>' + icon(part.icon) + '<strong>' + escape(part.label) +
@@ -503,7 +507,7 @@ function editor() {
     fileRow({...part,icon:'wave',type:'virada'}, song.parts?.[part.id], song) +
     button('remove-custom', 'Excluir virada específica', 'trash', 'ghost danger', 'data-part="' + escape(part.id) + '"') + '</div>').join('') +
     '</div>' + button('add-custom', 'Adicionar virada específica', 'plus', 'ghost') + '</details>' +
-    editorSection(song, 'crashstops', 'Crash', 'Bumbo + prato para PARAR a música ou o ritmo. Escolha até 3 WAVs de ataque final: toca uma vez, sem virada, e aguarda a cauda inteira do prato antes de encerrar.') +
+    editorSection(song, 'crashstops', 'Crashes adicionais', 'Crash 1, 2 e 3: WAVs de ataque que tocam JUNTOS do loop no próximo tempo 1, sem interromper a bateria. Para encerrar, use Acabamento ou Final. Se quiser prato em outro pulso, prepare o deslocamento dentro do WAV, começando o arquivo no tempo 1.') +
     editorSection(song, 'finais', 'Acabamento e final', 'Arquivos de encerramento de execução única, inclusive cauda do prato.') +
     customSectionsEditor(song) +
     customEntryEditor(song) +
@@ -788,7 +792,7 @@ const pedalActions=[
   ...PLAY_PARTS.map(p=>['part:'+p.id,'Ir para '+p.label]),
   ...MANUAL_PARTS.map(p=>['fill:'+p.id,'Virada: '+p.label]),
   ...FINALES.map(p=>['part:'+p.id,'Encerramento: '+p.label]),
-  ...CRASH_STOPS.map(p=>['part:'+p.id,'Crash final: '+p.label]),
+  ...CRASH_STOPS.map(p=>['crash:'+p.id,'Acionar '+p.label]),
   ['rep-prev-live','Música anterior'],['rep-next-live','Próxima música'],['open-library','Abrir repertório']
 ];
 function pedalOptions(value){return '<option value="">Não atribuir</option>'+pedalActions.map(([id,txt])=>
@@ -823,7 +827,7 @@ function receivePedal(code){
   const now=Date.now();if(now-state.pedalLastAt<170)return;
   state.pedalLastAt=now;
   const [prefix,part]=entry.command.split(':');
-  const action=['part','fill'].includes(prefix)?prefix:entry.command;
+  const action=['part','fill','crash'].includes(prefix)?prefix:entry.command;
   handleAction({dataset:{action:action==='play'&&player.running?'stop':action,part}}).catch(e=>notice(e.message));
   const label=pedalActions.find(([key])=>key===entry.command)?.[1]||entry.command;
   const live=get('#pedal-status-live');if(live)live.textContent='Pedal: '+label;
@@ -986,8 +990,30 @@ function requestSync() {
   syncTimer = setTimeout(() => { syncCatalog(); }, 650);
 }
 
+function loadLiveCount(song) {
+  if (!song) return {enabled:false,bars:1};
+  const defaults={enabled:song.countIntroEnabled!==false,bars:Math.min(2,Math.max(1,Number(song.parts?.countIntro?.bars)||1))};
+  try {
+    const saved=JSON.parse(localStorage.getItem('loops-v20-count-'+song.id)||'null');
+    if(saved && typeof saved.enabled==='boolean' && [1,2].includes(saved.bars)) return saved;
+  } catch {}
+  return defaults;
+}
+function updateLiveCount(enabled,bars) {
+  const present=Boolean(state.selected?.parts?.countIntro?.path);
+  state.liveCountEnabled=Boolean(enabled)&&present;
+  state.liveCountBars=bars===2?2:1;
+  player.setCountControl(state.liveCountEnabled,state.liveCountBars);
+  if(state.selected?.id) {
+    try {localStorage.setItem('loops-v20-count-'+state.selected.id,JSON.stringify({enabled:state.liveCountEnabled,bars:state.liveCountBars}));} catch {}
+  }
+}
 function selectLive(song,bpmOverride=null) {
   currentGeneration++;
+  const count=loadLiveCount(song);
+  state.liveCountEnabled=count.enabled && Boolean(song?.parts?.countIntro?.path);
+  state.liveCountBars=count.bars;
+  player.setCountControl(state.liveCountEnabled,state.liveCountBars);
   clearTimeout(prepTimer);
   state.selected = song;
   state.selectedSignature = sortedSignature(song);
@@ -1140,7 +1166,6 @@ function updatePlayback(force = false) {
     const name = playing.active ? player.label(playing.active) :
       (player.ready ? player.label(playing.armed || player.initialPart || 'a') : 'Aguardando');
     const mode = !playing.running ? (player.ready ? (playing.armed?'Parte selecionada · Pronto para iniciar':'Pronto para iniciar') : 'Preparando áudio') :
-      CRASH_STOPS.some(p=>p.id===playing.active) ? 'Crash final · cauda do prato' :
       isFill ? 'Virada em execução' : playing.entryAttack ? 'Entrada com crash' :
       playing.active === 'countIntro' ? 'Contagem de baquetas' : playing.active === 'intro' ? 'Introdução musical' : 'Loop contínuo';
     const next = playing.next ? 'PRÓXIMO · ' + player.label(playing.next) : (playing.sequenceTotal ? 'MAPA · '+(playing.sequenceIndex+1)+'/'+playing.sequenceTotal : '');
@@ -1162,11 +1187,13 @@ function updatePlayback(force = false) {
     (playing.offsetBeats ? ' (últimos ' + playing.fillBeats + 'T)' : '') + ' → ' : '') + player.label(playing.next)) : '';
   const message = playing.interrupted ? 'Áudio suspenso · toque em Retomar' :
     playing.running ? (queued || (playing.active ? player.label(playing.active) + (playing.entryAttack ? ' · entrada com crash' : playing.active==='countIntro' ? ' · contagem antes da entrada' : ' · contínuo') : 'Iniciando…')) :
-    (preparation || (player.ready ? (playing.armed ? 'Selecionada '+player.label(playing.armed)+' · Iniciar '+(state.selected.countIntroEnabled!==false && player.buffers.has('countIntro') ? 'toca a contagem antes dela':'entra direto nessa parte') : 'Todos os áudios preparados · Pronto para tocar') : 'Selecione os áudios para tocar.'));
+    (preparation || (player.ready ? (playing.armed ? 'Selecionada '+player.label(playing.armed)+' · Iniciar '+(state.liveCountEnabled && player.buffers.has('countIntro') ? 'toca a contagem antes dela':'entra direto nessa parte') : 'Todos os áudios preparados · Pronto para tocar') : 'Selecione os áudios para tocar.'));
   const chip = playing.running ? (playing.interrupted ? 'Interrompido' : 'Tocando') : player.ready ? 'Pronto para tocar' : 'Aguardando áudio';
-  const closing = ['finish','outro',...CRASH_STOPS.map(p=>p.id)].includes(playing.next) ||
-    ['finish','outro',...CRASH_STOPS.map(p=>p.id)].includes(playing.active);
-  if (force || previous.running !== playing.running || previous.next !== playing.next ||
+  const closing = ['finish','outro'].includes(playing.next) ||
+    ['finish','outro'].includes(playing.active);
+  const crashChanged=(previous.crashQueued||[]).join('|')!==(playing.crashQueued||[]).join('|') ||
+    (previous.crashPlaying||[]).join('|')!==(playing.crashPlaying||[]).join('|');
+  if (force || crashChanged || previous.running !== playing.running || previous.next !== playing.next ||
       previous.fill !== playing.fill || previous.active !== playing.active || previous.armed !== playing.armed || previous.entryAttack !== playing.entryAttack || previous.canCancel !== playing.canCancel || previous.interrupted !== playing.interrupted) {
     const text = get('#player-message');
     if (text && text.textContent !== message) text.textContent = message;
@@ -1183,8 +1210,9 @@ function updatePlayback(force = false) {
     get('#faster').disabled = playing.running || startPending || state.bpm >= max;
     for (const pad of app.querySelectorAll('.pad')) {
       const key = pad.dataset.part;
-      const current = playing.active === key;
-      const inQueue = playing.next === key || playing.fill === key;
+      const isCrash = pad.dataset.action==='crash';
+      const current = isCrash ? Boolean(playing.crashPlaying?.includes(key)) : playing.active === key;
+      const inQueue = isCrash ? Boolean(playing.crashQueued?.includes(key)) : (playing.next === key || playing.fill === key);
       const armed = !playing.running && playing.armed === key;
       pad.classList.toggle('active', current);
       pad.classList.toggle('queued', inQueue);
@@ -1193,7 +1221,7 @@ function updatePlayback(force = false) {
       pad.disabled = (!playing.running && !selectableStopped) || (pad.dataset.action === 'fill' ? !player.fillExists(key) : !player.buffers.has(key)) || closing;
       const info = pad.querySelector('small');
       if (info) info.textContent = armed ? 'Selecionada para iniciar' : current ? (playing.entryAttack ? 'Com crash' : 'Tocando') : inQueue ? 'Na fila' :
-        pad.dataset.action === 'fill' ? 'Virada avulsa' : CRASH_STOPS.some(p=>p.id===key) ? 'Bumbo + prato · parar' : ['finish','outro'].includes(key) ? 'Finalizar' :
+        pad.dataset.action === 'fill' ? 'Virada avulsa' : isCrash ? (inQueue ? 'Ataque no próximo tempo 1' : current ? 'Crash soando sobre a bateria' : 'Adicionar crash no tempo 1') : ['finish','outro'].includes(key) ? 'Finalizar' :
         (state.selected.parts?.[key + 'Entry'] ? 'Entrada + contínuo' : 'Loop contínuo');
     }
     const cancel = get('#cancel-btn');
@@ -1204,6 +1232,20 @@ function updatePlayback(force = false) {
   }
   const modeLabel = get('#fill-mode span');
   if (modeLabel) modeLabel.textContent = 'Virada: ' + (player.mode === 'smart' ? 'INTELIGENTE' : 'PRÓXIMO 1');
+  const countSelector=get('#live-count-bars');
+  if(countSelector) countSelector.disabled=playing.running || !player.buffers.has('countIntro');
+  const countLabel=get('#live-count-toggle');
+  if(countLabel) {
+    countLabel.setAttribute('aria-pressed',String(state.liveCountEnabled));
+    countLabel.disabled=playing.running || !player.buffers.has('countIntro');
+    const span=countLabel.querySelector('span');
+    if(span)span.textContent='Contagem: '+(state.liveCountEnabled?'LIGADA':'DESLIGADA');
+  }
+  const opening=get('#opening-path');
+  if(opening) {
+    const text=(state.liveCountEnabled && player.buffers.has('countIntro') ? 'Contagem de baquetas ('+state.liveCountBars+' comp.) → ' : '')+(player.buffers.has('intro')?'Introdução musical ('+(state.selected.introMode==='repeat'?'repete até comando':'uma vez')+') → ':'')+'Parte escolhida';
+    if(opening.dataset.path!==text){opening.dataset.path=text;opening.innerHTML=icon('music')+' <strong>Abertura:</strong> '+escape(text);}
+  }
   if (force || playing.beat !== previous.beat) {
     Array.from(app.querySelectorAll('.pulse')).forEach((tempo, i) => tempo.classList.toggle('on', i === playing.beat));
   }
@@ -1745,6 +1787,13 @@ async function handleAction(element) {
   if (action === 'play') { await startPlayer(); return; }
   if (action === 'stop') { stopPlayback(); return; }
   if (action === 'part') { if (!player.go(part)) notice('Parte indisponível ou aguarde a troca atual.'); updatePlayback(true); return; }
+  if (action === 'crash') { if (!player.crash(part)) notice('Inicie um loop musical antes de acionar o crash.'); updatePlayback(true); return; }
+  if (action === 'toggle-live-count') {
+    if(player.running){notice('Pare a reprodução para alterar a contagem inicial.');return;}
+    updateLiveCount(!state.liveCountEnabled,state.liveCountBars);
+    updatePlayback(true);
+    return;
+  }
   if (action === 'fill') { player.fill(part); updatePlayback(true); return; }
   if (action === 'mode-toggle') {
     if (player.pending) { notice('Aguarde ou cancele a troca agendada para mudar o modo.'); return; }
@@ -1935,6 +1984,12 @@ app.addEventListener('input', event => {
     player.volume(state.volume);
     return;
   }
+  if(input.id==='live-count-bars'){
+    if(player.running){input.value=String(state.liveCountBars);notice('Pare a reprodução para alterar os compassos da contagem.');return;}
+    updateLiveCount(state.liveCountEnabled,Number(input.value));
+    updatePlayback(true);
+    return;
+  }
   if (!state.admin || !input.validity.valid) return;
   if(input.dataset.sectionName){const entry=state.admin.customSections?.find(s=>s.id===input.dataset.sectionName);if(entry){entry.label=input.value.slice(0,52);delayedSave();}return;}
   if (input.dataset.customName) {
@@ -1980,6 +2035,10 @@ app.addEventListener('input', event => {
 
 app.addEventListener('change', event => {
   const el=event.target;
+  if(el.id==='live-count-bars'){
+    if(player.running){el.value=String(state.liveCountBars);return;}
+    updateLiveCount(state.liveCountEnabled,Number(el.value));updatePlayback(true);return;
+  }
   if(el.dataset.folderName){
     const f=state.libraryData.folders.find(x=>x.id===el.dataset.folderName);
     if(f){const name=el.value.trim().slice(0,70);if(!name){el.value=f.name;notice('Informe o nome da pasta.');return;}
