@@ -874,3 +874,75 @@ body.drawer-visible {overflow:hidden}
 }
 .pedal-live-feedback {font-size:.65rem;color:#8be6c9;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .stage-tools [data-action="pedal-setup"] {width:31px;height:31px;flex-shrink:0}
+
+
+/* V13 — janelas ajustadas ao conteúdo, sem overflow horizontal */
+#dialog:has(.backup-dialog) {width:min(680px,calc(100vw - 28px));max-width:calc(100vw - 28px);max-height:calc(100dvh - 32px);padding:18px 22px;overflow-x:hidden;overflow-y:auto;box-sizing:border-box;}
+#dialog:has(.backup-dialog) .backup-dialog {width:100%;max-width:100%;max-height:none;overflow:visible;box-sizing:border-box;}
+#dialog:has(.backup-dialog) .backup-dialog * {min-width:0;}
+.v13-modal-title {display:flex;align-items:start;justify-content:space-between;gap:16px;}
+.v13-modal-title .eyebrow {font-size:.7rem;letter-spacing:.13em;margin:0 0 4px;}
+.v13-modal-title h2 {margin:0;font-size:1.32rem;line-height:1.15;}
+.v13-modal-title .icon-btn {flex:0 0 35px;width:35px;height:35px;}
+.v13-backup-caption {margin:8px 0 10px!important;font-size:.82rem!important;line-height:1.35!important;}
+.v13-backup-dialog .backup-choices {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:10px 0;}
+.v13-backup-dialog .backup-choices>.button:first-child {grid-column:auto;}
+.v13-backup-dialog .backup-choices .button {font-size:.78rem;white-space:normal;min-width:0;padding:9px 6px;line-height:1.2;gap:5px;}
+.v13-import-panel {padding:10px 12px;background:#1a3440;border:1px solid #38576a;border-radius:10px;}
+.v13-import-panel input[type=file] {max-width:100%;width:100%;font-size:.78rem;margin-top:5px;}
+.v13-import-panel .field {gap:3px;}
+.v13-import-panel p {margin:6px 0 0;font-size:.75rem;line-height:1.3;}
+.v13-backup-extra {margin-top:10px;border-top:1px solid #34495a;padding-top:10px;}
+.v13-backup-extra summary {display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-size:.82rem;font-weight:650;color:#bad5dc;}
+.v13-backup-extra summary svg {height:16px;width:16px;}
+.v13-backup-extra .backup-row {margin-top:10px;display:grid;grid-template-columns:1fr 1fr;}
+.v13-backup-extra .button {font-size:.78rem;white-space:normal;}
+.v13-backup-dialog .backup-progress {margin:7px 0 0;min-height:0;font-size:.75rem;overflow-wrap:anywhere;}
+.v13-backup-dialog menu {margin:7px 0 0;}
+#dialog:has(.v12-settings-dialog) {width:min(570px,calc(100vw - 28px));max-width:calc(100vw - 28px);max-height:calc(100dvh - 28px);overflow-x:hidden;overflow-y:auto;}
+#dialog:has(.v12-settings-dialog) .v12-settings-dialog {min-width:0;overflow-wrap:anywhere;}
+#dialog:has(.v12-settings-dialog) input {max-width:100%;}
+/* Repertórios: nome individual, ritmo de origem e BPM por item */
+.rep-track-name input {width:100%;min-width:0;max-width:380px;background:#112333;border:1px solid #3b5869;border-radius:7px;color:#f1f7fa;padding:8px 9px;font-weight:650;font-size:.85rem;}
+.rep-track-name input:focus {outline:2px solid #73dbc2;}
+.rep-track-name small {display:block;margin-top:4px;}
+.rep-add {grid-template-columns:repeat(2,minmax(0,1fr)) auto;align-items:end;}
+/* Mapa modular de execução */
+.v13-sequence-editor,.v13-extra-sections {margin-top:14px;}
+.v13-rhythm-map-note {padding:10px;border:1px solid #426275;border-radius:9px;color:#a3cbd1;margin-top:10px;}
+.v13-sequence-options {display:flex;align-items:end;gap:16px;margin:12px 0;}
+.v13-sequence-options>.field {min-width:260px;}
+.v13-sequence-options p {max-width:430px;font-size:.76rem;}
+.v13-sequence-list {display:grid;gap:7px;}
+.v13-sequence-step {display:grid;grid-template-columns:30px minmax(140px,2fr) minmax(115px,1fr) minmax(125px,1.25fr) auto;gap:8px;align-items:end;padding:9px;border:1px solid #335366;background:#142a37;border-radius:10px;}
+.v13-sequence-step .field {margin:0;}
+.v13-sequence-step select {max-width:100%;height:38px;min-width:0;}
+.v13-step-num {display:grid;place-items:center;width:28px;height:38px;font-size:.8rem;color:#a9dfd0;}
+.v13-step-actions {display:flex;gap:3px;align-items:center;}
+.v13-step-actions .icon-btn {width:31px;height:36px;}
+.v13-sequence-add {display:flex;gap:8px;align-items:end;margin:12px 0;flex-wrap:wrap;}
+.v13-sequence-add .field {min-width:210px;flex:1;}
+.v13-extra-list {display:grid;gap:9px;margin:10px 0;}
+.v13-extra-item {border:1px solid #3b5a69;padding:12px;border-radius:10px;background:#172e3d;}
+.v13-extra-heading {display:flex;gap:9px;align-items:end;margin-bottom:9px;}
+.v13-extra-heading .field {flex:1;}
+.v13-extra-item .file-row+.file-row {margin-top:7px;}
+.live-map-toolbar {display:flex;align-items:center;gap:8px;margin-top:10px;padding:7px;border:1px solid #355e66;border-radius:9px;background:#173743;}
+.live-map-toolbar>span {font-size:.75rem;flex:1;color:#9be6d1;}
+.live-map-toolbar .button,.live-map-toolbar .icon-btn {min-height:33px;height:33px;padding:7px;}
+@media(max-width:840px){
+.v13-sequence-options {display:block;}
+.v13-sequence-options p {margin-top:6px;}
+.v13-sequence-step {grid-template-columns:25px minmax(0,1fr) minmax(0,1fr);}
+.v13-sequence-step .v13-step-actions {grid-column:2 / 4;justify-content:end;}
+.rep-add {grid-template-columns:minmax(0,1fr);}
+}
+@media(max-width:480px){
+#dialog:has(.backup-dialog) {padding:14px 12px;}
+.v13-backup-dialog .backup-choices {grid-template-columns:minmax(0,1fr) minmax(0,1fr);}
+.v13-backup-dialog .backup-choices>.button:first-child {grid-column:span 2;}
+.v13-backup-extra .backup-row {grid-template-columns:1fr;}
+.v13-sequence-step {grid-template-columns:25px 1fr;}
+.v13-sequence-step .field {grid-column:2;}
+.v13-sequence-step .v13-step-actions {grid-column:2;}
+}

@@ -1,4 +1,4 @@
-import { PARTS, DEFAULT_FILLS, FILL_IDS, ENTRY_OF, BASE_OF_ENTRY, fillBase, fillVariantId, firstPlayablePart } from './data.js';
+import { PARTS, DEFAULT_FILLS, FILL_IDS, ENTRY_OF, BASE_OF_ENTRY, fillBase, fillVariantId, firstPlayablePart, playableParts, extraSections } from './data.js';
 import { demoBuffer } from './demo.js';
 
 const LOOPS = new Set(Object.keys(ENTRY_OF));
@@ -42,6 +42,7 @@ export function pickFill(family, availableBeats, buffers, isFill = () => true) {
 }
 
 export class Player {
+  loopKeys=new Set(LOOPS);
   buffers = new Map();
   preparation = 0;
   segments = [];
@@ -75,8 +76,8 @@ export class Player {
     if (!family) return false;
     return [...this.buffers.keys()].some(key => this.isFill(key) && fillBase(key) === family);
   }
-  entryFor(key) { return ENTRY_OF[key] && this.buffers.has(ENTRY_OF[key]) ? ENTRY_OF[key] : null; }
-  baseFor(key) { return BASE_OF_ENTRY[key] || key; }
+  entryFor(key) { const target=this.song?.customSections?.some(s=>s.id===key) ? key+'Entry' : ENTRY_OF[key]; return target&&this.buffers.has(target) ? target : null; }
+  baseFor(key) { const base=key?.endsWith('Entry')?key.slice(0,-5):''; return this.song?.customSections?.some(s=>s.id===base)?base:(BASE_OF_ENTRY[key]||key); }
   setMode(mode) { this.mode = mode === 'full' ? 'full' : 'smart'; }
 
   async prepare(song, bpm, load) {
@@ -87,7 +88,8 @@ export class Player {
     this.song = song;
     const beatSeconds = 60 / song.bpm;
     const ratio = song.bpm / bpm;
-    const supported = new Set(PARTS.map(part => part.id));
+    const supported = new Set([...PARTS.map(part => part.id),...extraSections(song).flatMap(s=>[s.id,s.id+'Entry'])]);
+    this.loopKeys=new Set([...LOOPS,...extraSections(song).map(s=>s.id)]);
     for (const [key, part] of Object.entries(song.parts || {})) {
       if (!supported.has(key) && !this.isFill(key)) continue;
       const audio = song.demo ? demoBuffer(context, song, key) : await load(part.path);
@@ -121,7 +123,7 @@ export class Player {
       const buffer = adjusted.length >= frames ? adjusted : this.copyWithPadding(adjusted, frames);
       buffers.set(key, { buffer, seconds: ENDINGS.has(key) ? buffer.duration : target, beats });
     }
-    this.initialPart = firstPlayablePart(song);
+    this.initialPart = (song.sequence||[]).map(s=>s.part).find(k=>this.loopKeys.has(k)&&buffers.has(k)) || firstPlayablePart(song);
     if (!this.initialPart || !buffers.has(this.initialPart)) throw new Error('Cadastre ao menos um WAV contínuo para tocar.');
     this.song = song;
     this.bpm = bpm;
@@ -161,7 +163,7 @@ export class Player {
     const source = this.ctx.createBufferSource();
     const gate = this.ctx.createGain();
     source.buffer = meta.buffer;
-    source.loop = LOOPS.has(key);
+    source.loop = this.loopKeys.has(key);
     if (source.loop) source.loopEnd = meta.seconds;
     source.connect(gate).connect(this.mix);
     const offset = offsetBeats * this.beatSeconds;
@@ -225,10 +227,12 @@ export class Player {
     this.running = true;
     this.pending = null;
     this.segments = [];
+    this.initSequence();
     if (this.buffers.has('intro')) {
       const intro = this.segment('intro', this.epoch);
       this.introduction(intro);
     } else this.scheduleDestination(this.initialPart || 'a', this.epoch);
+    this.sequenceEnteredAt=this.segments.find(seg=>this.baseFor(seg.key)===this.initialPart)?.at??this.sequenceEnteredAt;
   }
   introduction(intro) {
     const fill = this.buffers.has('fillIntro') ? 'fillIntro' : null;
@@ -249,9 +253,9 @@ export class Player {
   fromKey() {
     const active = this.current();
     const key = this.baseFor(active?.key);
-    if (LOOPS.has(key)) return key;
+    if (this.loopKeys.has(key)) return key;
     if (active?.key === 'intro') return 'intro';
-    return this.pending?.dest || this.baseFor(this.segments.findLast(s => LOOPS.has(this.baseFor(s.key)))?.key) || this.initialPart || 'a';
+    return this.pending?.dest || this.baseFor(this.segments.findLast(s => this.loopKeys.has(this.baseFor(s.key)))?.key) || this.initialPart || 'a';
   }
   autoFill(from, dest) {
     const setting = this.song.transitions?.[from + '>' + dest];
@@ -282,8 +286,8 @@ export class Player {
     return { fill: selected.key, changeAt: entry - selected.beats * this.beatSeconds,
       entry, fillBeats: selected.beats, offsetBeats: selected.offsetBeats };
   }
-  request(dest, manual = null) {
-    if (!this.running || !this.buffers.has(dest) || !(LOOPS.has(dest) || ENDINGS.has(dest))) return false;
+  request(dest, manual = null, forcedEntry=null) {
+    if (!this.running || !this.buffers.has(dest) || !(this.loopKeys.has(dest) || ENDINGS.has(dest))) return false;
     const now = this.ctx.currentTime;
     const active = this.current(now);
     if (ENDINGS.has(active?.key)) return false;
@@ -293,10 +297,15 @@ export class Player {
     const chosenManual = manual || (this.pending?.manual && this.pending.changeAt > now + LEAD
       ? this.pending.family : null);
     let family = chosenManual || this.autoFill(from, dest);
-    if (LOOPS.has(dest) && dest === from && !chosenManual && this.song.repeatMode === 'direct') family = null;
+    if (this.loopKeys.has(dest) && dest === from && !chosenManual && this.song.repeatMode === 'direct') family = null;
     if (family && !this.fillExists(family)) return false;
     this.clearPlan();
-    const plan = family ? this.planFill(family, now) : null;
+    let plan = family ? this.planFill(family, now) : null;
+    if(forcedEntry && forcedEntry>now+LEAD*2){
+      const beatsAvailable=Math.max(0,Math.min(this.song.beats,Math.floor((forcedEntry-nextBeat(this.epoch,this.beatSeconds,now))/this.beatSeconds+.0001)));
+      const selection=family?pickFill(family,beatsAvailable,this.buffers,k=>this.isFill(k)):null;
+      plan={fill:selection?.key||null,entry:forcedEntry,changeAt:selection?forcedEntry-selection.beats*this.beatSeconds:forcedEntry,fillBeats:selection?.beats||0,offsetBeats:selection?.offsetBeats||0};
+    }
     const fill = plan?.fill || null;
     const entry = plan?.entry || nextBoundary(this.epoch, this.bar, now);
     const changeAt = plan?.changeAt ?? entry;
@@ -318,11 +327,20 @@ export class Player {
       fillBeats: plan?.fillBeats || 0, offsetBeats: plan?.offsetBeats || 0 };
     return true;
   }
-  go(dest) { return this.request(dest); }
+  go(dest) {
+    if(this.sequenceAuto)this.sequenceAuto=false;
+    const changed=this.request(dest);
+    if(changed && this.sequenceSteps?.length){
+      const index=this.sequenceSteps.findIndex(s=>s.part===dest);
+      if(index>=0)this.sequenceScheduled={index,entry:this.pending?.entry??this.ctx.currentTime};
+    }
+    return changed;
+  }
   fill(key) {
+    if(this.sequenceAuto)this.sequenceAuto=false;
     if (!this.running || !this.isFill(key) || !this.fillExists(fillBase(key))) return false;
     const dest = this.pending?.dest && this.pending.changeAt > this.ctx.currentTime + LEAD
-      ? this.pending.dest : (LOOPS.has(this.fromKey()) ? this.fromKey() : (this.initialPart || 'a'));
+      ? this.pending.dest : (this.loopKeys.has(this.fromKey()) ? this.fromKey() : (this.initialPart || 'a'));
     return this.request(dest, fillBase(key));
   }
   cancel() {
@@ -333,8 +351,64 @@ export class Player {
   stop() {
     this.running = false;
     this.pending = null;
+    this.sequenceSteps=[];this.sequenceScheduled=null;
     for (const segment of this.segments) this.discard(segment);
     this.segments = [];
+  }
+  initSequence() {
+    const source=this.song.kind==='rhythm'?[]:(this.song.sequence||[]);
+    const indexed=source.map((step,index)=>({...step,rawIndex:index})).filter(s=>
+      (this.loopKeys.has(s.part)||ENDINGS.has(s.part))&&this.buffers.has(s.part));
+    const normalized=new Map(indexed.map((step,index)=>[step.rawIndex,index]));
+    this.sequenceSteps=indexed.map(({rawIndex,...step})=>({
+      ...step,jumpTo:normalized.get(step.jumpTo)??-1,
+    }));
+    this.sequenceIndex=Math.max(0,this.sequenceSteps.findIndex(s=>this.loopKeys.has(s.part)));
+    this.sequenceEnteredAt=this.epoch+(this.buffers.get('intro')?.seconds||0);
+    this.sequenceScheduled=null;
+    this.sequenceAuto=this.song.sequenceMode==='automatic';
+    this.sequenceCount=0;
+  }
+  sequenceTarget(fromIndex) {
+    const step=this.sequenceSteps[fromIndex];
+    if(!step)return -1;
+    const jump=Number.isInteger(step.jumpTo)?step.jumpTo:-1;
+    // Cycles are intentional; stages marked 'repeat until command' wait for the next foot/touch cue.
+    return jump>=0&&jump<this.sequenceSteps.length?jump:fromIndex+1<this.sequenceSteps.length?fromIndex+1:-1;
+  }
+  nextSequence(direction=1){
+    if(!this.running||!this.sequenceSteps?.length)return false;
+    const target=direction<0?Math.max(0,this.sequenceIndex-1):this.sequenceTarget(this.sequenceIndex);
+    if(target<0||!this.sequenceSteps[target]||!this.buffers.has(this.sequenceSteps[target].part))return false;
+    const step=this.sequenceSteps[target];
+    if(!this.request(step.part))return false;
+    this.sequenceScheduled={index:target,entry:this.pending?.entry??this.ctx.currentTime};
+    return true;
+  }
+  tickSequence(now) {
+    if(!this.sequenceSteps?.length||!this.running)return;
+    if(this.sequenceScheduled && now>=this.sequenceScheduled.entry-EPS){
+      this.sequenceIndex=this.sequenceScheduled.index;
+      this.sequenceEnteredAt=this.sequenceScheduled.entry;
+      this.sequenceScheduled=null;
+      this.sequenceCount++;
+    }
+    if(!this.sequenceAuto||this.sequenceScheduled||this.pending)return;
+    const step=this.sequenceSteps[this.sequenceIndex];
+    if(!step||step.repeats===0||ENDINGS.has(step.part)||this.sequenceCount>500)return;
+    const part=this.buffers.get(step.part);
+    if(!part)return;
+    const entry=this.buffers.get(this.entryFor(step.part));
+    const totalBeats=(entry?.beats||part.beats)+Math.max(0,step.repeats-1)*part.beats;
+    const duration=totalBeats*this.beatSeconds;
+    const deadline=this.sequenceEnteredAt+duration;
+    const target=this.sequenceTarget(this.sequenceIndex);
+    if(target<0)return;
+    // Schedule in advance; AudioContext clock owns the actual playback boundaries.
+    if(now>=deadline-Math.max(this.bar,0.45) && now<deadline-LEAD*2){
+      const dest=this.sequenceSteps[target].part;
+      if(this.request(dest,null,deadline))this.sequenceScheduled={index:target,entry:deadline};
+    }
   }
   volume(value) {
     this.context();
@@ -343,12 +417,14 @@ export class Player {
   label(key) {
     const base = fillBase(key);
     const name = PARTS.find(part => part.id === base)?.label ||
+      this.song?.customSections?.find(part => part.id === base)?.label ||
       this.song?.customFills?.find(part => part.id === base)?.label || key;
     const variant = key.match(/__(\d+)$/);
     return variant ? name + ' (' + variant[1] + 'T)' : name;
   }
   summary() {
     if (!this.running) return { running: false, beat: -1 };
+    this.tickSequence(this.ctx.currentTime);
     const now = this.ctx.currentTime;
     this.segments = this.segments.filter(seg => {
       if (seg.end > now - 0.08) return true;
@@ -369,6 +445,10 @@ export class Player {
       canCancel: Boolean(this.pending && this.pending.changeAt > now + LEAD),
       nextIn: this.pending ? Math.max(0, this.pending.entry - now) : 0,
       progress: (beats / this.song.beats) % 1,
-      interrupted: !['running', 'closed'].includes(this.ctx.state) };
+      interrupted: !['running', 'closed'].includes(this.ctx.state),
+      sequenceIndex:this.sequenceSteps?.length?this.sequenceIndex:null,
+      sequenceNext:this.sequenceSteps?.length?this.sequenceTarget(this.sequenceIndex):null,
+      sequenceName:this.sequenceSteps?.[this.sequenceIndex]?.part||null,
+      sequenceTotal:this.sequenceSteps?.length||0,sequenceAuto:this.sequenceAuto }; 
   }
 }

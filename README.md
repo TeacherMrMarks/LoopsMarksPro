@@ -1,45 +1,53 @@
-# Loops Marks Pro — V12
+# Loops Marks Pro — V13
 
-Versão para o **mesmo GitHub e Netlify**. Criada a partir da V11, preservando os stores de WAVs, músicas, pastas e repertórios.
+**Pacote de atualização do mesmo projeto GitHub + Netlify**, criado a partir da V12, sem apagar nem renomear os stores existentes de músicas e WAVs. A V12 permanece preservada como arquivo ZIP separado.
 
-## Novidades da V12
+## Recursos implementados
 
-- **Gerenciamento recolhível:** Central de Loops, Músicas, Ritmos, Repertórios e Pastas agrupados num menu. A barra lateral inteira também pode ser recolhida no computador.
-- **Biblioteca principal:** a lista e o campo de pesquisa saíram do menu estreito. As músicas e ritmos são apresentados em cartões no painel principal; clicar abre o editor em toda a largura disponível.
-- **Configurações em janela flutuante:** conta, Backup/Restauração, Gerenciar Link, Controle por Pedal, Sincronizar, Sair e X para fechar.
-- **Editor retrátil:** clique em **Dados e comportamento musical** para esconder/exibir tipo, pasta, BPM, identificação e regras de virada. O modo escolhido permanece no aparelho.
-- **Pedal Bluetooth HID:** seis comandos configuráveis, com botão **Aprender** para cada pedal, usando as teclas que a pedaleira realmente envia. Configure pelo menu da Central ou pelo pequeno ícone de pedal no Modo Live. O mapeamento fica salvo **localmente no aparelho** (inclusive offline). Ele deve ser ensinado novamente no iPhone caso tenha sido configurado em outro computador. Não foi necessário modificar o motor de viradas.
-- **Link pessoal e revogável de músico:** em Configurações, gere um link seguro de **somente leitura**, copie, renove ou revogue. A nuvem valida cada acesso antes de fornecer listas e WAVs. A revogação impede novos acessos online; o aplicativo verifica periodicamente a validade enquanto conectado e tenta limpar o cache do músico revogado. Uma cópia já baixada pode funcionar **até 48 horas offline**, pois a internet é necessária para receber uma revogação.
-- **Link permanente e atualizações:** o link principal `.netlify.app` permanece válido quando uma nova versão é publicada nesse domínio; o worker prioriza a versão nova quando o aparelho está online. O app nunca recarrega a interface durante a execução. O **Permalink de preview fica fixo** na versão testada, mas usa a mesma autorização e pode ser revogado. O atalho PWA do músico usa um manifesto personalizado para abrir diretamente no player, com a chave do link.
-- **Modo Live mantido:** logotipo, visor da parte atual, BPM, loops, crash, viradas, acabamento, finais, repertório e download offline. O pequeno ícone de pedal foi acrescentado no topo.
+**Repertório com nome e BPM próprios por apresentação**
+- Adicione uma música cadastrada ou um ritmo reutilizável a um repertório.
+- Cada item do repertório aceita **nome próprio** (por exemplo, “Entrada da noiva”) e **BPM individual**.
+- O mesmo ritmo pode ser utilizado várias vezes com nomes e andamentos distintos, sem alterar o cadastro original nem duplicar os WAVs.
+- Continua valendo o limite anterior de **±10 BPM** para preservar a qualidade dos áudios. Os ritmos e músicas podem ser reordenados, duplicados e excluídos do repertório.
+- No modo ao vivo, selecionar uma música ou um repertório fecha a gaveta e retorna aos botões do player.
 
-## Seguranca e pré-requisitos
+**Mapa da sequência musical (para músicas)**
+- Seção nova no editor: crie uma ordem com partes musicais já cadastradas, introdução inicial e encerramentos.
+- Acrescente quantas etapas precisar (limite técnico: 120), incluindo retornos e repetições. Cada etapa aceita de 1 a 16 repetições ou **Até comando**.
+- **Modo assistido:** o botão “Próxima parte” avança a música quando você decidir. Há também “Etapa anterior”. As viradas e entradas continuam respeitando o relógio de áudio.
+- **Modo automático:** a passagem é agendada usando a duração do WAV, o BPM e os compassos; é possível interromper a sequência ao acionar manualmente outra parte. Etapas “Até comando” aguardam seu comando.
+- A introdução gravada toca automaticamente antes do primeiro loop. Quando usada no mapa, permanece como etapa de abertura (não como retorno de meio de música).
+- Os ritmos genéricos continuam com troca livre pelos botões ou pelo pedal, sem obrigação de usar mapa.
 
-- A Central Administrativa continua usando **Netlify Identity**; não usamos a senha e as variáveis da V5.
-- O acesso do músico por link usa um token aleatório armazenado no novo store **`loops-v12-access`**. Ele tem validade de 90 dias e somente um link permanece ativo por conta. O token é sensível como uma senha: não o exponha publicamente.
-- O endpoint do músico (`netlify/functions/loops-musician.mjs`) permite **somente GET** de catálogo, repertório e áudio. Não tem operações de criação, exclusão ou edição. O endpoint administrativo ainda exige Netlify Identity.
-- Para que o link do músico abra sem **Sign in to Netlify**, o site/página de preview correspondente precisa permitir acesso dos visitantes (Project visibility/Deploy protection). A proteção dos dados fica nas Functions. Não confunda a proteção da plataforma com a autenticação do aplicativo.
-- Instale o PWA no Safari após abrir o **link permanente** e teste o atalho. Confirme que o manifesto personalizado foi aceito pelo iOS antes de depender dele.
-- **Pedal:** use um modelo Bluetooth HID em modo teclado, não MIDI puro. A resposta real depende do modelo e do Safari; teste com o iPhone 11 antes de apresentações.
+**Partes musicais adicionais**
+- Novo editor “Mais partes musicais”: crie, renomeie e remova seções personalizadas (até 36), como Ponte, Solo, Verso 3, Interlúdio, Parte D/E, Coda ou qualquer outro nome.
+- Para cada parte, importe um loop WAV contínuo e, opcionalmente, uma primeira entrada com crash.
+- Essas partes entram nos mapas de transição e de sequência e aparecem como botões no Modo Live quando tiverem WAV.
 
-## Atualização
+**Backup e janelas**
+- O backup completo exporta os novos nomes do repertório, BPMs, mapas, partes personalizadas e WAVs, além das pastas e preferências locais não sensíveis (como o mapeamento do pedal).
+- A **importação do ZIP** recria os registros e os arquivos sem apagar os existentes. Os links de acesso e credenciais não entram no backup por segurança.
+- A janela de Backup/Restauração ganhou layout responsivo, importação em destaque, opções avançadas recolhíveis e botão **X** de fechamento. A janela de link do músico também possui X.
+- Os diálogos de Configurações passam a impedir rolagem **horizontal**. Em telas muito pequenas, ainda pode haver rolagem vertical para evitar ocultar funções.
 
-1. Salve um **backup completo** na V11, preservando os WAVs, e guarde o ZIP da V11.
-2. Extraia este pacote e envie **seu conteúdo, não o ZIP fechado**, para a raiz do **mesmo** repositório GitHub.
-3. No Netlify, mantenha: Base directory vazio, Build `npm run build`, Publish `dist`, Functions `netlify/functions`.
-4. Se a publicação automática estiver bloqueada, use o **novo Permalink da V12** para testar; não use `Trigger deploy` repetidamente.
-5. Teste as telas, o pedal no navegador e a geração/revogação de um link. Para testar a própria versão V12 no celular, copie **Link de teste**. Depois de aprovar e publicar a V12 no endereço principal, use **Copiar link permanente**.
-6. Teste primeiro com WAVs de demonstração. Confirme downloads, transições, repertórios, sessão offline e abertura pelo ícone no iPhone 11 em modo avião, antes de tocar uma cerimônia.
+## Publicação no Netlify
 
-## Persistência
+1. Faça **Backup completo** da V12 antes de qualquer atualização e guarde o ZIP original.
+2. Extraia o ZIP V13 e envie o **conteúdo extraído** à raiz do mesmo repositório GitHub `LoopsMarksPro`.
+3. Configuração de build: base vazia; `npm run build`; publish `dist`; functions `netlify/functions`.
+4. Mantenha o bloqueio de publicação automática se desejar testar o novo **Permalink** antes de promover a V13 ao endereço principal.
+5. Confirme que aparece `V13`, entre com seu Netlify Identity e teste com a música já cadastrada, um repertório com duas músicas usando o mesmo ritmo em BPMs diferentes e uma sequência musical de teste.
+6. Antes de cerimônias, faça teste real de áudio e Modo Avião no iPhone 11, inclusive mudanças automáticas, acabamentos e baixa/atualização de WAVs.
 
-- Músicas: `loops-v3-songs`; WAVs: `loops-v3-wavs`; histórico: `loops-v3-history`; pastas e repertórios: `loops-v11-library` — **preservados e sem migração destrutiva**.
-- Novo: `loops-v12-access` para a autorização do link do músico.
-- Preferências de layout e pedal: armazenamento local do próprio navegador/aplicativo (não substituem o backup do repertório).
+## Compatibilidade / segurança
 
-## Validação
+- Mantidos os stores `loops-v3-songs`, `loops-v3-wavs`, `loops-v3-history`, `loops-v11-library` e `loops-v12-access`, sem migração destrutiva.
+- Mantidos o Netlify Identity, links revogáveis de músico, armazenamento Netlify Blobs, motor de viradas adaptativas, entradas com crash, controle por pedal Bluetooth HID, backup, PWA e reprodução offline.
+- **O teste local não substitui testes no Netlify e com seus WAVs reais.** Os fluxos automáticos seguem sendo aperfeiçoados e devem ser ensaiados antes de apresentações.
 
-- Testes automatizados locais de autenticação, Cloud/Netlify Blobs simulado, link revogável, leitura do músico, viradas, biblioteca e interface.
-- Prévia estática da Central avaliada em 1440 × 900, sem rolagem horizontal.
-- O `npm run build` precisa baixar `esbuild` e outras dependências; o ambiente de montagem não tinha `node_modules`, portanto o build completo **não foi validado localmente**. Validar pelo Netlify.
-- **Ainda não testado com pedal físico nem com reprodução real no iPhone.** Os 53+ testes são automatizados, não substituem ensaio de áudio nem teste de revogação numa implantação real.
+## Validação local
+
+- 62 testes automatizados passando: regressões desde as versões anteriores, metadados de repertório, novas partes, componentes da interface e agendamento de etapa automática pelo relógio de áudio simulado.
+- Sintaxe JavaScript conferida.
+- **Build completo não executado neste ambiente** porque as dependências npm (`esbuild`, `@netlify/identity`, `@netlify/blobs`, `fflate`) não estavam instaladas. A compilação precisa ser confirmada no Netlify.
+- O navegador automatizado deste ambiente bloqueou a abertura da prévia local, então o layout da V13 ainda precisa de validação visual no Permalink.

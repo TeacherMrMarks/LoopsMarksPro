@@ -28,11 +28,14 @@ export const PARTS = [
   { id: 'finish', label: 'Acabamento', icon: 'check', type: 'uma vez', group: 'finais' },
   { id: 'outro', label: 'Final', icon: 'flag', type: 'uma vez', group: 'finais' },
 ];
+export const extraSections = song => (song?.customSections||[]).filter(s=>/^section_[a-f0-9]{12}$/.test(s.id)&&typeof s.label==='string').map(s=>({...s,icon:'layers',group:'loops',type:'loop'}));
+export const playableParts = song => [...PARTS.filter(p=>p.group==='loops'&&p.id!=='intro'),...extraSections(song)];
+export const entryOf = (song,key) => key?.startsWith('section_') ? key+'Entry' : ENTRY_OF[key];
 export const PLAY_PARTS = PARTS.filter(part => part.group === 'loops' && part.id !== 'intro');
 // O repertório inclui todos os cadastros, mesmo os que ainda estão recebendo WAVs.
 // O primeiro loop disponível inicia o player: a Parte A não é obrigatória.
 export function firstPlayablePart(song) {
-  return PLAY_PARTS.find(part => Boolean(song?.parts?.[part.id]))?.id || null;
+  return playableParts(song).find(part => Boolean(song?.parts?.[part.id]))?.id || null;
 }
 export function liveCatalog(rows) {
   return rows.filter(song => song && !song.deleted);
@@ -53,7 +56,7 @@ const KEY = 'loops-marks-last-user-v3';
 const STORE = 'dados';
 
 export function newSong() {
-  return { kind:'music', folderId:'', id: crypto.randomUUID(), name: '', occasion: '', bpm: 84, beats: 4, parts: {}, transitions: {}, customFills: [], fillMode: 'smart', repeatMode: 'fill', revision: 0 };
+  return { kind:'music', folderId:'', id: crypto.randomUUID(), name: '', occasion: '', bpm: 84, beats: 4, parts: {}, transitions: {}, customFills: [], fillMode: 'smart', repeatMode: 'fill', customSections: [], sequence: [], sequenceMode:'assisted', revision: 0 };
 }
 
 function openDB() {
@@ -401,9 +404,9 @@ export class Cloud {
   }
   catalog() { return this.request('?op=catalog'); }
   async save(owner, song) {
-    const { id, revision, name, occasion, bpm, beats, parts, transitions, customFills, fillMode, repeatMode, kind, folderId, deleted, edit } = song;
+    const { id, revision, name, occasion, bpm, beats, parts, transitions, customFills, customSections, sequence, sequenceMode, fillMode, repeatMode, kind, folderId, deleted, edit } = song;
     const content = deleted ? {deleted: true, edit} :
-      {name, occasion, bpm, beats, kind:kind||'music', folderId:folderId||'', parts, transitions: transitions || {}, customFills: customFills || [], fillMode: fillMode || 'smart', repeatMode: repeatMode || 'fill', edit};
+      {name, occasion, bpm, beats, kind:kind||'music', folderId:folderId||'', parts, transitions: transitions || {}, customFills: customFills || [], customSections:customSections||[], sequence:sequence||[], sequenceMode:sequenceMode||'assisted', fillMode: fillMode || 'smart', repeatMode: repeatMode || 'fill', edit};
     const data = await this.request('?op=save', { method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({id, revision, content}) });

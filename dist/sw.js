@@ -1,4 +1,4 @@
-const VERSION = 'loops-marks-v12-access-pedals-20261121';
+const VERSION = 'loops-marks-v13-repertoire-map-20261121';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './netlify-client.js', './backup.js', './data.js', './library-model.js',
   './audio.js', './stretch.js', './demo.js', './importer.js', './manifest.webmanifest',

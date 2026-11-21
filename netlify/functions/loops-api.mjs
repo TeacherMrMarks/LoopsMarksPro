@@ -34,7 +34,12 @@ function validateContent(content, owner) {
   }
   if (Object.keys(content.transitions||{}).length>140 || (content.customFills||[]).length>50 ||
       (content.fillMode && !['smart','full'].includes(content.fillMode)) ||
-      (content.repeatMode && !['fill','direct'].includes(content.repeatMode))) return false;
+      (content.repeatMode && !['fill','direct'].includes(content.repeatMode)) ||
+      (content.sequenceMode && !['automatic','assisted'].includes(content.sequenceMode))) return false;
+  const extra=content.customSections||[];
+  if(!Array.isArray(extra)||extra.length>36||extra.some(s=>!/^section_[a-f0-9]{12}$/.test(s?.id||'')||typeof s.label!=='string'||!s.label.trim()||s.label.length>52))return false;
+  const stages=content.sequence||[];
+  if(!Array.isArray(stages)||stages.length>120||stages.some(s=> !/^[a-zA-Z0-9_-]{1,50}$/.test(s?.part||'')||!Number.isInteger(s.repeats)||s.repeats<0||s.repeats>32||!Number.isInteger(s.jumpTo??-1)|| (s.jumpTo??-1)<-1|| (s.jumpTo??-1)>=stages.length))return false;
   return true;
 }
 export default async function handler(req) {

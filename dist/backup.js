@@ -6,13 +6,17 @@ function slim(song) {
   return { originalId:song.id, kind:song.kind||'music', folderId:song.folderId||'', name: song.name || '', occasion: song.occasion || '', bpm: song.bpm,
     beats: song.beats, parts: structuredClone(song.parts||{}),
     transitions: structuredClone(song.transitions||{}), customFills: structuredClone(song.customFills||[]),
-    fillMode: song.fillMode || 'smart', repeatMode: song.repeatMode || 'fill' };
+    fillMode: song.fillMode || 'smart', repeatMode: song.repeatMode || 'fill', customSections:structuredClone(song.customSections||[]), sequence:structuredClone(song.sequence||[]), sequenceMode:song.sequenceMode||'assisted' };
 }
 export async function makeBackup(repo, mode = 'completo', progress = () => {}) {
   const songs = (await repo.catalog()).filter(song => !song.deleted);
   const lib=cleanLibrary(await repo.libraryState());
   const data = {type:'LOOPS_MARKS_PRO_BACKUP', schema:4, mode, createdAt:new Date().toISOString(),
-    library:lib,songs:songs.map(slim)};
+    library:lib,songs:songs.map(slim),preferences:(()=>{
+      try{return {pedalMap:JSON.parse(localStorage.getItem('loops-v12-pedal-map')||'{}'),
+        introOpen:localStorage.getItem('loops-v12-editor-intro'),
+        managementOpen:localStorage.getItem('loops-v12-management')};}
+      catch{return {};}})()};
   let bytes = 0;
   const items = {'manifest.json':strToU8(JSON.stringify(data,null,2))};
   if(mode !== 'configuracoes') {
@@ -59,7 +63,7 @@ export async function restoreBackup(repo, file, progress = () => {}) {
     const id=crypto.randomUUID();if(song.originalId)idMap.set(song.originalId,id);
     const restored={id,kind:song.kind==='rhythm'?'rhythm':'music',folderId:folderMap.get(song.folderId)||'',name:song.name,occasion:String(song.occasion||'').slice(0,55),bpm:song.bpm,
       beats:song.beats,parts:{},transitions:song.transitions||{},customFills:song.customFills||[],
-      fillMode: song.fillMode || 'smart', repeatMode: song.repeatMode || 'fill',revision:0};
+      fillMode: song.fillMode || 'smart', repeatMode: song.repeatMode || 'fill',customSections:song.customSections||[],sequence:song.sequence||[],sequenceMode:song.sequenceMode||'assisted',revision:0};
     const files=[];
     for(const [part,meta] of Object.entries(song.parts)) {
       if(!/^[A-Za-z0-9_-]{1,80}$/.test(part)) continue;
@@ -79,12 +83,19 @@ export async function restoreBackup(repo, file, progress = () => {}) {
   if(manifest.schema===4){
     for(const r of manifest.library?.repertoires||[]){
       if(typeof r.name!=='string'||!r.name.trim())continue;
-      const items=(r.items||[]).map(item=>({songId:idMap.get(item.songId),bpm:item.bpm||null}))
+      const items=(r.items||[]).map(item=>({songId:idMap.get(item.songId),bpm:item.bpm||null,title:String(item.title||'').slice(0,90)}))
         .filter(item=>item.songId);
       library.repertoires.push({id:crypto.randomUUID(),name:r.name.slice(0,90),date:String(r.date||'').slice(0,35),items});
     }
     await repo.saveLibrary(library);
   }
+  if(manifest.preferences && typeof localStorage!=='undefined'){
+    const p=manifest.preferences;try{
+      if(p.pedalMap && typeof p.pedalMap==='object'&&!Array.isArray(p.pedalMap) && Object.keys(p.pedalMap).length<=32)
+        localStorage.setItem('loops-v12-pedal-map',JSON.stringify(p.pedalMap));
+      if(['open','closed'].includes(p.introOpen))localStorage.setItem('loops-v12-editor-intro',p.introOpen);
+      if(['open','closed'].includes(p.managementOpen))localStorage.setItem('loops-v12-management',p.managementOpen);
+    }catch{/* Navegador pode bloquear preferências locais; dados restaurados permanecem intactos. */}}
   return {imported,audioIncluded:manifest.mode!=='configuracoes'};
 }
 export function triggerDownload(blob, filename) {

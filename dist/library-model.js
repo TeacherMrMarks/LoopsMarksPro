@@ -4,12 +4,12 @@ export const songKind = song => song?.kind === 'rhythm' ? 'rhythm' : 'music';
 export const emptyLibrary = () => ({folders:[],repertoires:[],revision:0,dirty:false});
 export const cleanLibrary = source => ({
   folders: (source?.folders || []).map(f=>({id:f.id,name:f.name,kind:f.kind})),
-  repertoires: (source?.repertoires || []).map(r=>({id:r.id,name:r.name,date:r.date||'',items:(r.items||[]).map(i=>({songId:i.songId,bpm:i.bpm||null}))})),
+  repertoires: (source?.repertoires || []).map(r=>({id:r.id,name:r.name,date:r.date||'',items:(r.items||[]).map(i=>({songId:i.songId,bpm:i.bpm||null,...(i.title?{title:String(i.title).slice(0,90)}:{})}))})),
 });
 export const inFolder = (song,kind,folderId='') => songKind(song)===kind && (!folderId || song.folderId===folderId);
 export function repertoireEntries(repertoire,songs) {
   const byId = new Map(songs.filter(s=>!s.deleted).map(song=>[song.id,song]));
-  return (repertoire?.items||[]).map(item=>({song:byId.get(item.songId),bpm:item.bpm||null}))
+  return (repertoire?.items||[]).map(item=>({song:byId.get(item.songId),bpm:item.bpm||null,title:item.title||''}))
     .filter(entry=>entry.song);
 }
 export function validLibrary(data) {
@@ -29,7 +29,8 @@ export function validLibrary(data) {
        !Array.isArray(r.items)||r.items.length>250||ids.has(r.id))return false;
     ids.add(r.id);
     for(const item of r.items) if(!uuid.test(item.songId)||
-      (item.bpm!=null && (!Number.isInteger(item.bpm)||item.bpm<30||item.bpm>280)))return false;
+      (item.bpm!=null && (!Number.isInteger(item.bpm)||item.bpm<30||item.bpm>280)) ||
+      (item.title!=null && (typeof item.title!=='string'||item.title.length>90)))return false;
   }
   return true;
 }
