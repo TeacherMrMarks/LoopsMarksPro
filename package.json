@@ -1,21 +1,13 @@
 {
-  "name": "loops-marks-pro",
-  "version": "4.0.0",
+  "name": "loops-marks-pro-v4-teste-sem-login",
+  "version": "4.0.0-test",
   "private": true,
   "type": "module",
-  "engines": {
-    "node": ">=20"
-  },
   "scripts": {
-    "build": "node scripts/configure.mjs",
+    "build": "node scripts/check.mjs",
     "test": "node --test tests/*.test.mjs"
   },
-  "dependencies": {
-    "@netlify/identity": "2.0.1",
-    "@netlify/blobs": "11.1.9",
-    "fflate": "0.8.2"
-  },
-  "devDependencies": {
-    "esbuild": "0.28.2"
+  "engines": {
+    "node": ">=20"
   }
 }

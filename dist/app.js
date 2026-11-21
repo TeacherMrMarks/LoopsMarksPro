@@ -5,7 +5,8 @@ import { exampleSongs } from './demo.js';
 import { makeBackup, restoreBackup, triggerDownload } from './backup.js';
 
 const APP_VERSION = 'V4';
-const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
+const TEST_MODE = true;
+const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + ' de teste" title="Versão ' + APP_VERSION + ' · Teste sem login">' + APP_VERSION + ' TESTE</span>';
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#dialog');
 const toast = document.querySelector('#toast');
@@ -86,7 +87,7 @@ function iconButton(action, text, sign, props = '') {
 }
 
 function statusText() {
-  if (!cloud.enabled) return ['Modo demonstração', 'headphones'];
+  if (!cloud.enabled) return ['TESTE SEM LOGIN · salvamento local', 'headphones'];
   if (!navigator.onLine) return ['Offline', 'device'];
   if (state.syncLabel) return [state.syncLabel, state.errors ? 'device' : 'cloud'];
   return ['Central online', 'cloud'];
@@ -94,16 +95,16 @@ function statusText() {
 
 function shell() {
   const live = state.view === 'live';
-  const user = cloud.session()?.email || 'Conta não conectada';
+  const user = cloud.session()?.email || 'Teste local · sem conta';
   const [status, statusIcon] = statusText();
   const locker = cloud.enabled ? button('logout', '', 'exit', 'mobile-only ghost', 'aria-label="Sair"') : '';
-  return '<div class="shell"><aside class="sidebar">' + brand() + '<nav aria-label="Seções">' +
+  return '<div class="shell test-mode"><aside class="sidebar">' + brand() + '<nav aria-label="Seções">' +
     '<button class="nav-link" data-action="live" ' + (live ? 'aria-current="page"' : '') + '>' + icon('current') + 'Modo ao vivo</button>' +
     '<button class="nav-link" data-action="admin" ' + (!live ? 'aria-current="page"' : '') + '>' + icon('grid') + 'Central de loops</button>' +
     '</nav><div class="sidebar-foot">' +
     (cloud.enabled ? '<button class="nav-link" data-action="logout">' + icon('exit') + 'Sair da conta</button>' : '') +
     '<div class="session-line">' + icon('user') + '<span class="account-name" title="' + escape(user) + '">' + escape(user) + '</span>' + versionTag() + '</div></div></aside>' +
-    '<div class="workspace"><header class="topbar">' + brand('mobile-only') +
+    '<div class="workspace"><div class="test-banner">V4 · AMBIENTE DE TESTE SEM LOGIN · Arquivos salvos apenas neste navegador. Não envie áudios particulares sem necessidade.</div><header class="topbar">' + brand('mobile-only') +
     '<div class="breadcrumb">' + icon(live ? 'current' : 'grid') + '<span>' + (live ? 'Modo ao vivo' : 'Central de loops') + '</span></div>' +
     '<div class="top-actions"><span class="sync' + (state.errors ? ' warn' : '') + '" id="sync-label">' +
     icon(statusIcon) + '<span>' + escape(status) + '</span></span>' +
@@ -225,8 +226,8 @@ function adminView() {
     '<div class="admin-summary">' +
     '<div class="mini-stat"><small>MÚSICAS</small><strong>' + amount + '</strong><span>Na biblioteca</span></div>' +
     '<div class="mini-stat"><small>SALVAMENTO</small><strong>' + (cloud.enabled ? 'Nuvem' : 'Local') + '</strong><span>' +
-      (cloud.enabled ? 'Netlify Blobs + aparelho' : 'Demonstração sem nuvem') + '</span></div>' +
-    '<div class="access-shortcut"><div><small>ACESSO DO MÚSICO</small><strong>Aplicativo no celular</strong><span>Link direto · Mesmo login · Loops offline</span></div>' +
+      (cloud.enabled ? 'Netlify Blobs + aparelho' : 'Salvo somente neste aparelho') + '</span></div>' +
+    '<div class="access-shortcut"><div><small>LINK DE TESTE</small><strong>Modo Live no celular</strong><span>Sem login · Biblioteca local de cada aparelho</span></div>' +
     button('link', 'Gerar link', 'link', 'primary') + '</div></div>' +
     (state.errors ? '<div class="warning" role="status">' + escape(state.errors) + ' ' +
       button('sync', 'Tentar sincronizar', 'refresh', 'ghost') + '</div>' : '') +
@@ -437,7 +438,7 @@ async function copyMobile() {
   url.hash = '';
   const published = !['localhost', '127.0.0.1', '0.0.0.0'].includes(url.hostname) && url.protocol === 'https:';
   dialog.innerHTML = '<h2>Link do aplicativo · Modo Live</h2>' +
-    '<p>Abra no celular, entre com a mesma conta e baixe os loops. No iPhone, use Safari → Compartilhar → Adicionar à Tela de Início.</p>' +
+    '<p>Abra sem login no celular. ATENÇÃO: os WAVs cadastrados no computador não são enviados para o celular neste modo; cada aparelho tem sua biblioteca local. No iPhone, use Safari → Compartilhar → Adicionar à Tela de Início.</p>' +
     (published ? '' : '<p class="warning">Este é um endereço de teste local. Publique no Netlify antes de usar o link em outro aparelho.</p>') +
     '<label class="field"><span>Endereço de acesso</span><input readonly value="' + escape(url.href) + '"></label>' +
     '<div class="batch-footer" style="margin-top:14px">' + button('copy', 'Copiar link', 'link', 'primary') +
@@ -464,7 +465,7 @@ async function openBackupCenter() {
   await saveBeforeLeaving();
   dialog.innerHTML = '<section class="backup-dialog"><p class="eyebrow">PROTEÇÃO DO REPERTÓRIO</p>'+
     '<h2>Backup e restauração</h2>'+
-    '<p>Escolha uma cópia para guardar fora do Netlify. O backup completo reúne músicas, viradas, regras e áudios WAV.</p>'+
+    '<p>O backup completo reúne músicas, viradas, regras e áudios WAV. Salve o ZIP fora do navegador: esta prévia não sincroniza com a nuvem.</p>'+
     '<div class="backup-choices">'+
     '<button type="button" class="button primary" data-backup="completo">' + icon('download') + 'Backup completo</button>'+
     '<button type="button" class="button ghost" data-backup="configuracoes">' + icon('cloud') + 'Só configurações</button>'+
@@ -472,8 +473,7 @@ async function openBackupCenter() {
     '<div class="backup-divider"></div><label class="field"><span>Importar e restaurar backup ZIP</span>'+
     '<input id="restore-file" type="file" accept=".zip,application/zip"></label>'+
     '<p class="subtle backup-small">A restauração adiciona novas cópias das músicas, sem sobrescrever as existentes.</p>'+
-    '<div class="backup-divider"></div><div class="backup-row"><button type="button" class="button ghost" id="list-history">' +
-    icon('layers') + 'Versões automáticas</button><button type="button" class="button ghost" id="migrate-v2">Importar cadastros locais V2</button></div>'+
+    ''+
     '<div id="backup-history"></div><p class="backup-progress" id="backup-progress" role="status"></p>'+
     '<menu><button class="button ghost" id="backup-close">Fechar</button></menu></section>';
   const message=dialog.querySelector('#backup-progress');
@@ -490,7 +490,7 @@ async function openBackupCenter() {
     message.textContent='Preparando backup…';
     const blob=await makeBackup(repo,mode,(n,total)=>{message.textContent='Incluindo WAV '+n+'/'+total;});
     const stamp=new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
-    triggerDownload(blob,'Loops-Marks-Pro-V3-'+mode+'-'+stamp+'.zip');
+    triggerDownload(blob,'Loops-Marks-Pro-V4-TESTE-'+mode+'-'+stamp+'.zip');
     message.textContent='Backup criado: '+(blob.size/1024/1024).toFixed(1)+' MB. Guarde este ZIP em local seguro.';
   })));
   dialog.querySelector('#restore-file').addEventListener('change',e=>{
@@ -500,30 +500,9 @@ async function openBackupCenter() {
       message.textContent='Restaurando…';
       const result=await restoreBackup(repo,file,(n,total)=>{message.textContent='Restaurando '+n+'/'+total;});
       await refreshLocal();requestSync();
-      message.textContent=result.imported+' músicas restauradas. A sincronização será feita com o Netlify.';
+      message.textContent=result.imported+' músicas restauradas neste navegador.';
     });
   });
-  dialog.querySelector('#migrate-v2').addEventListener('click',()=>lock(async()=>{
-    message.textContent='Importando rascunhos locais da versão anterior…';
-    const n=await repo.importV2Demo(); await refreshLocal();requestSync();
-    message.textContent=n ? n+' música(s) importada(s) da V2.' : 'Nenhum cadastro local da V2 encontrado neste aparelho.';
-  }));
-  dialog.querySelector('#list-history').addEventListener('click',()=>lock(async()=>{
-    if(!navigator.onLine)throw new Error('Para recuperar versões da nuvem, conecte-se à internet.');
-    const entries=await cloud.snapshots();
-    const list=dialog.querySelector('#backup-history');
-    list.innerHTML='<h3>Versões anteriores</h3>'+(entries.length ? entries.map((r,i)=>
-      '<div class="history-row"><span>'+escape(r.title)+'</span><button type="button" class="button ghost" data-history="'+i+'">Restaurar</button></div>').join(''):
-      '<p class="subtle backup-small">Nenhuma versão anterior na nuvem.</p>');
-    list.querySelectorAll('[data-history]').forEach(b=>b.addEventListener('click',()=>lock(async()=>{
-      const selected=entries[Number(b.dataset.history)];
-      if(!confirm('Restaurar esta versão da música? A versão atual também ficará guardada.'))return;
-      await cloud.restore(selected.key);
-      await refreshLocal(); await syncCatalog();
-      message.textContent='Versão recuperada na nuvem. Confira o repertório.';
-    })));
-    message.textContent=entries.length+' versões automáticas encontradas.';
-  }));
   dialog.showModal();
 }
 async function confirmBackupRestore(file) {

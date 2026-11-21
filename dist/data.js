@@ -49,7 +49,7 @@ export function newSong() {
 
 function openDB() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('loops-marks-data', 1);
+    const request = indexedDB.open('loops-marks-v4-teste-data', 1);
     request.onupgradeneeded = () => request.result.createObjectStore(STORE);
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
@@ -102,13 +102,16 @@ export class CloudError extends Error {
 // V3: Login do Netlify Identity e armazenamento exclusivamente no Netlify Blobs.
 // Os cookies de sessão são controlados pelo SDK oficial do Identity.
 export class Cloud {
-  enabled = true;
+  enabled = false;
   user = null;
   authFlow = null;
   authError = '';
   constructor() {}
   session() { return this.user; }
   async initialize() {
+    // MODO TESTE: não processar tokens, Identity nem acessar a nuvem.
+    this.user = null; this.authFlow = null; this.authError = '';
+    return null;
     // Primeiro identificamos o tipo de token, mas nunca guardamos o valor.
     // Um link de redefinição inválido não pode abrir diretamente a Central.
     const hash = typeof location === 'undefined' ? '' : location.hash || '';
@@ -207,6 +210,7 @@ export class Cloud {
     return this.user;
   }
   async request(op, { method = 'GET', body, headers = {}, responseType = 'json' } = {}) {
+    if (!this.enabled) throw new CloudError('Este modo teste não acessa a nuvem.', 403);
     await this.ready();
     const url = '/.netlify/functions/loops-api' + op;
     let res;
@@ -265,7 +269,7 @@ export class Repository {
   disk = new Disk();
   constructor(cloud) {
     this.cloud = cloud;
-    this.owner = cloud.session()?.id || 'demo';
+    this.owner = 'v4-teste-local';
   }
   key(kind, id = '') { return this.owner + '/' + kind + '/' + id; }
   song(id) { return this.disk.get(this.key('song', id)); }
