@@ -60,7 +60,7 @@ const KEY = 'loops-marks-last-user-v3';
 const STORE = 'dados';
 
 export function newSong() {
-  return { kind:'music', folderId:'', id: crypto.randomUUID(), name: '', occasion: '', bpm: 84, beats: 4, parts: {}, transitions: {}, customFills: [], fillMode: 'smart', repeatMode: 'fill', customSections: [], sequence: [], sequenceMode:'assisted', revision: 0 };
+  return { kind:'music', folderId:'', id: crypto.randomUUID(), name: '', occasion: '', bpm: 84, beats: 4, meter: '4/4', parts: {}, transitions: {}, customFills: [], fillMode: 'smart', repeatMode: 'fill', customSections: [], sequence: [], sequenceMode:'assisted', revision: 0 };
 }
 
 function openDB() {
@@ -408,9 +408,9 @@ export class Cloud {
   }
   catalog() { return this.request('?op=catalog'); }
   async save(owner, song) {
-    const { id, revision, name, occasion, bpm, beats, parts, transitions, customFills, customSections, sequence, sequenceMode, fillMode, repeatMode, kind, folderId, deleted, edit } = song;
+    const { id, revision, name, occasion, bpm, beats, meter, beatUnit, parts, transitions, customFills, customSections, sequence, sequenceMode, fillMode, repeatMode, kind, folderId, deleted, edit } = song;
     const content = deleted ? {deleted: true, edit} :
-      {name, occasion, bpm, beats, kind:kind||'music', folderId:folderId||'', parts, transitions: transitions || {}, customFills: customFills || [], customSections:customSections||[], sequence:sequence||[], sequenceMode:sequenceMode||'assisted', fillMode: fillMode || 'smart', repeatMode: repeatMode || 'fill', edit};
+      {name, occasion, bpm, beats, meter, beatUnit, kind:kind||'music', folderId:folderId||'', parts, transitions: transitions || {}, customFills: customFills || [], customSections:customSections||[], sequence:sequence||[], sequenceMode:sequenceMode||'assisted', fillMode: fillMode || 'smart', repeatMode: repeatMode || 'fill', edit};
     const data = await this.request('?op=save', { method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({id, revision, content}) });

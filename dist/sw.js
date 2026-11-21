@@ -1,7 +1,7 @@
-const VERSION = 'loops-marks-v15-692f4962b796';
+const VERSION = 'loops-marks-v16-0887adf6931b';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './netlify-client.js', './backup.js', './data.js', './library-model.js',
-  './audio.js', './stretch.js', './demo.js', './importer.js', './manifest.webmanifest',
+  './audio.js', './meter.js', './stretch.js', './demo.js', './importer.js', './manifest.webmanifest',
   './icon.svg', './icon-192.png', './icon-512.png',
 ];
 const scope = new URL(self.registration.scope);

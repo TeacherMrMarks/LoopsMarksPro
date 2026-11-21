@@ -1,11 +1,12 @@
 import { Cloud, Repository, PARTS, PLAY_PARTS, MANUAL_PARTS, FINALES, newSong, MAX_FILE_BYTES, fillBase, fillVariantId, firstPlayablePart, liveCatalog, playableParts, extraSections, CRASH_STOPS } from './data.js';
 import { suggestSlot } from './importer.js';
 import { Player, bpmRange } from './audio.js';
+import { METERS, meterOf, meterHint, meterChoice, beatUnitForChoice, countForMeter, classifyDuration, wavMeasure } from './meter.js';
 import { exampleSongs } from './demo.js';
 import { makeBackup, restoreBackup, triggerDownload } from './backup.js';
 import { emptyLibrary, cleanLibrary, songKind, inFolder, repertoireEntries } from './library-model.js';
 
-const APP_VERSION = 'V15';
+const APP_VERSION = 'V16';
 // O link do músico carrega exclusivamente o Modo Live.
 const musicianLink = new URL(location.href).searchParams.get('modo') === 'musico';
 const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
@@ -243,8 +244,8 @@ function deck() {
   const repEntries=activeRep?repertoireEntries(activeRep,songsFor('live')):[];
   const repNav=repEntries.length?'<div class="live-rep-strip"><span>'+icon('list')+' '+escape(activeRep.name)+' · '+(state.activeRepPos+1)+'/'+repEntries.length+'</span><div>'+iconButton('rep-prev-live','Música anterior','arrowup',''+(state.activeRepPos===0?'disabled':''))+iconButton('rep-next-live','Próxima música','arrowdown',''+(state.activeRepPos===repEntries.length-1?'disabled':''))+'</div></div>':'';
   return '<section class="frame">'+repNav+'<div class="deck-header"><div><h2>'+escape(song.name)+'</h2><p class="track-meta">' +
-    (song.occasion ? escape(song.occasion) + ' · ' : '') + escape(song.bpm) + ' BPM original · ' + escape(song.beats) +
-    ' tempos</p></div><span class="chip" id="player-chip"></span></div>' +
+    (song.occasion ? escape(song.occasion) + ' · ' : '') + escape(song.bpm) + ' BPM original · ' + escape(meterOf(song)) +
+    ' · ' + escape(song.beats) + ' pulsos</p></div><span class="chip" id="player-chip"></span></div>' +
     '<div class="stage-status" role="status" aria-live="polite"><div class="stage-status-main"><span class="stage-status-label">PARTE EM EXECUÇÃO</span>' +
     '<strong id="stage-active">' + escape(playableParts(song).find(p => p.id === openingPart)?.label || 'Aguardando') + '</strong></div>' +
     '<div class="stage-status-side"><span id="stage-mode">Pronto · contínuo</span><small id="stage-next"></small></div></div>' +
@@ -453,7 +454,7 @@ function editor() {
     (song.conflict ? '<div class="warning" role="status">Esta música foi editada em outro aparelho.' +
       '<div>' + button('resolve-remote', 'Usar versão da central', 'cloud', 'ghost') +
       button('resolve-local', 'Publicar minha edição', 'check', 'ghost') + '</div></div>' : '') +
-    '<details class="v12-editor-intro" id="v12-editor-intro" '+(state.introOpen?'open':'')+'><summary>'+icon('settings')+'<strong>Dados e comportamento musical</strong><span>'+escape(song.bpm)+' BPM · '+escape(song.beats)+'/4 · '+(songKind(song)==='rhythm'?'Ritmo':'Música')+'</span></summary><div class="v12-editor-intro-body">'+
+    '<details class="v12-editor-intro" id="v12-editor-intro" '+(state.introOpen?'open':'')+'><summary>'+icon('settings')+'<strong>Dados e comportamento musical</strong><span>'+escape(song.bpm)+' BPM · '+escape(meterOf(song))+' · '+(songKind(song)==='rhythm'?'Ritmo':'Música')+'</span></summary><div class="v12-editor-intro-body">'+
     '<div class="v11-classification"><label class="field"><span>Tipo de cadastro</span><select data-field="kind">' +
     ['music','rhythm'].map(k=>'<option value="'+k+'" '+(songKind(song)===k?'selected':'')+'>'+(k==='music'?'Música específica':'Ritmo reutilizável')+'</option>').join('')+'</select></label>' +
     '<label class="field"><span>Pasta</span><select data-field="folderId"><option value="">Sem pasta</option>' +
@@ -463,9 +464,9 @@ function editor() {
     '<div class="form-grid">' + field('name', 'Nome da música', song.name, 'maxlength="90" placeholder="Ex.: Entrada da noiva"') +
     field('occasion', 'Momento', song.occasion, 'maxlength="55" placeholder="Ex.: Entrada"') +
     field('bpm', 'BPM original', song.bpm, 'type="number" min="30" max="280"') +
-    '<label class="field"><span>Tempos / compasso</span><select data-field="beats">' +
-    [2,3,4,5,6].map(beats => '<option ' + (beats === song.beats ? 'selected' : '') + '>' + beats + '</option>').join('') +
-    '</select></label></div>' +
+    '<label class="field"><span>Fórmula de compasso</span><select data-field="meter" aria-label="Fórmula de compasso">' +
+    METERS.map(meter => '<option value="' + meter.value + '" ' + (meterChoice(song) === meter.value ? 'selected' : '') + '>' + (meter.label||meter.value) + '</option>').join('') +
+    '</select><small class="v16-meter-hint">'+escape(meterHint(song))+'</small></label></div>' +
     '<div class="section-head"><h2>02 · Comportamento musical</h2><span>Personalizado por música</span></div>' +
     '<div class="form-grid">' +
     '<label class="field"><span>Troca de parte / virada</span><select data-field="fillMode">' +
@@ -613,7 +614,7 @@ function updateAdminSidebar(){
     .sort((a,b)=>(a.name||'').localeCompare(b.name||'','pt-BR'));
   const counter=get('#catalog-count');if(counter)counter.textContent=String(rows.length);
   container.innerHTML=rows.map(song=>'<button type="button" class="v12-catalog-card" data-action="song" data-id="'+escape(song.id)+'">'+
-    '<span class="v12-catalog-symbol">'+icon(songKind(song)==='rhythm'?'wave':'music')+'</span><span><strong>'+escape(song.name||'Sem título')+'</strong><small>'+escape(song.occasion||'Sem categoria')+' · '+song.bpm+' BPM</small></span>'+icon('arrowdown')+'</button>').join('')||
+    '<span class="v12-catalog-symbol">'+icon(songKind(song)==='rhythm'?'wave':'music')+'</span><span><strong>'+escape(song.name||'Sem título')+'</strong><small>'+escape(song.occasion||'Sem categoria')+' · '+song.bpm+' BPM · '+escape(meterOf(song))+'</small></span>'+icon('arrowdown')+'</button>').join('')||
     '<p class="empty-list">Nenhum cadastro nesta pasta. Crie um item pelo botão acima.</p>';
 }
 function updateLibrary() {
@@ -634,7 +635,7 @@ function updateLibrary() {
       const status=firstPlayablePart(song)?'':' · Falta loop contínuo';
       return '<button type="button" class="item" data-action="song" data-id="'+escape(song.id)+'" aria-pressed="'+(song.id===state.selected?.id)+'">'+
         '<span class="item-icon">'+icon(songKind(song)==='rhythm'?'wave':'music')+'</span><span><span class="item-title">'+escape(song.name||'Sem título')+
-        '</span><span class="item-meta">'+(songKind(song)==='rhythm'?'Ritmo':'Música')+' · '+escape(song.occasion||'')+' · '+song.bpm+' BPM'+status+'</span></span>'+
+        '</span><span class="item-meta">'+(songKind(song)==='rhythm'?'Ritmo':'Música')+' · '+escape(song.occasion||'')+' · '+song.bpm+' BPM · '+escape(meterOf(song))+status+'</span></span>'+
         (downloaded?icon('check'):'')+'</button>';
     }).join('')||'<p class="empty-list">Nenhum item encontrado.</p>';
   app.querySelectorAll('[data-action="drawer-tab"]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.tab===state.drawerTab)));
@@ -1338,16 +1339,19 @@ async function inspectWav(file, part, song) {
   const fill = slotInfo(song,fillBase(part))?.type === 'virada';
   if (variant && (!fill || Number(variant[1]) > song.beats)) throw new Error('Variação inválida para o compasso atual.');
   if (!ending) {
-    const estimatedBeats = duration / secondsPerBeat;
-    const beats = Math.max(1, Math.round(estimatedBeats));
-    if (Math.abs(beats * secondsPerBeat - duration) > 0.085) {
-      throw new Error(file.name + ': duração não encaixa em tempos inteiros a ' + song.bpm + ' BPM.');
+    const timing=classifyDuration(duration,song,fill);
+    const beats=Math.max(1,timing.beats);
+    if (!timing.ok && timing.reason==='tempo') {
+      throw new Error(file.name + ': o WAV mede '+duration.toFixed(3)+' s, mas não encaixa em ' +
+        meterOf(song) + ' a '+song.bpm+' BPM. Um compasso deve durar '+wavMeasure(song).toFixed(3)+
+        ' s. Confira o compasso, o BPM e o corte na DAW.');
     }
     if (variant && beats !== Number(variant[1])) {
       throw new Error(file.name + ': esta variação deve ter exatamente ' + variant[1] + ' tempos.');
     }
-    if (!fill && beats % song.beats !== 0) {
-      throw new Error(file.name + ': o loop deve conter compassos completos (' + song.beats + '/4).');
+    if (!fill && !timing.ok) {
+      throw new Error(file.name + ': o loop precisa conter compassos completos de ' + meterOf(song) +
+        ' ('+song.beats+' pulsos por compasso). Confira o corte do WAV.');
     }
     if (beats > (fill ? 128 : 64 * song.beats)) throw new Error(file.name + ': o trecho está longo demais.');
     return { part, file, meta: { path: repo.owner + '/' + song.id + '/' + crypto.randomUUID() + '.wav',
@@ -1865,6 +1869,17 @@ app.addEventListener('input', event => {
       persistDraft().then(()=>render()).catch(()=>{});return;}
     if(field==='folderId'){state.admin.folderId=input.value;state.adminFolder=input.value;
       persistDraft().then(()=>render()).catch(()=>{});return;}
+    if (field==='meter') {
+      const pulses=countForMeter(input.value);
+      if(!pulses || (meterChoice(state.admin)===input.value && state.admin.beats===pulses))return;
+      const existing=Object.keys(state.admin.parts||{}).length;
+      state.admin.meter=input.value==='6/8@quarter'?'6/8':input.value;
+      state.admin.beatUnit=beatUnitForChoice(input.value);
+      state.admin.beats=pulses;
+      if(existing)notice('Compasso alterado. Confira os WAVs já importados: precisam corresponder ao novo compasso e BPM.');
+      persistDraft().then(()=>render()).catch(error=>notice(error.message));
+      return;
+    }
     if (['bpm', 'beats'].includes(field)) {
       if (!input.value || !Number(input.value)) return;
       state.admin[field] = Number(input.value);

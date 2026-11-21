@@ -12,6 +12,7 @@ const CHUNK_LIMIT = 1_572_864;
 const json = (data, status=200) => Response.json(data, {status, headers:{'Cache-Control':'no-store'}});
 const fail = (message, status=400) => json({message},status);
 import { validLibrary, cleanLibrary } from '../../dist/library-model.js';
+import { validMeter } from '../../dist/meter.js';
 const uuid = id => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f-]{26,38}$/i.test(id);
 function validAudio(path, owner) {
   return typeof path==='string' && path.startsWith(owner+'/') &&
@@ -23,7 +24,7 @@ function validateContent(content, owner) {
   if (typeof content.name !== 'string' || content.name.length>90 ||
       typeof content.occasion!=='string' || content.occasion.length>55 ||
       !Number.isFinite(content.bpm) || content.bpm<30 || content.bpm>280 ||
-      !Number.isInteger(content.beats) || content.beats<2 || content.beats>6 ||
+      !validMeter(content) ||
       !content.parts || typeof content.parts!=='object' || Array.isArray(content.parts)) return false;
   if ((content.kind && !['music','rhythm'].includes(content.kind)) ||
       (content.folderId && !uuid(content.folderId))) return false;

@@ -44,12 +44,15 @@ globalThis.__netlifyIdentity={ getUser:async()=>loggedIn?({id:owner,email:'teste
   verifyRequestOrigin:()=>{} };
 const libSrc=await readFile(new URL('../dist/library-model.js',import.meta.url),'utf8');
 const libUrl='data:text/javascript;base64,'+Buffer.from(libSrc).toString('base64');
+const meterSrc=await readFile(new URL('../dist/meter.js',import.meta.url),'utf8');
+const meterUrl='data:text/javascript;base64,'+Buffer.from(meterSrc).toString('base64');
 const source=(await readFile(new URL('../netlify/functions/loops-api.mjs',import.meta.url),'utf8'))
   .replace("import { getUser, verifyRequestOrigin } from '@netlify/identity';",
     'const {getUser,verifyRequestOrigin}=globalThis.__netlifyIdentity;')
   .replace("import { getStore } from '@netlify/blobs';",
     'const getStore=globalThis.__netlifyBlobs;')
-  .replace("from '../../dist/library-model.js';","from '"+libUrl+"';");
+  .replace("from '../../dist/library-model.js';","from '"+libUrl+"';")
+  .replace("from '../../dist/meter.js';","from '"+meterUrl+"';");
 const {default:handler}=await import('data:text/javascript;charset=utf-8,'+encodeURIComponent(source));
 function invoke(op,method='GET',body=null,type='application/json'){
   const request=new Request('https://loops-marks-pro.netlify.app/.netlify/functions/loops-api'+op,{method,
@@ -158,4 +161,26 @@ test('V12: links pessoais são revogáveis e só permitem leitura de músicas e 
   const manifest=await musician(new Request('https://loops-marks-pro.netlify.app/.netlify/functions/loops-musician?op=manifest&chave='+encodeURIComponent(newLink.token)));
   assert.equal(manifest.status,200);
   assert.match((await manifest.json()).start_url,/modo=musico.*chave=/);
+});
+
+
+test('V16: Netlify saves real 3/4 and 6/8 signatures and refuses inconsistent pulses',async()=>{
+  const cloud=new Cloud();cloud.user={id:owner,email:'teste@example.com'};
+  const original=globalThis.fetch;
+  globalThis.fetch=(url,options={})=>handler(new Request('https://loops-marks-pro.netlify.app'+url,options));
+  const uuid=crypto.randomUUID();
+  try {
+    const six={id:uuid,revision:0,name:'Blues composto',occasion:'Blues',bpm:90,
+      beats:2,meter:'6/8',parts:{},kind:'rhythm',transitions:{},customFills:[]};
+    assert.equal(await cloud.save(owner,six),1);
+    const catalog=await cloud.catalog();
+    assert.equal(catalog.find(s=>s.id===uuid).content.meter,'6/8');
+    assert.equal(catalog.find(s=>s.id===uuid).content.beats,2);
+    const wrong=await invoke('?op=save','POST',JSON.stringify({id:uuid,revision:1,
+      content:{...six,beats:4,meter:'6/8'}}));
+    assert.equal(wrong.status,400);
+    const waltz=await invoke('?op=save','POST',JSON.stringify({id:uuid,revision:1,
+      content:{...six,beats:3,meter:'3/4',name:'Balada três por quatro'}}));
+    assert.equal(waltz.status,200);
+  } finally {globalThis.fetch=original;}
 });

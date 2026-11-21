@@ -4,13 +4,14 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 import * as data from '../dist/data.js';
 import * as lib from '../dist/library-model.js';
+import * as meter from '../dist/meter.js';
 import {Player,bpmRange} from '../dist/audio.js';
 const source=readFileSync(new URL('../dist/app.js',import.meta.url),'utf8')
   .replace(/^import .*;\n/gm,'').split("document.addEventListener('keydown',")[0];
 function context(mode='central'){
   const root={querySelector:()=>null};
   const sandbox={
-    ...data,...lib,Player,bpmRange,
+    ...data,...lib,...meter,Player,bpmRange,
     Cloud:class {enabled=true;session(){return {id:'u1',email:'editor@example.com'}}},
     location:{href:'https://loops.test/?modo='+mode},
     URL,crypto,structuredClone,
@@ -60,4 +61,18 @@ test('V12 modo músico exibe somente a execução e acesso à gaveta, sem editor
  assert.match(html,/stage-shell/);assert.match(html,/repertoire-toggle/);
  assert.match(html,/PARTE EM EXECUÇÃO/);assert.match(html,/id="play-btn"/);
  assert.doesNotMatch(html,/class="v11-editor"|data-action="browse"|data-action="new"/);
+});
+
+test('V16 renderiza 3/4 e 6/8 com opções e unidade de BPM apropriada',()=>{
+ const ctx=context(),balada=song();balada.meter='3/4';balada.beats=3;ctx.testSong=balada;
+ let html=vm.runInContext('state.admin=testSong;editor()',ctx);
+ assert.match(html,/Fórmula de compasso/);
+ assert.match(html,/value="3\/4" selected/);
+ assert.match(html,/valsa/);
+ balada.meter='6/8';balada.beats=2;html=vm.runInContext('state.admin=testSong;editor()',ctx);
+ assert.match(html,/value="6\/8" selected/);
+ assert.match(html,/semínima pontuada/);
+ assert.match(html,/6\/8 · BPM de semínima \(DAW\)/);
+ balada.beatUnit='quarter';balada.beats=3;html=vm.runInContext('state.admin=testSong;editor()',ctx);
+ assert.match(html,/value="6\/8@quarter" selected/);
 });

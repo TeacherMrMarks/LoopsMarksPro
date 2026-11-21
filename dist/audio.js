@@ -1,5 +1,6 @@
 import { PARTS, DEFAULT_FILLS, FILL_IDS, ENTRY_OF, BASE_OF_ENTRY, fillBase, fillVariantId, firstPlayablePart, playableParts, extraSections, CRASH_STOPS } from './data.js';
 import { demoBuffer } from './demo.js';
+import { meterOf } from './meter.js';
 
 const LOOPS = new Set(Object.keys(ENTRY_OF));
 const ENDINGS = new Set(['outro', 'finish', ...CRASH_STOPS.map(part => part.id)]);
@@ -103,7 +104,7 @@ export class Player {
           throw new Error(this.label(key) + ': configure a duração em tempos inteiros.');
         }
         if (!this.isFill(key) && beats % song.beats !== 0) {
-          throw new Error(this.label(key) + ' precisa ter compassos completos.');
+          throw new Error(this.label(key) + ' precisa ter compassos completos de ' + meterOf(song) + '.');
         }
         const variant = key.match(/__(\d+)$/);
         if (variant && beats !== Number(variant[1])) {
@@ -112,7 +113,7 @@ export class Player {
         const expected = beats * beatSeconds;
         if (Math.abs(decoded.duration - expected) > 0.085) {
           throw new Error(this.label(key) + ' mede ' + decoded.duration.toFixed(2) +
-            ' s. Para ' + beats + ' tempos deve medir ' + expected.toFixed(2) + ' s. Confira o BPM e o corte na DAW.');
+            ' s. Para ' + beats + ' pulsos em ' + meterOf(song) + ' deve medir ' + expected.toFixed(2) + ' s. Confira o BPM, o compasso e o corte na DAW.');
         }
       }
       const target = ENDINGS.has(key) ? decoded.duration * ratio : beats * (60 / bpm);

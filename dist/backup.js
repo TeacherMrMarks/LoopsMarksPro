@@ -1,10 +1,11 @@
 import { zipSync, unzipSync, strToU8, strFromU8 } from './netlify-client.js';
 import { MAX_FILE_BYTES } from './data.js';
 import { cleanLibrary } from './library-model.js';
+import { validMeter, meterOf } from './meter.js';
 const LIMIT = 420 * 1024 * 1024;
 function slim(song) {
   return { originalId:song.id, kind:song.kind||'music', folderId:song.folderId||'', name: song.name || '', occasion: song.occasion || '', bpm: song.bpm,
-    beats: song.beats, parts: structuredClone(song.parts||{}),
+    beats: song.beats, meter: meterOf(song), beatUnit:song.beatUnit, parts: structuredClone(song.parts||{}),
     transitions: structuredClone(song.transitions||{}), customFills: structuredClone(song.customFills||[]),
     fillMode: song.fillMode || 'smart', repeatMode: song.repeatMode || 'fill', customSections:structuredClone(song.customSections||[]), sequence:structuredClone(song.sequence||[]), sequenceMode:song.sequenceMode||'assisted' };
 }
@@ -58,11 +59,11 @@ export async function restoreBackup(repo, file, progress = () => {}) {
   }
   for(const [i,song] of manifest.songs.entries()) {
     if(typeof song.name!=='string'||song.name.length>90 || !Number.isFinite(song.bpm) ||
-       song.bpm<30||song.bpm>280||!Number.isInteger(song.beats) || song.beats<2||song.beats>6 ||
+       song.bpm<30||song.bpm>280||!validMeter(song) ||
        !song.parts || typeof song.parts!=='object') throw new Error('Dados inválidos no backup.');
     const id=crypto.randomUUID();if(song.originalId)idMap.set(song.originalId,id);
     const restored={id,kind:song.kind==='rhythm'?'rhythm':'music',folderId:folderMap.get(song.folderId)||'',name:song.name,occasion:String(song.occasion||'').slice(0,55),bpm:song.bpm,
-      beats:song.beats,parts:{},transitions:song.transitions||{},customFills:song.customFills||[],
+      beats:song.beats,meter:meterOf(song),beatUnit:song.beatUnit,parts:{},transitions:song.transitions||{},customFills:song.customFills||[],
       fillMode: song.fillMode || 'smart', repeatMode: song.repeatMode || 'fill',customSections:song.customSections||[],sequence:song.sequence||[],sequenceMode:song.sequenceMode||'assisted',revision:0};
     const files=[];
     for(const [part,meta] of Object.entries(song.parts)) {

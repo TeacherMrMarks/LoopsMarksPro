@@ -1011,3 +1011,6 @@ body.drawer-visible {overflow:hidden}
   .v12-sidebar-bottom .v15-primary-nav{width:auto;}
   .v15-sync-status{font-size:.66rem;}
 }
+
+/* V16: indicação discreta do compasso e da unidade de BPM sem mudar a paleta atual. */
+.v16-meter-hint{display:block;max-width:34rem;line-height:1.45;margin-top:6px;font-size:.75rem;color:var(--muted,#9eb7c5);white-space:normal}

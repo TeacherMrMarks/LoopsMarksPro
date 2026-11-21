@@ -1,1 +1,1 @@
-Loops Marks Pro V15 — menus externos padronizados; sincronização no topo direito; abas “Loop + Crash” e “Crash” separadas com ataques finais bumbo + prato sem viradas. Sem mudanças no Netlify ou na paleta.
+Loops Marks Pro V16 — Fórmula de compasso real para músicas e ritmos (2/4, 3/4, 4/4, 6/8, 9/8, 12/8 e outras), cálculo de WAV, viradas e pulso. Duas convenções de BPM para 6/8. Backups e links preservados.
