@@ -6,7 +6,7 @@ import { exampleSongs } from './demo.js';
 import { makeBackup, restoreBackup, triggerDownload } from './backup.js';
 import { emptyLibrary, cleanLibrary, songKind, inFolder, repertoireEntries } from './library-model.js';
 
-const APP_VERSION = 'V16';
+const APP_VERSION = 'V17';
 // O link do músico carrega exclusivamente o Modo Live.
 const musicianLink = new URL(location.href).searchParams.get('modo') === 'musico';
 const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
@@ -337,12 +337,12 @@ function repertoiresPanel() {
       '<div class="rep-tracks">'+(rep.items.map((item,index)=>{
         const song=songs.find(s=>s.id===item.songId);
         return '<div class="rep-track"><span class="rep-track-num">'+(index+1)+'</span><span class="rep-track-name"><input type="text" maxlength="90" data-rep-title="'+index+'" aria-label="Nome da música neste repertório" placeholder="Nome neste repertório" value="'+escape(item.title||song?.name||'')+'"><small>'+(songKind(song)==='rhythm'?'Ritmo':'Música')+(song?' · '+song.bpm+' BPM':'')+'</small></span>'+
-          '<label class="rep-bpm">BPM<input type="number" min="30" max="280" data-rep-bpm="'+index+'" placeholder="Original" value="'+(item.bpm||'')+'" aria-label="BPM do item '+(index+1)+'"></label>'+
+          '<label class="rep-bpm">BPM<input type="number" min="'+(song?bpmRange(song.bpm)[0]:30)+'" max="'+(song?bpmRange(song.bpm)[1]:280)+'" data-rep-bpm="'+index+'" placeholder="Original" value="'+(item.bpm||'')+'" aria-label="BPM do item '+(index+1)+'" title="Ajuste seguro: até 10 BPM acima ou abaixo do WAV original"></label>'+
           iconButton('rep-up','Subir item','arrowup','data-index="'+index+'" '+(index===0?'disabled':''))+
           iconButton('rep-down','Descer item','arrowdown','data-index="'+index+'" '+(index===rep.items.length-1?'disabled':''))+
           iconButton('rep-remove','Remover do repertório','trash','data-index="'+index+'"')+'</div>';}).join('')||'<p class="subtle">Adicione uma música ou ritmo abaixo.</p>')+'</div>'+
-      '<div class="v11-form-row rep-add"><label class="field"><span>Nome no repertório (opcional)</span><input id="rep-add-name" maxlength="90" placeholder="Ex.: Entrada da noiva"></label><label class="field"><span>Adicionar da biblioteca</span><select id="rep-add-song">'+
-      songs.map(s=>'<option value="'+escape(s.id)+'">'+escape(s.name||'Sem título')+' · '+(songKind(s)==='rhythm'?'Ritmo':'Música')+'</option>').join('')+'</select></label>'+button('rep-add','Adicionar','plus','primary',songs.length?'':'disabled')+'</div>')+'</div></div>';
+      '<div class="v11-form-row rep-add"><label class="field"><span>Nome da música no repertório</span><input id="rep-add-name" maxlength="90" placeholder="Ex.: Deus Cuida de Mim"></label><label class="field"><span>Selecionar música ou ritmo existente</span><select id="rep-add-song">'+
+      songs.map(s=>'<option value="'+escape(s.id)+'">'+escape(s.name||'Sem título')+' · '+(songKind(s)==='rhythm'?'Ritmo':'Música')+'</option>').join('')+'</select></label><label class="field"><span>BPM desta música (opcional)</span><input id="rep-add-bpm" type="number" min="30" max="280" placeholder="BPM original"></label>'+button('rep-add','Adicionar ao repertório','plus','primary',songs.length?'':'disabled')+'</div><p class="v17-rep-help">Ao selecionar um ritmo, informe o nome da música e seu BPM. O ritmo original e os arquivos WAV permanecem intactos. O ajuste seguro de andamento é de até ±10 BPM do WAV original.</p>')+'</div></div>';
 }
 
 function field(key, title, value, attrs = '') {
@@ -448,9 +448,9 @@ function customEntryEditor(song){
 function editor() {
   const song = state.admin;
   const customized = song.customFills || [];
-  return '<div class="deck-header"><div><p class="eyebrow">EDITOR DE LOOPS</p><h2 id="editor-title">' + escape(song.name || 'Nova música') +
+  return '<div class="deck-header"><div><p class="eyebrow">EDITOR DE LOOPS</p><h2 id="editor-title">' + escape(song.name || (songKind(song)==='rhythm'?'Novo ritmo':'Nova música')) +
     '</h2><p class="track-meta" id="save-label">Salvamento automático</p></div>' +
-    iconButton('delete', 'Excluir música', 'trash') + '</div>' +
+    iconButton('delete', songKind(song)==='rhythm'?'Excluir ritmo':'Excluir música', 'trash') + '</div>' +
     (song.conflict ? '<div class="warning" role="status">Esta música foi editada em outro aparelho.' +
       '<div>' + button('resolve-remote', 'Usar versão da central', 'cloud', 'ghost') +
       button('resolve-local', 'Publicar minha edição', 'check', 'ghost') + '</div></div>' : '') +
@@ -461,13 +461,13 @@ function editor() {
     kindFolders(songKind(song)).map(f=>'<option value="'+escape(f.id)+'" '+(song.folderId===f.id?'selected':'')+'>'+escape(f.name)+'</option>').join('')+'</select></label></div>' +
     (songKind(song)==='rhythm' ? '<div class="v11-rhythm-template"><span>Use esta bateria em outras músicas sem reimportar os WAVs.</span>'+button('make-from-rhythm','Criar música a partir deste ritmo','plus','ghost')+'</div>' : '') +
     '<div class="section-head"><h2>01 · Identificação</h2><span>Salva automaticamente</span></div>' +
-    '<div class="form-grid">' + field('name', 'Nome da música', song.name, 'maxlength="90" placeholder="Ex.: Entrada da noiva"') +
-    field('occasion', 'Momento', song.occasion, 'maxlength="55" placeholder="Ex.: Entrada"') +
+    '<div class="form-grid">' + field('name', songKind(song)==='rhythm'?'Nome do ritmo':'Nome da música', song.name, songKind(song)==='rhythm'?'maxlength="90" placeholder="Ex.: Balada Pop, Blues 6/8, Valsa"':'maxlength="90" placeholder="Ex.: Entrada da noiva"') +
+    field('occasion', songKind(song)==='rhythm'?'Estilo musical':'Momento', song.occasion, songKind(song)==='rhythm'?'maxlength="55" placeholder="Ex.: Pop, Blues, Sertanejo"':'maxlength="55" placeholder="Ex.: Entrada"') +
     field('bpm', 'BPM original', song.bpm, 'type="number" min="30" max="280"') +
     '<label class="field"><span>Fórmula de compasso</span><select data-field="meter" aria-label="Fórmula de compasso">' +
     METERS.map(meter => '<option value="' + meter.value + '" ' + (meterChoice(song) === meter.value ? 'selected' : '') + '>' + (meter.label||meter.value) + '</option>').join('') +
     '</select><small class="v16-meter-hint">'+escape(meterHint(song))+'</small></label></div>' +
-    '<div class="section-head"><h2>02 · Comportamento musical</h2><span>Personalizado por música</span></div>' +
+    '<div class="section-head"><h2>02 · Comportamento musical</h2><span>Personalizado por '+(songKind(song)==='rhythm'?'ritmo':'música')+'</span></div>' +
     '<div class="form-grid">' +
     '<label class="field"><span>Troca de parte / virada</span><select data-field="fillMode">' +
     '<option value="smart" ' + ((song.fillMode || 'smart') === 'smart' ? 'selected' : '') + '>Inteligente · próximo tempo 1</option>' +
@@ -1606,7 +1606,13 @@ async function handleAction(element) {
   if(action==='edit-repertoire'){state.repEditingId=id;render();return;}
   if(action==='rep-add'){
     const selected=get('#rep-add-song')?.value;if(!selected)return;
-    await mutateRepertoire(rep=>{rep.items.push({songId:selected,bpm:null,title:get('#rep-add-name')?.value.trim().slice(0,90)||''});});return;
+    const source=state.songs.find(song=>song.id===selected&&!song.deleted);if(!source)return;
+    const title=get('#rep-add-name')?.value.trim().slice(0,90)||'';
+    if(songKind(source)==='rhythm'&&!title){notice('Informe o nome da música para utilizar este ritmo no repertório.');get('#rep-add-name')?.focus();return;}
+    const raw=get('#rep-add-bpm')?.value.trim()||'';const tempo=raw?Number(raw):null;
+    const [min,max]=bpmRange(source.bpm);
+    if(tempo!==null&&(!Number.isInteger(tempo)||tempo<min||tempo>max)){notice('Este WAV permite BPM entre '+min+' e '+max+'. O ritmo original não será modificado.');get('#rep-add-bpm')?.focus();return;}
+    await mutateRepertoire(rep=>{rep.items.push({songId:selected,bpm:tempo,title});});return;
   }
   if(['rep-up','rep-down','rep-remove'].includes(action)){
     const index=Number(element.dataset.index);
@@ -1885,7 +1891,7 @@ app.addEventListener('input', event => {
       state.admin[field] = Number(input.value);
     } else {
       state.admin[field] = input.value.trim();
-      if (field === 'name') get('#editor-title').textContent = state.admin[field] || 'Nova música';
+      if (field === 'name') get('#editor-title').textContent = state.admin[field] || (songKind(state.admin)==='rhythm'?'Novo ritmo':'Nova música');
     }
     delayedSave();
   } else if (input.dataset.length && input.value && Number(input.value) >= 1) {
@@ -1924,6 +1930,8 @@ app.addEventListener('change', event => {
   if(el.dataset.repBpm!==undefined){
     const rep=currentRepertoire();const entry=rep?.items[Number(el.dataset.repBpm)];if(!entry)return;
     const n=Number(el.value);if(el.value&&!Number.isInteger(n)||el.value&&(n<30||n>280)){notice('BPM entre 30 e 280.');return;}
+    const source=state.songs.find(song=>song.id===entry.songId&&!song.deleted);
+    if(el.value&&source){const [min,max]=bpmRange(source.bpm);if(n<min||n>max){notice('BPM permitido para este WAV: '+min+' a '+max+'.');el.value=entry.bpm||'';return;}}
     entry.bpm=el.value?n:null;saveLibraryData().then(()=>render()).catch(e=>notice(e.message));return;
   }
   if (event.target.id === 'batch-files') { batchPreview(event.target); return; }

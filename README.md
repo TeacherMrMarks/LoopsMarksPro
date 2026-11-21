@@ -1,8 +1,15 @@
-# Loops Marks Pro — V16
+# Loops Marks Pro — V17
 
-Atualização incremental da **V15**, voltada apenas à identificação do compasso, à duração dos WAVs e ao agendamento musical correspondente. As cores, layout, links do músico, autenticação Netlify Identity, Netlify Blobs, diretórios, paleta, cadastros e a lógica anterior de viradas e crash permanecem preservados.
+Atualização incremental da **V16** com identificação específica para ritmos e criação de entradas de repertório usando um ritmo existente e BPM independente. O suporte a fórmulas de compasso da V16 permanece preservado. As cores, layout, links do músico, autenticação Netlify Identity, Netlify Blobs, diretórios, paleta, cadastros e a lógica anterior de viradas e crash permanecem preservados.
 
-## Nova fórmula de compasso — músicas e ritmos
+## V17 — Ritmos independentes e repertório inteligente
+
+- Ao escolher **Ritmo reutilizável**, a identificação passa a mostrar **Nome do ritmo** e **Estilo musical**; em **Música específica**, continua **Nome da música** e **Momento**. Os campos técnicos, as viradas, o compasso, a biblioteca de WAVs e o comportamento musical permanecem.
+- Em **Repertórios**, selecione um ritmo ou uma música já cadastrada, informe um nome de música para a entrada e, se desejar, ajuste o BPM. Cada entrada do repertório guarda seu próprio nome e BPM, sem alterar o ritmo original nem duplicar arquivos WAV.
+- **Limite atual do player:** somente de -10 a +10 BPM em relação ao BPM original do WAV, além dos limites gerais de 30 a 280 BPM. Valores fora da faixa são recusados no cadastro e na edição.
+- O Modo Live e os links de músicos continuam a carregar a biblioteca e os repertórios pelo mesmo mecanismo de sincronização. Confirme o comportamento em seu site de teste e nos aparelhos reais antes de promover para produção.
+
+## Fórmulas de compasso herdadas da V16 — músicas e ritmos
 
 Na aba **Dados**, o antigo campo genérico "Tempos / compasso" virou **Fórmula de compasso**. Opções: 2/4, 3/4, 4/4, 5/4, 6/4, 7/4, 2/2, 3/8, 5/8, 6/8, 7/8, 9/8 e 12/8.
 
@@ -32,13 +39,14 @@ O importador não altera o som nem muda silenciosamente o ritmo: ele exige que o
 
 ## Como testar antes de publicar
 
-1. Faça o backup da V15 e mantenha o ZIP anterior.
-2. Extraia a V16, envie os **40+ arquivos e pastas extraídos** para a raiz do mesmo GitHub e mantenha o build existente `npm run build`, publicação `dist`, funções `netlify/functions`.
+1. Faça o backup da V16 e mantenha o ZIP anterior.
+2. Extraia a V17, envie os **40+ arquivos e pastas extraídos** para a raiz do mesmo GitHub e mantenha o build existente `npm run build`, publicação `dist`, funções `netlify/functions`.
 3. Abra o Permalink do deploy de teste.
 4. Crie um **ritmo 3/4** a 80 BPM e importe um loop de 2,25 s por compasso (4,5 s para 2 compassos).
 5. Crie um **ritmo 6/8** a 80 BPM e importe um loop de 1,5 s por compasso, ou selecione a variante **BPM de semínima (DAW)** e use 2,25 s por compasso.
 6. Confira as trocas de parte, viradas, o tempo 1 e o player no iPhone, incluindo o uso offline.
-7. Confira o backup/restore de um ritmo ou música 6/8. Somente promova a V16 para produção após passar nos testes reais de palco.
+7. Monte um repertório com uma música nomeada a partir de um ritmo de 82 BPM; escolha 76 BPM e confirme no Modo Live do celular que o ritmo original continua a 82 BPM.
+8. Confira o backup/restore de um ritmo ou música 6/8. Somente promova a V17 para produção após passar nos testes reais de palco.
 
 ## Testes
 
