@@ -1,20 +1,11 @@
-LOOPS MARKS PRO V5 — CONFIGURAÇÃO NO MESMO NETLIFY
+LOOPS MARKS PRO V6 - INSTRUÇÕES
 
-1. Extraia o ZIP; envie todo conteúdo à RAIZ do GitHub LoopsMarksPro.
-2. No Netlify, em Environment variables (escopo Functions, Production e Deploy Previews):
-   LOOPS_ADMIN_USERNAME = marks
-   LOOPS_ADMIN_PASSWORD = <SENHA FORTE DE NO MÍNIMO 16 CARACTERES>
-   LOOPS_SESSION_SECRET = <CHAVE ALEATÓRIA DIFERENTE, MÍNIMO 32 CARACTERES>
-   Você receberá as sugestões de senha e chave na conversa, NÃO dentro do ZIP.
-3. Build settings: Base directory vazio; Package directory vazio;
-   Build command = npm run build; Publish directory = dist;
-   Functions directory = netlify/functions.
-4. Faça um NOVO deploy após adicionar as variáveis e confira V5 no topo.
-5. Login: usuário 'marks' e a senha configurada no painel (não precisa de e-mail).
-6. Para usar apenas o login próprio da aplicação, a visibilidade Private do Netlify
-   deve ser desativada; a biblioteca continua protegida por autenticação de servidor.
-7. Antes de editar registros antigos, exporte backup pela V4/V3.2 e importe na V5:
-   o novo identificador do administrador é diferente do antigo Identity.
-
-NÃO use Netlify Drop para esta V5: ele não instala as dependências nem configura
-as Functions necessárias para salvar na nuvem.
+USAR O MESMO SITE E GITHUB.
+Subir arquivos extraídos à RAIZ do repositório.
+Netlify: base vazio; command npm run build; publish dist; functions netlify/functions.
+IMPORTANTE: publicar V6 no DOMÍNIO PRINCIPAL para aceitar links de convite e recuperação de senha. Permalink antigo não recebe esses links.
+Netlify > Identity > Users > Invite users, ou Send reset password email para quem já foi convidado.
+V6 mostra tela CRIAR SENHA ou DEFINIR NOVA SENHA ao abrir link de e-mail.
+V5 LOOPS_ADMIN_* e LOOPS_SESSION_SECRET não são usados.
+Não compartilhar tokens dos e-mails.
+Faça backup antes de atualizar; teste login, nuvem, offline e viradas.

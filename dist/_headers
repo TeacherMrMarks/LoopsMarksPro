@@ -7,3 +7,10 @@
   Cache-Control: no-cache
 /netlify-client.js
   Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache, must-revalidate
+/app.js
+  Cache-Control: no-cache, must-revalidate
+/data.js
+  Cache-Control: no-cache, must-revalidate

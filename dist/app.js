@@ -4,7 +4,7 @@ import { Player, bpmRange } from './audio.js';
 import { exampleSongs } from './demo.js';
 import { makeBackup, restoreBackup, triggerDownload } from './backup.js';
 
-const APP_VERSION = 'V5';
+const APP_VERSION = 'V6';
 const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#dialog');
@@ -114,14 +114,43 @@ function shell() {
 
 function loginView() {
   return '<main class="login"><section class="frame login-card">' + brand() +
-    '<h1>Entrar na central</h1><p>Seu usuário e sua senha funcionam no computador e no celular, sem convites por e-mail.</p>' +
-    '<form id="login-form"><label class="field"><span>Usuário</span><input type="text" name="username" required autocomplete="username" value="marks"></label>' +
+    '<h1>Entrar na central</h1><p>Acesse com o e-mail convidado no Netlify Identity. No primeiro acesso, abra o convite para criar sua senha.</p>' +
+    '<form id="login-form"><label class="field"><span>E-mail</span><input type="email" name="email" required autocomplete="username"></label>' +
     '<label class="field"><span>Senha</span><input type="password" name="password" required autocomplete="current-password"></label>' +
     '<button class="button primary" type="submit">' + icon('user') + 'Entrar</button>' +
     '<p class="error" id="login-error" role="alert">' + escape(cloud.authError) + '</p></form>' +
-    '<p class="login-help">Senha administrada com segurança no Netlify, sem link de redefinição por e-mail.</p>' +
+    '<details class="recovery-help"><summary>Esqueci minha senha</summary>' +
+    '<p>O e-mail do Netlify abrirá o endereço principal deste projeto. Para criar ou redefinir a senha, esse endereço precisa estar rodando a V6.</p>' +
+    '<form id="request-recovery-form"><label class="field"><span>E-mail da conta</span><input type="email" name="email" required autocomplete="email"></label>' +
+    '<button class="button ghost" type="submit">Enviar link de recuperação</button>' +
+    '<p id="recovery-message" role="status"></p></form></details>' +
     '<div class="login-footer">Loops Marks Pro ' + APP_VERSION + '</div>' +
     '</section></main>';
+}
+
+function passwordView() {
+  const isInvite = cloud.authFlow?.type === 'invite';
+  return '<main class="login"><section class="frame login-card">' + brand() +
+    '<h1>' + (isInvite ? 'Criar senha de acesso' : 'Definir nova senha') + '</h1>' +
+    '<p>' + (isInvite ? 'O Netlify confirmou o convite. Crie e confirme sua senha para ativar esta conta.' :
+      'O Netlify confirmou seu link. Defina e confirme a nova senha abaixo. A Central só será aberta após salvar.') + '</p>' +
+    '<form id="password-form"><label class="field"><span>Nova senha (mínimo 8 caracteres)</span>' +
+    '<input type="password" name="password" required minlength="8" autocomplete="new-password"></label>' +
+    '<label class="field"><span>Confirmar nova senha</span>' +
+    '<input type="password" name="confirmation" required minlength="8" autocomplete="new-password"></label>' +
+    '<button class="button primary" type="submit">' + icon('user') +
+    (isInvite ? 'Ativar minha conta' : 'Salvar nova senha') + '</button>' +
+    '<p class="error" id="password-error" role="alert"></p></form>' +
+    '<div class="login-footer">Loops Marks Pro ' + APP_VERSION + '</div>' +
+    '</section></main>';
+}
+
+function authLinkErrorView() {
+  return '<main class="login"><section class="frame login-card">' + brand() +
+    '<h1>Link de acesso não validado</h1>' +
+    '<p>' + escape(cloud.authError || 'O link pode ter expirado ou já ter sido usado. Solicite um novo link de recuperação pelo aplicativo.') + '</p>' +
+    '<button type="button" class="button ghost" data-action="auth-back">Voltar ao login</button>' +
+    '<div class="login-footer">Loops Marks Pro ' + APP_VERSION + '</div></section></main>';
 }
 
 function songsFor(view) {
@@ -336,6 +365,8 @@ function fileRow(part, audio, song = state.admin) {
 }
 
 function render() {
+  if (cloud.enabled && cloud.authFlow?.type === 'invalid') { app.innerHTML = authLinkErrorView(); return; }
+  if (cloud.enabled && cloud.authFlow) { app.innerHTML = passwordView(); return; }
   if (cloud.enabled && !cloud.session()) { app.innerHTML = loginView(); return; }
   app.innerHTML = shell();
   updateLibrary();
@@ -459,7 +490,7 @@ async function openBackupCenter() {
     message.textContent='Preparando backup…';
     const blob=await makeBackup(repo,mode,(n,total)=>{message.textContent='Incluindo WAV '+n+'/'+total;});
     const stamp=new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
-    triggerDownload(blob,'Loops-Marks-Pro-V5-'+mode+'-'+stamp+'.zip');
+    triggerDownload(blob,'Loops-Marks-Pro-V3-'+mode+'-'+stamp+'.zip');
     message.textContent='Backup criado: '+(blob.size/1024/1024).toFixed(1)+' MB. Guarde este ZIP em local seguro.';
   })));
   dialog.querySelector('#restore-file').addEventListener('change',e=>{
@@ -1027,9 +1058,14 @@ async function handleAction(element) {
     prepTimer = setTimeout(() => prepareLive(), 190);
     return;
   }
+  if (action === 'auth-back') {
+    cloud.authFlow = null; cloud.authError = '';
+    render();
+    return;
+  }
   if (action === 'logout') {
     if (state.capture) return;
-    if (!await confirmChoice('Sair da conta?', 'Para entrar novamente neste aparelho, use seu usuário e senha.', 'Sair')) return;
+    if (!await confirmChoice('Sair da conta?', 'Para entrar novamente neste aparelho, use seu e-mail e senha.', 'Sair')) return;
     await saveBeforeLeaving();
     stopPlayback();
     currentGeneration++;
@@ -1175,6 +1211,46 @@ app.addEventListener('change', event => {
 });
 
 app.addEventListener('submit', async event => {
+  if (event.target.id === 'request-recovery-form') {
+    event.preventDefault();
+    const form = event.target;
+    const button = form.querySelector('[type="submit"]');
+    const message = form.querySelector('#recovery-message');
+    button.disabled = true;
+    message.textContent = 'Solicitando link…';
+    try {
+      await cloud.sendPasswordReset(new FormData(form).get('email').trim());
+      message.textContent = 'Se o e-mail estiver cadastrado, confira sua caixa de entrada e spam.';
+    } catch (error) {
+      message.textContent = error.message || 'Não foi possível solicitar o link.';
+    } finally { button.disabled = false; }
+    return;
+  }
+  if (event.target.id === 'password-form') {
+    event.preventDefault();
+    const form = event.target;
+    const data = new FormData(form);
+    const password = String(data.get('password'));
+    const confirmation = String(data.get('confirmation'));
+    const output = form.querySelector('#password-error');
+    const submit = form.querySelector('[type="submit"]');
+    if (password.length < 8 || password !== confirmation) {
+      output.textContent = password !== confirmation ? 'As senhas não coincidem.' : 'Use pelo menos 8 caracteres.';
+      return;
+    }
+    submit.disabled = true;
+    output.textContent = 'Confirmando acesso…';
+    try {
+      if (cloud.authFlow?.type === 'invite') await cloud.finishInvite(password);
+      else await cloud.finishRecovery(password);
+      output.textContent = '';
+      await boot();
+      notice('Senha configurada. Bem-vindo ao Loops Marks Pro.');
+    } catch (error) {
+      output.textContent = error.message || 'Não foi possível concluir. Solicite outro link.';
+    } finally { submit.disabled = false; }
+    return;
+  }
   if (event.target.id !== 'login-form') return;
   event.preventDefault();
   const form = event.target;
@@ -1183,12 +1259,12 @@ app.addEventListener('submit', async event => {
   get('#login-error').textContent = '';
   submit.disabled = true;
   try {
-    await cloud.signIn(String(data.get('username')).trim(), String(data.get('password')));
+    await cloud.signIn(String(data.get('email')).trim(), String(data.get('password')));
     await boot();
   } catch (error) {
     const errorOutput = get('#login-error');
     const message = error.code === 400 || error.code === 401
-      ? 'Usuário ou senha incorretos. Confira os dados e tente novamente.' : (error.message || 'Falha de autenticação. Confira as variáveis seguras no painel Netlify.');
+      ? 'E-mail ou senha incorretos. Confira os dados e tente novamente.' : (error.message || 'Falha de autenticação. Ative Netlify Identity no painel do projeto.');
     if (errorOutput) errorOutput.textContent = message;
     else notice(message);
   } finally { submit.disabled = false; }
@@ -1198,7 +1274,7 @@ window.addEventListener('resize', () => drawWave(lastProgress));
 window.addEventListener('online', () => { updateTop(); requestSync(); });
 window.addEventListener('offline', updateTop);
 window.addEventListener('storage', event => {
-  if (event.key === 'loops-marks-last-user-v5' && !event.newValue && repo && cloud.enabled) {
+  if (event.key === 'loops-marks-last-user-v3' && !event.newValue && repo && cloud.enabled) {
     stopPlayback();
     currentGeneration++;
     player.cancelPreparation();
@@ -1240,4 +1316,4 @@ async function boot() {
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {
   notice('Não foi possível ativar a abertura offline neste navegador.');
 });
-boot().catch(error => notice(error.message || 'Falha ao abrir a central.'));
+boot().catch(error => { cloud.authError = error.message || 'Falha ao abrir a central.'; render(); notice(cloud.authError); });

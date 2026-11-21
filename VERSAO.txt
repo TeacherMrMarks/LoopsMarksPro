@@ -1,1 +1,1 @@
-V5 — login próprio com usuário e senha no Netlify Functions, sincronização via Blobs, backup, motor musical V4.
+V6
