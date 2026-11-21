@@ -125,13 +125,13 @@ test('re-tapping current chorus restarts the crash entry with a fill when config
   assert.ok(player.segments.some(seg=>seg.key==='chorusEntry'&&seg.at>firstEntry));
 });
 
-test('repeatMode direct re-enters current chorus with crash but without fill',async()=>{
+test('V19: segundo toque no mesmo refrão sempre pede virada mesmo com repeatMode direct',async()=>{
   const {player,ctx}=fixture({repeatMode:'direct'});await player.start();
   ctx.currentTime=player.epoch+player.bar*2+.15;
   player.go('chorus');const entry=player.pending.entry;
   ctx.currentTime=entry+player.bar+.15;player.summary();
   assert.equal(player.go('chorus'),true);
-  assert.equal(player.pending.fill,null);
+  assert.equal(player.pending.family,'fillChorus');
   assert.ok(player.segments.some(seg=>seg.key==='chorusEntry'&&seg.at>entry));
 });
 

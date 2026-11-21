@@ -1,1 +1,2 @@
-Loops Marks Pro V18 — Introdução 1: contagem de baquetas em WAV; Introdução 2: musical com reprodução única ou repetição até comando; contagem ativável por ritmo/música; alteração de senha administrativa nas Configurações via Netlify Identity; preserva recursos e dados V17.
+Loops Marks Pro V19 · 21/11/2026
+Contagem one-shot e celular, virada no mesmo botão, ensaio com seleção de parte, WAVs reutilizáveis, progresso do Modo Live e sincronização da introdução.

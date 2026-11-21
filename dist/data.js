@@ -33,9 +33,9 @@ export const PARTS = [
   { id: 'outro', label: 'Final', icon: 'flag', type: 'uma vez', group: 'finais' },
 ];
 export const extraSections = song => (song?.customSections||[]).filter(s=>/^section_[a-f0-9]{12}$/.test(s.id)&&typeof s.label==='string').map(s=>({...s,icon:'layers',group:'loops',type:'loop'}));
-export const playableParts = song => [...PARTS.filter(p=>p.group==='loops'&&p.id!=='intro'),...extraSections(song)];
+export const playableParts = song => [...PARTS.filter(p=>p.group==='loops' && !['intro','countIntro'].includes(p.id)),...extraSections(song)];
 export const entryOf = (song,key) => key?.startsWith('section_') ? key+'Entry' : ENTRY_OF[key];
-export const PLAY_PARTS = PARTS.filter(part => part.group === 'loops' && part.id !== 'intro');
+export const PLAY_PARTS = PARTS.filter(part => part.group === 'loops' && !['intro','countIntro'].includes(part.id));
 // O repertório inclui todos os cadastros, mesmo os que ainda estão recebendo WAVs.
 // O primeiro loop disponível inicia o player: a Parte A não é obrigatória.
 export function firstPlayablePart(song) {
@@ -423,9 +423,9 @@ export class Cloud {
   }
   catalog() { return this.request('?op=catalog'); }
   async save(owner, song) {
-    const { id, revision, name, occasion, bpm, beats, meter, beatUnit, parts, transitions, customFills, customSections, sequence, sequenceMode, fillMode, repeatMode, kind, folderId, deleted, edit } = song;
+    const { id, revision, name, occasion, bpm, beats, meter, beatUnit, parts, transitions, customFills, customSections, sequence, sequenceMode, fillMode, repeatMode, introMode, countIntroEnabled, kind, folderId, deleted, edit } = song;
     const content = deleted ? {deleted: true, edit} :
-      {name, occasion, bpm, beats, meter, beatUnit, kind:kind||'music', folderId:folderId||'', parts, transitions: transitions || {}, customFills: customFills || [], customSections:customSections||[], sequence:sequence||[], sequenceMode:sequenceMode||'assisted', fillMode: fillMode || 'smart', repeatMode: repeatMode || 'fill', edit};
+      {name, occasion, bpm, beats, meter, beatUnit, kind:kind||'music', folderId:folderId||'', parts, transitions: transitions || {}, customFills: customFills || [], customSections:customSections||[], sequence:sequence||[], sequenceMode:sequenceMode||'assisted', fillMode: fillMode || 'smart', repeatMode: repeatMode || 'fill', introMode:introMode==='repeat'?'repeat':'once', countIntroEnabled:countIntroEnabled!==false, edit};
     const data = await this.request('?op=save', { method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({id, revision, content}) });
@@ -589,6 +589,15 @@ export class Repository {
       const remote = records.get(local.id);
       records.delete(local.id);
       if (!local.dirty) {
+        // Migração V18: os novos campos eram salvos no iPhone/PC, mas omitidos do cloud.save.
+        // Reaproveita as preferências locais somente se a revisão remota ainda é a mesma.
+        if (remote && local.revision === remote.revision &&
+            (remote.introMode === undefined || remote.countIntroEnabled === undefined) &&
+            (local.introMode !== undefined || local.countIntroEnabled !== undefined)) {
+          const revision = await this.cloud.save(this.owner, local);
+          await this.finishSave(local, revision);
+          continue;
+        }
         if (remote && local.revision !== remote.revision) {
           await this.disk.batch([[this.key('song', local.id), remote]]);
         }

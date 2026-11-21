@@ -1023,3 +1023,17 @@ body.drawer-visible {overflow:hidden}
 .v18-intro-settings h3,.v18-intro-settings p{flex-basis:100%;margin:0}
 .v18-intro-settings .field{flex:1 1 230px;min-width:0}
 .v18-password-form{display:grid;gap:14px;margin-top:15px}
+
+/* V19: parte preparada para reinício no ensaio e fluxo visível de introduções. */
+.pad.armed { border-color: #65e0b2; box-shadow: inset 0 0 0 1px #65e0b2, 0 0 0 1px rgba(101,224,178,.25); }
+.pad.armed small { color: #8ff5d1; font-weight: 700; }
+.v19-opening-hint { margin: .6rem 0 0; color: #b8d4de; display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; font-size: .85rem; }
+.v19-opening-hint svg { width: 1rem; height: 1rem; flex: none; }
+/* V19: a ação Reutilizar acrescenta uma coluna, sem quebrar a linha no celular. */
+.file-row { grid-template-columns:24px minmax(0,1fr) 88px auto auto auto 34px; }
+.file-row [data-action="reuse-wav"] {color:#b3f4dd; border-color:#347f75;white-space:nowrap;}
+@media(max-width:650px) {
+  .file-row {grid-template-columns:16px minmax(0,1fr) 44px 33px 33px 33px 29px;gap:4px;}
+  .file-row [data-action="reuse-wav"] {padding:6px;display:flex;align-items:center;justify-content:center;}
+  .file-row [data-action="reuse-wav"] span {display:none;}
+}

@@ -6,7 +6,7 @@ import { exampleSongs } from './demo.js';
 import { makeBackup, restoreBackup, triggerDownload } from './backup.js';
 import { emptyLibrary, cleanLibrary, songKind, inFolder, repertoireEntries } from './library-model.js';
 
-const APP_VERSION = 'V18';
+const APP_VERSION = 'V19';
 // O link do músico carrega exclusivamente o Modo Live.
 const musicianLink = new URL(location.href).searchParams.get('modo') === 'musico';
 const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
@@ -237,6 +237,10 @@ function deck() {
     '</h2><p>Cadastro encontrado. Para reproduzir, importe pelo menos um WAV no campo <strong>Loop contínuo</strong> (Parte A, Refrão ou outra parte). Entradas com prato e viradas não substituem o loop contínuo.</p>' +
     (musicianLink ? '' : button('admin', 'Completar cadastro', 'grid', 'primary')) + '</div>';
   const parts = playableParts(song).filter(part => song.parts?.[part.id]);
+  const countReady = Boolean(song.parts?.countIntro?.path) && song.countIntroEnabled!==false;
+  const introReady = Boolean(song.parts?.intro?.path);
+  const openingLabel = (countReady ? 'Contagem de baquetas ('+(song.parts.countIntro.bars||1)+' comp.) → ' : '') +
+    (introReady ? 'Introdução musical ('+(song.introMode==='repeat'?'repete até comando':'uma vez')+') → ' : '') + 'Parte escolhida';
   const manual = MANUAL_PARTS.filter(part => Object.keys(song.parts || {}).some(id => fillBase(id) === part.id));
   const endings = FINALES.filter(part => song.parts?.[part.id]);
   const crashStops = CRASH_STOPS.filter(part => song.parts?.[part.id]);
@@ -269,7 +273,7 @@ function deck() {
     '<section class="frame live-sections"><div class="section-head"><h2>Partes da música</h2><span>Entrada no tempo 1</span></div>' +
     '<div class="pads">' + parts.map(part => '<button type="button" class="pad" data-action="part" data-part="' + part.id +
     '" disabled>' + icon(part.icon) + '<strong>' + escape(part.label) + '</strong><small>' + (song.parts?.[part.id + 'Entry'] ? 'Entrada + contínuo' : 'Loop contínuo') + '</small></button>').join('') +
-    '</div>' + (song.kind!=='rhythm'&&(song.sequence||[]).length ? '<div class="live-map-toolbar"><span id="live-map-status">Mapa musical · '+escape(song.sequenceMode==='automatic'?'Automático':'Assistido')+'</span>'+iconButton('map-previous','Etapa anterior','arrowup')+button('map-next','Próxima parte','arrowdown','ghost')+'</div>':'') + (manual.length ? '<div class="section-head live-subsection"><h2>Viradas manuais</h2><span>Retorna ao loop</span></div>' +
+    '</div><p class="v19-opening-hint" id="opening-path">'+icon('music')+' <strong>Abertura:</strong> '+escape(openingLabel)+'</p>' + (song.kind!=='rhythm'&&(song.sequence||[]).length ? '<div class="live-map-toolbar"><span id="live-map-status">Mapa musical · '+escape(song.sequenceMode==='automatic'?'Automático':'Assistido')+'</span>'+iconButton('map-previous','Etapa anterior','arrowup')+button('map-next','Próxima parte','arrowdown','ghost')+'</div>':'') + (manual.length ? '<div class="section-head live-subsection"><h2>Viradas manuais</h2><span>Retorna ao loop</span></div>' +
     '<div class="pads manual-pads">' + manual.map(part => '<button type="button" class="pad fill-pad" data-action="fill" data-part="' +
     part.id + '" disabled>' + icon(part.icon) + '<strong>' + escape(part.label) + '</strong><small>Virada avulsa</small></button>').join('') +
     '</div>' : '') + (crashStops.length ? '<div class="section-head live-subsection"><h2>Crash</h2><span>Bumbo + prato · sem virada</span></div>' +
@@ -523,6 +527,7 @@ function fileRow(part, audio, song = state.admin) {
       (audio && !variant ? '' : 'disabled') + '><span>' + unit + '</span></label>') +
     '<input type="file" accept=".wav,audio/wav,audio/x-wav" data-file="' + escape(part.id) + '" hidden>' +
     button('preview', 'Ouvir', 'play', 'ghost audio-preview', 'data-part="' + escape(part.id) + '" aria-label="Ouvir ' + escape(part.label) + '" ' + (audio ? '' : 'disabled')) +
+    button('reuse-wav', 'Reutilizar', 'layers', 'ghost', 'data-part="' + escape(part.id) + '" title="Usar WAV de outra parte deste cadastro"') +
     button('browse', audio ? 'Trocar' : 'Importar', audio ? 'refresh' : 'plus', 'ghost',
       'data-part="' + escape(part.id) + '" aria-label="Importar WAV de ' + escape(part.label) + '"') +
     iconButton('remove-file', 'Remover WAV de ' + escape(part.label), 'trash', 'data-part="' + escape(part.id) + '" ' +
@@ -1133,8 +1138,8 @@ function updatePlayback(force = false) {
     const isFill = Boolean(playing.active && ([...PARTS, ...(state.selected?.customFills || [])]
       .some(part => part.id === fillBase(playing.active) && part.type === 'virada')));
     const name = playing.active ? player.label(playing.active) :
-      (player.ready ? player.label(player.initialPart || 'a') : 'Aguardando');
-    const mode = !playing.running ? (player.ready ? 'Pronto para iniciar' : 'Preparando áudio') :
+      (player.ready ? player.label(playing.armed || player.initialPart || 'a') : 'Aguardando');
+    const mode = !playing.running ? (player.ready ? (playing.armed?'Parte selecionada · Pronto para iniciar':'Pronto para iniciar') : 'Preparando áudio') :
       CRASH_STOPS.some(p=>p.id===playing.active) ? 'Crash final · cauda do prato' :
       isFill ? 'Virada em execução' : playing.entryAttack ? 'Entrada com crash' :
       playing.active === 'countIntro' ? 'Contagem de baquetas' : playing.active === 'intro' ? 'Introdução musical' : 'Loop contínuo';
@@ -1156,13 +1161,13 @@ function updatePlayback(force = false) {
     ('Agendado: ' + (playing.fill ? player.label(playing.fill) +
     (playing.offsetBeats ? ' (últimos ' + playing.fillBeats + 'T)' : '') + ' → ' : '') + player.label(playing.next)) : '';
   const message = playing.interrupted ? 'Áudio suspenso · toque em Retomar' :
-    playing.running ? (queued || (playing.active ? player.label(playing.active) + (playing.entryAttack ? ' · entrada com crash' : ' · contínuo') : 'Iniciando…')) :
-    (preparation || (player.ready ? 'Todos os áudios preparados · Pronto para tocar' : 'Selecione os áudios para tocar.'));
+    playing.running ? (queued || (playing.active ? player.label(playing.active) + (playing.entryAttack ? ' · entrada com crash' : playing.active==='countIntro' ? ' · contagem antes da entrada' : ' · contínuo') : 'Iniciando…')) :
+    (preparation || (player.ready ? (playing.armed ? 'Selecionada '+player.label(playing.armed)+' · Iniciar '+(state.selected.countIntroEnabled!==false && player.buffers.has('countIntro') ? 'toca a contagem antes dela':'entra direto nessa parte') : 'Todos os áudios preparados · Pronto para tocar') : 'Selecione os áudios para tocar.'));
   const chip = playing.running ? (playing.interrupted ? 'Interrompido' : 'Tocando') : player.ready ? 'Pronto para tocar' : 'Aguardando áudio';
   const closing = ['finish','outro',...CRASH_STOPS.map(p=>p.id)].includes(playing.next) ||
     ['finish','outro',...CRASH_STOPS.map(p=>p.id)].includes(playing.active);
   if (force || previous.running !== playing.running || previous.next !== playing.next ||
-      previous.fill !== playing.fill || previous.active !== playing.active || previous.entryAttack !== playing.entryAttack || previous.canCancel !== playing.canCancel || previous.interrupted !== playing.interrupted) {
+      previous.fill !== playing.fill || previous.active !== playing.active || previous.armed !== playing.armed || previous.entryAttack !== playing.entryAttack || previous.canCancel !== playing.canCancel || previous.interrupted !== playing.interrupted) {
     const text = get('#player-message');
     if (text && text.textContent !== message) text.textContent = message;
     const chipElement = get('#player-chip');
@@ -1180,18 +1185,21 @@ function updatePlayback(force = false) {
       const key = pad.dataset.part;
       const current = playing.active === key;
       const inQueue = playing.next === key || playing.fill === key;
+      const armed = !playing.running && playing.armed === key;
       pad.classList.toggle('active', current);
       pad.classList.toggle('queued', inQueue);
-      pad.disabled = !playing.running || (pad.dataset.action === 'fill' ? !player.fillExists(key) : !player.buffers.has(key)) || closing;
+      pad.classList.toggle('armed', armed);
+      const selectableStopped = pad.dataset.action==='part' && player.loopKeys.has(key) && player.ready;
+      pad.disabled = (!playing.running && !selectableStopped) || (pad.dataset.action === 'fill' ? !player.fillExists(key) : !player.buffers.has(key)) || closing;
       const info = pad.querySelector('small');
-      if (info) info.textContent = current ? (playing.entryAttack ? 'Com crash' : 'Tocando') : inQueue ? 'Na fila' :
+      if (info) info.textContent = armed ? 'Selecionada para iniciar' : current ? (playing.entryAttack ? 'Com crash' : 'Tocando') : inQueue ? 'Na fila' :
         pad.dataset.action === 'fill' ? 'Virada avulsa' : CRASH_STOPS.some(p=>p.id===key) ? 'Bumbo + prato · parar' : ['finish','outro'].includes(key) ? 'Finalizar' :
         (state.selected.parts?.[key + 'Entry'] ? 'Entrada + contínuo' : 'Loop contínuo');
     }
     const cancel = get('#cancel-btn');
     if (cancel) { cancel.hidden = !playing.canCancel; cancel.disabled = !playing.canCancel; }
-    get('#wave-caption').textContent = playing.active ? player.label(playing.active) + (playing.entryAttack ? ' · Crash' : '') : player.label(player.initialPart || 'a');
-    if (previous.active !== playing.active && player.ready) computePeaks(playing.active || player.initialPart || 'a');
+    get('#wave-caption').textContent = playing.active ? player.label(playing.active) + (playing.entryAttack ? ' · Crash' : '') : player.label(playing.armed || player.initialPart || 'a');
+    if ((previous.active !== playing.active || previous.armed !== playing.armed) && player.ready) computePeaks(playing.active || playing.armed || player.initialPart || 'a');
     updateDownload();
   }
   const modeLabel = get('#fill-mode span');
@@ -1511,6 +1519,37 @@ async function previewWav(part) {
   notice('Ouvindo ' + (slotInfo(state.admin, part)?.label || part) + '…');
 }
 
+async function reuseWavInPart(target) {
+  const song = state.admin;
+  if (!song || !slotInfo(song, target)) return;
+  const options = Object.entries(song.parts||{}).filter(([key,meta]) => key!==target && meta?.path);
+  if (!options.length) { notice('Importe primeiro um WAV em outra parte deste cadastro.'); return; }
+  dialog.innerHTML = '<h2>Reutilizar WAV já cadastrado</h2><p class="subtle">O mesmo áudio será vinculado a outra parte, sem nova importação. Os dois botões funcionarão separadamente.</p>'+
+    '<label class="field"><span>WAV de origem</span><select id="reuse-source">'+options.map(([key,meta])=>
+      '<option value="'+escape(key)+'">'+escape(label(key))+' — '+escape(meta.name||'WAV')+'</option>').join('')+'</select></label>'+
+    '<menu>'+button('reuse-cancel','Cancelar','x','ghost')+button('reuse-confirm','Usar este WAV','check','primary')+'</menu>';
+  dialog.showModal();
+  dialog.querySelector('[data-action="reuse-cancel"]').onclick=()=>dialog.close();
+  dialog.querySelector('[data-action="reuse-confirm"]').onclick=async()=>{
+    const key=dialog.querySelector('#reuse-source')?.value;
+    const source=song.parts?.[key];if(!source)return;
+    const srcFill=slotInfo(song,fillBase(key))?.type==='virada';
+    const dstFill=slotInfo(song,fillBase(target))?.type==='virada';
+    const srcEnding=['finish','outro',...CRASH_STOPS.map(p=>p.id)].includes(key);
+    const dstEnding=['finish','outro',...CRASH_STOPS.map(p=>p.id)].includes(target);
+    const beats=Number(source.lengthBeats||source.bars*song.beats);
+    const variant=target.match(/__(\d+)$/);
+    if(srcEnding!==dstEnding){notice('Para manter a duração correta, reutilize encerramentos apenas em outros encerramentos.');return;}
+    if(srcFill!==dstFill && !dstEnding && (!Number.isInteger(beats)||(!dstFill&&beats%song.beats!==0))) {
+      notice('Este WAV não tem duração compatível com a parte de destino.');return;
+    }
+    if(variant && beats!==Number(variant[1])){notice('A variação deve conter '+variant[1]+' tempos.');return;}
+    song.parts[target] = {...structuredClone(source)};
+    try { await persistDraft(); dialog.close(); render(); notice('WAV reutilizado sem duplicar o arquivo.'); }
+    catch(e){notice(e.message);}
+  };
+}
+
 async function saveLibraryData() {
   state.libraryData=await repo.saveLibrary(state.libraryData);
   requestSync();
@@ -1705,7 +1744,7 @@ async function handleAction(element) {
   if (action === 'backup') { await openBackupCenter(); return; }
   if (action === 'play') { await startPlayer(); return; }
   if (action === 'stop') { stopPlayback(); return; }
-  if (action === 'part') { player.go(part); updatePlayback(true); return; }
+  if (action === 'part') { if (!player.go(part)) notice('Parte indisponível ou aguarde a troca atual.'); updatePlayback(true); return; }
   if (action === 'fill') { player.fill(part); updatePlayback(true); return; }
   if (action === 'mode-toggle') {
     if (player.pending) { notice('Aguarde ou cancele a troca agendada para mudar o modo.'); return; }
@@ -1816,6 +1855,7 @@ async function handleAction(element) {
     if (state.admin.transitions) delete state.admin.transitions[element.dataset.key];
     await persistDraft(); render(); return;
   }
+  if (action === 'reuse-wav') { await reuseWavInPart(part); return; }
   if (action === 'browse') {
     stopPreview();
     get('[data-file="' + part + '"]').click();

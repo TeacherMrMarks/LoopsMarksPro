@@ -1,11 +1,13 @@
-Loops Marks Pro V16 — atualização exclusivamente visual
+Loops Marks Pro V19 — correções de Modo Live
 
-1) Faça um backup completo na V13 e guarde o ZIP da versão anterior.
-2) Extraia o ZIP V16 e envie todo o conteúdo extraído à raiz do mesmo repositório GitHub.
-3) Preserve as configurações do Netlify: base vazia, build npm run build, publish dist, functions netlify/functions.
-4) Mantenha a publicação automática bloqueada para testar no novo Permalink sem mudar a produção.
-5) Abra a Central de Loops ou Músicas → Nova música e teste Dados, Loops, Crash, Viradas, Mapa musical e Finais; confira o salvamento automático.
-6) Em Músicas/Ritmos, teste alternar Cards e Lista.
-7) Confirme que as músicas antigas, WAVs, backups, login e o Modo Live continuam como antes.
+1) Faça um BACKUP COMPLETO da V18 e guarde o ZIP da versão anterior.
+2) Extraia o ZIP da V19 e envie os arquivos extraídos à raiz do mesmo repositório GitHub.
+3) Mantenha os mesmos site Netlify e Netlify Blobs. Não apague dados nem crie novo site.
+4) Configure no Netlify: base vazia; build 'npm run build'; publicação 'dist'; Functions 'netlify/functions'; Node 22.
+5) Confira no log de deploy se 'npm install' e 'npm run build' foram concluídos. O arquivo 'dist/netlify-client.js' do ZIP é um placeholder e será gerado durante o build. Não publique diretamente a pasta dist sem compilar.
+6) Teste num Permalink: um ritmo 3/4 ou 6/8 com contagem WAV -> introdução musical -> Parte A; sem introdução musical deve ir à Parte A; introdução no modo repetir deve aguardar comando.
+7) Teste PC e iPhone: parar, tocar Parte B e depois Iniciar (deve fazer a contagem antes da Parte B); no meio do compasso toque duas vezes a mesma Parte A com uma virada configurada; observe pulsos e onda.
+8) Teste a função Reutilizar WAV no cadastro e a sincronização das configurações de introdução no celular.
+9) Só publique a V19 como produção depois que esses testes reais forem aprovados.
 
-A V16 não muda a paleta nem o motor de áudio, nem funções Netlify.
+Testes locais: 94/94 passaram. Compilação completa não foi executada neste ambiente por impossibilidade de instalar pacotes npm.

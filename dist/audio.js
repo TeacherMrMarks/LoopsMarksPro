@@ -2,7 +2,7 @@ import { PARTS, DEFAULT_FILLS, FILL_IDS, ENTRY_OF, BASE_OF_ENTRY, fillBase, fill
 import { demoBuffer } from './demo.js';
 import { meterOf } from './meter.js';
 
-const LOOPS = new Set(Object.keys(ENTRY_OF));
+const LOOPS = new Set(Object.keys(ENTRY_OF)); // Somente partes contínuas, nunca a contagem
 const ENDINGS = new Set(['outro', 'finish', ...CRASH_STOPS.map(part => part.id)]);
 const LEAD = 0.075;           // antecedência para agendamento no relógio Web Audio
 const FADE = 0.004;
@@ -92,6 +92,7 @@ export class Player {
     const supported = new Set([...PARTS.map(part => part.id),...extraSections(song).flatMap(s=>[s.id,s.id+'Entry'])]);
     this.loopKeys=new Set([...LOOPS,...extraSections(song).map(s=>s.id)]);
     if(song.introMode==='repeat')this.loopKeys.add('intro');
+    this.loopKeys.delete('countIntro'); // Contagem é sempre um WAV de uma vez
     for (const [key, part] of Object.entries(song.parts || {})) {
       if (!supported.has(key) && !this.isFill(key)) continue;
       const audio = song.demo ? demoBuffer(context, song, key) : await load(part.path);
@@ -126,6 +127,7 @@ export class Player {
       buffers.set(key, { buffer, seconds: ENDINGS.has(key) ? buffer.duration : target, beats });
     }
     this.initialPart = (song.sequence||[]).map(s=>s.part).find(k=>this.loopKeys.has(k)&&buffers.has(k)) || firstPlayablePart(song);
+    this.armedPart = null;
     if (!this.initialPart || !buffers.has(this.initialPart)) throw new Error('Cadastre ao menos um WAV contínuo para tocar.');
     this.song = song;
     this.bpm = bpm;
@@ -162,11 +164,15 @@ export class Player {
   segment(key, at, { offsetBeats = 0, lengthBeats = null } = {}) {
     const meta = this.buffers.get(key);
     if (!meta) throw new Error('Áudio não encontrado: ' + this.label(key));
+    if (!Number.isFinite(at) || at < 0) throw new Error('Tempo de entrada inválido. Confira a contagem e a introdução.');
     const source = this.ctx.createBufferSource();
     const gate = this.ctx.createGain();
     source.buffer = meta.buffer;
     source.loop = this.loopKeys.has(key);
-    if (source.loop) source.loopEnd = meta.seconds;
+    if (source.loop) {
+      if (!Number.isFinite(meta.seconds) || meta.seconds <= 0) throw new Error('Duração inválida do loop: '+this.label(key));
+      source.loopEnd = meta.seconds;
+    }
     source.connect(gate).connect(this.mix);
     const offset = offsetBeats * this.beatSeconds;
     const seconds = lengthBeats === null ? meta.seconds - offset : lengthBeats * this.beatSeconds;
@@ -230,15 +236,25 @@ export class Player {
     this.pending = null;
     this.segments = [];
     this.initSequence();
-    // Contagem prévia independente; antigas introduções continuam em 'intro'.
-    const count = this.song.countIntroEnabled!==false && this.buffers.has('countIntro')
-      ? this.segment('countIntro', this.epoch) : null;
-    const musicalAt=count ? count.naturalEnd : this.epoch;
-    if (this.buffers.has('intro')) {
-      const intro = this.segment('intro', musicalAt);
-      this.introduction(intro);
-    } else this.scheduleDestination(this.initialPart || 'a', musicalAt);
-    this.sequenceEnteredAt=this.segments.find(seg=>this.baseFor(seg.key)===this.initialPart)?.at??this.sequenceEnteredAt;
+    try {
+      // Reinício de ensaio: a parte armada toca DEPOIS da mesma contagem do início.
+      const selected = this.armedPart && this.buffers.has(this.armedPart) ? this.armedPart : null;
+      const count = this.song.countIntroEnabled!==false && this.buffers.has('countIntro')
+        ? this.segment('countIntro', this.epoch) : null;
+      const openingAt = count ? count.naturalEnd : this.epoch;
+      if (selected && selected !== 'intro') {
+        this.scheduleDestination(selected, openingAt);
+        this.sequenceAuto = false;
+      } else if (this.buffers.has('intro')) {
+        const intro = this.segment('intro', openingAt);
+        this.introduction(intro);
+      } else this.scheduleDestination(this.initialPart || 'a', openingAt);
+      const opening = this.segments.find(seg=>this.baseFor(seg.key)===(selected||this.initialPart));
+      this.sequenceEnteredAt = opening?.at ?? openingAt;
+    } catch (error) {
+      this.stop();
+      throw error;
+    }
   }
   introduction(intro) {
     // Na repetição, a saída acontece somente quando o músico acionar outra parte.
@@ -339,9 +355,21 @@ export class Player {
       fillBeats: plan?.fillBeats || 0, offsetBeats: plan?.offsetBeats || 0 };
     return true;
   }
+  arm(dest) {
+    if (this.running || !this.ready || !this.buffers.has(dest) || !this.loopKeys.has(dest) || dest==='intro') return false;
+    this.armedPart = dest;
+    this.onState?.();
+    return true;
+  }
   go(dest) {
+    if (!this.running) return this.arm(dest);
     if(this.sequenceAuto)this.sequenceAuto=false;
-    const changed=this.request(dest);
+    const active = this.fromKey();
+    const same = dest === active && this.loopKeys.has(dest);
+    // Segundo toque da própria parte: virada inteligente dela, seguida da mesma parte.
+    // Reutiliza a seleção de cauda por tempo de pickFill/planFill existente.
+    const family = same ? (this.autoFill(active, dest) || (this.fillExists(DEFAULT_FILLS[dest]) ? DEFAULT_FILLS[dest] : null)) : null;
+    const changed=this.request(dest, family);
     if(changed && this.sequenceSteps?.length){
       const index=this.sequenceSteps.findIndex(s=>s.part===dest);
       if(index>=0)this.sequenceScheduled={index,entry:this.pending?.entry??this.ctx.currentTime};
@@ -436,7 +464,7 @@ export class Player {
     return variant ? name + ' (' + variant[1] + 'T)' : name;
   }
   summary() {
-    if (!this.running) return { running: false, beat: -1 };
+    if (!this.running) return { running: false, beat: -1, armed: this.armedPart || null };
     this.tickSequence(this.ctx.currentTime);
     const now = this.ctx.currentTime;
     this.segments = this.segments.filter(seg => {
@@ -451,13 +479,17 @@ export class Player {
       return { running: false, beat: -1 };
     }
     const beats = Math.max(0, (now - this.epoch) * this.bpm / 60);
+    const activeDuration = this.buffers.get(active?.key)?.seconds || this.bar;
+    const activePosition = active && Number.isFinite(active.at) && Number.isFinite(activeDuration) && activeDuration>0
+      ? ((Math.max(0, now-active.at) % activeDuration) / activeDuration) : 0;
     return { running: true, beat: Math.floor(beats) % this.song.beats,
       active: this.baseFor(active?.key), entryAttack: Boolean(BASE_OF_ENTRY[active?.key]),
       next: this.pending?.dest, fill: this.pending?.fill,
       fillBeats: this.pending?.fillBeats, offsetBeats: this.pending?.offsetBeats,
       canCancel: Boolean(this.pending && this.pending.changeAt > now + LEAD),
       nextIn: this.pending ? Math.max(0, this.pending.entry - now) : 0,
-      progress: (beats / this.song.beats) % 1,
+      progress: activePosition,
+      armed: this.armedPart || null,
       interrupted: !['running', 'closed'].includes(this.ctx.state),
       sequenceIndex:this.sequenceSteps?.length?this.sequenceIndex:null,
       sequenceNext:this.sequenceSteps?.length?this.sequenceTarget(this.sequenceIndex):null,
