@@ -1,6 +1,6 @@
 // V22 — MIDI input only; independent from the HID pedal and audio engine.
 export const MIDI_KEY = 'loops-v22-midi-settings';
-const COMMAND = /^(?:start|play|stop|ride-toggle|auto-crash-toggle|restart-intro|mode-toggle|cancel-queue|slower|faster|bpm-absolute|volume-absolute|mix:(?:master|loops|fills|cymbals|counter|passage|count|endings)|toggle-live-count|count-one|count-two|rep-prev-live|rep-next-live|open-library|map-next|map-previous|(?:part|fill|crash|break):[A-Za-z0-9_-]{1,80})$/;
+const COMMAND = /^(?:start|play|stop|ride-toggle|hat-open-toggle|hat-closed-toggle|auto-crash-toggle|restart-intro|mode-toggle|cancel-queue|slower|faster|bpm-absolute|volume-absolute|mix:(?:master|loops|fills|cymbals|counter|passage|count|endings)|toggle-live-count|count-one|count-two|rep-prev-live|rep-next-live|open-library|map-next|map-previous|(?:part|fill|crash|break):[A-Za-z0-9_-]{1,80})$/;
 const cleanString = value => typeof value === 'string' ? value.slice(0,250) : '';
 const absolute = command => ['bpm-absolute','volume-absolute'].includes(command)||command.startsWith('mix:');
 export function cleanMidiSettings(raw) {

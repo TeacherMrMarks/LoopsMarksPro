@@ -1,6 +1,14 @@
-# Loops Marks Pro — V27
+# Loops Marks Pro — V28
 
-Base: V26. Preservação dos identificadores WAV, dados e chaves anteriores de armazenamento.
+Base: V27. Preservação dos identificadores WAV, dados e chaves anteriores de armazenamento.
+
+## Novidades V28 — Orquestração de pratos e resposta imediata
+
+- Central > Crash > Prato de condução manual e chimbais: três WAVs independentes, em compassos completos, cada um com volume de 0 a 100%. Chimbal aberto e condução ficam armados para o refrão; chimbal fechado para A, B, C, D, E, pré-refrão, parte baixa e partes adicionais. Parte alta não dispara essas camadas por padrão. O canal Pratos do mixer controla todas as camadas e crashes juntos.
+- No Palco, cada botão aparece só com WAV válido e preparado. Pode ligar/desligar antes ou durante a execução; estado armado não significa que está soando. A orquestração da parte de origem continua na virada e muda na queda do tempo 1; contratempos, passagens e finais suspendem as camadas. Nomes de WAV e correções manuais evitam dobrar condução/chimbal. Estado de execução é temporário, enquanto arquivos, volumes, identificação e atribuições são salvos e exportados.
+- Virada inteligente: agendamento com antecedência de cerca de 6 ms no relógio Web Audio, sem aguardar o próximo pulso quando há WAV suficiente; recorte fracionário da cauda para encaixar atrasos, preservando o ataque quando o comando coincide com o início. Se só houver uma virada curta e ainda faltar mais tempo que a duração dela, ela começa no ponto musical compatível, para não abrir lacuna. Modo completo e mapa automático preservados. A latência física depende do aparelho.
+- O Palco oculta as viradas automáticas de A/B/C/D/E, pré-refrão e refrão; ficam no cadastro e nos botões das partes. Viradas leves, fortes, especiais, específicas, introdução, baixa/alta, contratempos, passagens e finais mantêm seus controles. Atribuições antigas de viradas ocultas continuam reconhecidas por MIDI/pedal; novos comandos de chimbal podem ser aprendidos. Repertórios e personalizações independentes da V27 preservados.
+- Backup completo, sincronização e API incluem os novos WAVs, volumes, identificações e mapeamentos. Cadastros antigos sem chimbais continuam válidos e seus volumes novos assumem 100%.
 
 ## Novidades V27 — Repertórios independentes
 
@@ -49,9 +57,9 @@ Base: V26. Preservação dos identificadores WAV, dados e chaves anteriores de a
 
 Chrome de Chromebook/Windows/macOS e navegador Android compatível: conectar dispositivo reconhecido, abrir site HTTPS, permitir MIDI. No iPhone/iPad, Safari/PWA não disponibiliza Web MIDI nativo; pode-se testar uma ponte compatível, como Web MIDI Browser, mas não há garantia de compatibilidade com este site ou sua autenticação. A interface de áudio deve transmitir MIDI, não apenas áudio. Bluetooth MIDI depende da exposição pelo SO/navegador. Pedal HID continua disponível. O áudio pode exigir um gesto de desbloqueio: abra o painel MIDI por toque/clique ou toque Iniciar na tela antes de operar exclusivamente pelo controlador.
 
-## Validação V27
+## Validação V28
 
-- `npm test`: 166/166 testes aprovados (159 anteriores e 7 novos). Motor Web Audio testado por simulação de relógio, fontes e ganhos. O teste de backup utiliza um codec de teste substituto para validar exportação/restauração de metadados, WAVs e mapeamentos; não certifica a biblioteca ZIP real de produção.
+- `npm test`: 171/171 testes aprovados (166 casos anteriores, incluindo regras antigas adaptadas ao novo comportamento, e 5 novos). Motor Web Audio testado por simulação de relógio, fontes e ganhos. O teste de backup utiliza um codec de teste substituto para validar exportação/restauração de metadados, WAVs e mapeamentos; não certifica a biblioteca ZIP real de produção.
 - `node --check`: módulos JS, scripts e funções Netlify sem erros de sintaxe.
 - `npm run build`: bloqueado porque o pacote `esbuild` não está instalado no ambiente. O Netlify precisa realizar o build, que substitui `dist/netlify-client.js` pelo cliente real de Identity/fflate. Não publique `dist` isoladamente.
 - Testes com navegador real, WAVs reais, hardware e Netlify/Identity/Blobs ainda pendentes. Validar no Permalink antes da publicação oficial.

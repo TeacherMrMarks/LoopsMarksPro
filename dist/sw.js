@@ -1,4 +1,4 @@
-const VERSION = 'loops-marks-v27-repertoire-isolation-20261121';
+const VERSION = 'loops-marks-v28-cymbal-arranger-20261121';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './netlify-client.js', './backup.js', './data.js', './library-model.js',
   './midi.js', './mixer.js', './audio.js', './meter.js', './stretch.js', './demo.js', './importer.js', './manifest.webmanifest',

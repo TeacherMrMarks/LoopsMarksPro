@@ -34,6 +34,8 @@ export const PARTS = [
   { id: 'crashStop3', label: 'Crash 3 · Ataque adicional', icon: 'spark', type: 'uma vez', group: 'crashstops' },
   ...[1,2,3].map(n=>({id:'autoCrash'+n,label:'Prato automático '+n,icon:'spark',type:'uma vez',group:'autocrashes'})),
   {id:'rideLoop',label:'Prato de condução',icon:'wave',type:'condução',group:'conduction'},
+  {id:'hatOpenLoop',label:'Chimbal aberto',icon:'wave',type:'condução',group:'conduction'},
+  {id:'hatClosedLoop',label:'Chimbal fechado',icon:'wave',type:'condução',group:'conduction'},
   { id: 'finish', label: 'Acabamento', icon: 'check', type: 'uma vez', group: 'finais' },
   { id: 'outro', label: 'Final', icon: 'flag', type: 'uma vez', group: 'finais' },
 ];
@@ -76,18 +78,28 @@ export function liveCatalog(rows) {
 export const MANUAL_PARTS = PARTS.filter(part => part.group === 'manuais');
 export const FINALES = PARTS.filter(part => part.group === 'finais');
 export const AUTO_CRASHES = PARTS.filter(p=>p.group==='autocrashes');
+export const LAYER_IDS = ['rideLoop','hatOpenLoop','hatClosedLoop'];
+export const LAYER_ACTIONS = {rideLoop:'ride-toggle',hatOpenLoop:'hat-open-toggle',hatClosedLoop:'hat-closed-toggle'};
+export const stageFill = p => p.group !== 'automaticas' || ['fillLow','fillHigh','fillIntro'].includes(p.id);
+export function layerPartEligible(key,base) {
+  if(key==='hatClosedLoop')return ['a','b','c','d','e','pre','low'].includes(base)||/^section_/.test(base||'');
+  return base==='chorus';
+}
 export const ATTACK_IDS = ['crashStop','crashStop2','crashStop3',...AUTO_CRASHES.map(p=>p.id)];
 export const extraBreaks = song => (Array.isArray(song?.customBreaks)?song.customBreaks:[]).filter(s=>/^(counter|passage)_[1-9][0-9]{0,5}$/.test(s?.id||'')&&typeof s.label==='string').map(s=>({...s,group:s.id.startsWith('counter_')?'counter':'passage',type:'trecho',icon:'wave'}));
 export function cymbalSettings(song) {
   const s=song?.cymbals||{};const volume=v=>Number.isFinite(v)?Math.max(0,Math.min(1,v)):1;
-  return {autoEnabled:s.autoEnabled!==false,autoVolume:volume(s.autoVolume),rideVolume:volume(s.rideVolume)};
+  return {autoEnabled:s.autoEnabled!==false,autoVolume:volume(s.autoVolume),rideVolume:volume(s.rideVolume),hatOpenVolume:volume(s.hatOpenVolume),hatClosedVolume:volume(s.hatClosedVolume)};
 }
+export function layerVolume(song,key){const c=cymbalSettings(song);return c[{rideLoop:'rideVolume',hatOpenLoop:'hatOpenVolume',hatClosedLoop:'hatClosedVolume'}[key]]??1;}
 export function containsCymbal(meta, kind) {
   if(!meta)return false;
-  const override=kind==='crash'?meta.hasCrash:meta.hasConduction;
+  const override=kind==='crash'?meta.hasCrash:kind==='conduction'?meta.hasConduction:kind==='hatOpen'?meta.hasHatOpen:meta.hasHatClosed;
   if(override==='yes'||override==='no')return override==='yes';
   const text=String(meta.name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
-  const terms=kind==='crash'?'pratos?|crash(?:es)?':'conducao|ride';
+  const terms=kind==='crash'?'pratos?|crash(?:es)?':kind==='conduction'?'conducao|ride':kind==='hatOpen'?'chimbal aberto|hi hat open|open hi hat|hihat open|open hihat|chimbal|hi hat|hihat':'chimbal fechado|hi hat closed|closed hi hat|hihat closed|closed hihat|chimbal|hi hat|hihat';
+  if(kind==='hatOpen'&&/\b(?:chimbal fechado|closed hi hat|hi hat closed|closed hihat|hihat closed)\b/.test(text)&&! /\b(?:chimbal aberto|open hi hat|hi hat open|open hihat|hihat open)\b/.test(text))return false;
+  if(kind==='hatClosed'&&/\b(?:chimbal aberto|open hi hat|hi hat open|open hihat|hihat open)\b/.test(text)&&! /\b(?:chimbal fechado|closed hi hat|hi hat closed|closed hihat|hihat closed)\b/.test(text))return false;
   const negative=new RegExp('(?:^| )(?:sem|no|without) (?:'+terms+')(?: |$)');
   return !negative.test(text)&&new RegExp('(?:^| )(?:'+terms+')(?: |$)').test(text);
 }
@@ -116,11 +128,11 @@ export function preparedCrashParts(song, player) {
     player.buffers?.has(part.id));
 }
 export function crashSignature(song) {
-  return JSON.stringify([...CRASH_STOPS,...AUTO_CRASHES,...PARTS.filter(p=>p.id==='rideLoop'),...extraBreaks(song)].map(({id}) => hasAudioPart(song,id) ? (song.parts[id].path || song.parts[id].name) : null));
+  return JSON.stringify([...CRASH_STOPS,...AUTO_CRASHES,...PARTS.filter(p=>LAYER_IDS.includes(p.id)),...extraBreaks(song)].map(({id}) => hasAudioPart(song,id) ? (song.parts[id].path || song.parts[id].name) : null));
 }
 // Ignora somente registros vazios legados; não remove nem modifica arquivos reais.
 export function audioEntries(song) {
-  return Object.entries(song?.parts || {}).filter(([id]) => !(ATTACK_IDS.includes(id)||id==='rideLoop'||/^(counter|passage)_/.test(id)) || hasAudioPart(song,id));
+  return Object.entries(song?.parts || {}).filter(([id]) => !(ATTACK_IDS.includes(id)||LAYER_IDS.includes(id)||/^(counter|passage)_/.test(id)) || hasAudioPart(song,id));
 }
 
 export const FILL_IDS = new Set(PARTS.filter(part => part.type === 'virada').map(part => part.id));

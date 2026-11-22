@@ -11,7 +11,7 @@ export const soloExcluded = (profile,id)=>id!=='master'&&hasSolo(profile)&&!prof
 export const effectiveGain = (profile,id)=>profile[id].muted||soloExcluded(profile,id)?0:profile[id].level;
 export function mixChannel(key, isFill=false){
   if(key==='countIntro')return 'count';
-  if(key==='rideLoop')return 'cymbals';
+  if(['rideLoop','hatOpenLoop','hatClosedLoop'].includes(key))return 'cymbals';
   if(/^autoCrash[123]$/.test(key))return 'cymbals';
   if(/^crashStop[23]?$/.test(key))return 'cymbals';
   if(key==='outro'||key==='finish')return 'endings';

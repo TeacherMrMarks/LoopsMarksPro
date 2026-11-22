@@ -66,15 +66,15 @@ test('single base clip is backward compatible when no crash-entry WAV is provide
   assert.equal(player.segments[0].key,'a');assert.equal(player.segments[0].source.loop,true);
 });
 
-test('exact recorded 2T fill takes priority; chorus with crash plays then continuous loop',async()=>{
+test('V28: recorded 2T fill responds immediately when pressed at beat 3; chorus entry then loop',async()=>{
   const {player,ctx}=fixture({includeShort:true});await player.start();
-  ctx.currentTime=player.epoch+player.bar*2+BEAT*1.1; // dentro do tempo 2
+  ctx.currentTime=player.epoch+player.bar*2+BEAT*2; // cabeça do tempo 3
   assert.equal(player.go('chorus'),true);
   assert.equal(player.pending.fill,'fillChorus__2');
-  assert.equal(player.pending.fillBeats,2);
-  assert.equal(player.pending.offsetBeats,0);
+  near(player.pending.fillBeats,2-.006/BEAT);
+  near(player.pending.offsetBeats,0);
   near(player.pending.entry,player.epoch+player.bar*3);
-  near(player.pending.changeAt,player.pending.entry-2*BEAT);
+  near(player.pending.changeAt,ctx.currentTime+.006);
   const fill=player.segments.find(s=>s.key==='fillChorus__2');
   near(fill.source.startOffset,0);
   const attack=player.segments.find(s=>s.key==='chorusEntry');
@@ -85,16 +85,17 @@ test('exact recorded 2T fill takes priority; chorus with crash plays then contin
   assert.equal(continuous.source.loop,true);
 });
 
-test('without short WAV, motor plays tail of existing 4T WAV in remaining 2 beats',async()=>{
+test('V28: long WAV starts immediately at fractional tail when command arrives late',async()=>{
   const {player,ctx}=fixture();await player.start();
   ctx.currentTime=player.epoch+player.bar*3+BEAT*1.1;
   assert.equal(player.go('chorus'),true);
   assert.equal(player.pending.fill,'fillChorus');
-  assert.equal(player.pending.fillBeats,2);
-  assert.equal(player.pending.offsetBeats,2);
+  near(player.pending.fillBeats,2.9-.006/BEAT);
+  near(player.pending.offsetBeats,1.1+.006/BEAT);
   const fill=player.segments.find(s=>s.key==='fillChorus');
-  near(fill.source.startOffset,2*BEAT);
-  near(fill.source.startDuration,2*BEAT);
+  near(fill.source.startOffset,1.1*BEAT+.006);
+  near(fill.source.startDuration,2.9*BEAT-.006);
+  near(fill.at,ctx.currentTime+.006);
   near(player.pending.entry,player.epoch+player.bar*4);
 });
 

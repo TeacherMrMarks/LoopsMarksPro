@@ -42,7 +42,7 @@ function validateContent(content, owner) {
   const breaks=content.customBreaks||[];
   if(!Array.isArray(breaks)||breaks.length>250||new Set(breaks.map(s=>s?.id)).size!==breaks.length||breaks.some(s=>!(/^(counter|passage)_[1-9][0-9]{0,5}$/.test(s?.id||''))||typeof s.label!=='string'||!s.label.trim()||s.label.length>52))return false;
   const cymbals=content.cymbals;
-  if(cymbals!==undefined&&(!cymbals||typeof cymbals.autoEnabled!=='boolean'||!['autoVolume','rideVolume'].every(k=>Number.isFinite(cymbals[k])&&cymbals[k]>=0&&cymbals[k]<=1)))return false;
+  if(cymbals!==undefined&&(!cymbals||typeof cymbals.autoEnabled!=='boolean'||!['autoVolume','rideVolume'].every(k=>Number.isFinite(cymbals[k])&&cymbals[k]>=0&&cymbals[k]<=1)||!['hatOpenVolume','hatClosedVolume'].every(k=>cymbals[k]===undefined||Number.isFinite(cymbals[k])&&cymbals[k]>=0&&cymbals[k]<=1)))return false;
   if(content.mixer!==undefined){
     const keys=['master','loops','fills','cymbals','counter','passage','count','endings'];
     const m=content.mixer;

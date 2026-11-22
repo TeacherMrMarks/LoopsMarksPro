@@ -5,6 +5,9 @@ const norm = value => String(value).normalize('NFD').replace(/[\u0300-\u036f]/g,
 
 export function suggestSlot(filename) {
   const text = norm(filename);
+  if (/^(?:loop_)?(?:chimbal_aberto|hi_?hat_open|open_hi_?hat)(?:_\d+)?$/.test(text)) return 'hatOpenLoop';
+  if (/^(?:loop_)?(?:chimbal_fechado|hi_?hat_closed|closed_hi_?hat)(?:_\d+)?$/.test(text)) return 'hatClosedLoop';
+  if (/^(?:prato_de_|prato_|loop_)?(?:conducao|ride)(?:_\d+)?$/.test(text)) return 'rideLoop';
   // Distingue o crash de parada (bumbo + prato) da entrada de loop com crash.
   // Ex.: Crash_Final_2.wav -> crashStop2; Parte_A_com_crash.wav -> aEntry.
   if (/(?:^|_)(?:crash|prato)(?:_|$)/.test(text) &&
