@@ -1,6 +1,13 @@
-# Loops Marks Pro — V33
+# Loops Marks Pro — V34
 
-Base: V32. Preservação dos identificadores WAV, dados, mapeamentos MIDI/pedal e chaves anteriores de armazenamento.
+Base: V33. Preservação dos identificadores WAV, dados, mapeamentos MIDI/pedal e chaves anteriores de armazenamento.
+
+## Novidades V34 — Recuperação de áudio no iPhone
+
+- A inicialização do player no iOS volta ao caminho direto do toque em Iniciar, sem aguardar o roteamento de saída da V33. O iPhone/iPad utiliza a saída do sistema; a seleção de saída continua disponível em computadores compatíveis. O contexto iOS usa as opções padrão do navegador e solicita AudioSession playback quando disponível. Um buffer silencioso de uma amostra é agendado como tentativa de desbloqueio, sem modificar os WAVs.
+- O ícone de fones oferece dois diagnósticos independentes: Testar motor Web Audio e Testar áudio nativo (WAV curto reproduzido pelo elemento HTML audio). O segundo não usa o mixer nem o motor musical. O WAV é incluído no cache offline com tratamento de solicitações de faixa de bytes. Ouvir o teste nativo não garante que Web Audio esteja funcionando.
+- MIDI: a solicitação do dispositivo é iniciada diretamente no clique, antes da inicialização do áudio; preserva as opções de reconexão, compatibilidade, diagnóstico e mapeamentos. Reconhecimento físico ainda depende do navegador e hardware.
+- Nenhuma mudança no agendamento de viradas, loops, caudas, pratos, mixagem ou estrutura de dados/backups. Restrições de acesso da V33 preservadas. 225 testes locais aprovados, incluindo 5 novos. Build de produção pendente por ausência de esbuild; testes físicos no iPhone e controlador ainda necessários. Não se afirma que a regressão foi reproduzida ou definitivamente resolvida em hardware.
 
 ## Novidades V33 — acesso, saída de áudio e MIDI
 

@@ -27,3 +27,28 @@ export async function testOutput(ctx){
   osc.frequency.value=440;gain.gain.setValueAtTime(0,now);gain.gain.linearRampToValueAtTime(.08,now+.025);gain.gain.linearRampToValueAtTime(0,now+.35);
   osc.connect(gain);gain.connect(ctx.destination);osc.onended=()=>{osc.disconnect();gain.disconnect();};osc.start(now);osc.stop(now+.36);
 }
+
+// iOS uses the native media route. Do not apply desktop sink preferences there.
+export function appleMobile(nav={}) {
+  return /iPhone|iPad|iPod/i.test(nav.userAgent||'') || (/Macintosh/i.test(nav.userAgent||'') && nav.maxTouchPoints>1);
+}
+export function configurePlaybackSession(nav={}) {
+  if(!appleMobile(nav))return false;
+  try { if(nav.audioSession){nav.audioSession.type='playback';return true;} } catch {}
+  return false;
+}
+export function outputSelectionAllowed(ctx,nav={}) {return !appleMobile(nav)&&typeof ctx.setSinkId==='function';}
+// Call synchronously on the user's click (before any awaited routing or permission).
+export function unlockMobileAudio(ctx,nav={}) {
+  if(!appleMobile(nav))return;
+  configurePlaybackSession(nav);
+  try {
+    const source=ctx.createBufferSource();source.buffer=ctx.createBuffer(1,1,ctx.sampleRate);
+    source.connect(ctx.destination);source.onended=()=>source.disconnect();source.start(0);
+  } catch {} // optional unlock; the normal resume still runs
+}
+export function nativeAudioTest(element,nav={}) {
+  configurePlaybackSession(nav);
+  element.currentTime=0;
+  return element.play(); // no await before play: retain user activation
+}

@@ -25,3 +25,8 @@
   Cache-Control: no-cache, must-revalidate
 /access-mode.js
   Cache-Control: no-cache, must-revalidate
+
+/audio.js
+  Cache-Control: no-cache, must-revalidate
+/audio-test.wav
+  Cache-Control: no-cache, must-revalidate

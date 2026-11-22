@@ -24,7 +24,7 @@ test('V16: catálogo oferece visão lista e cards, mantendo ações originais',(
 });
 
 test('V16 mantém o fluxo de upload, backup e acesso de músico existente',()=>{
-  assert.match(app,/const APP_VERSION = 'V33'/);
+  assert.match(app,/const APP_VERSION = 'V34'/);
   assert.match(app,/await player\.prepare\(shown/);
   assert.match(app,/await current\.download\(state\.songs\.find\(s=>s\.id===shown\.id\)\|\|shown/);
   assert.match(app,/function copyMobile/);

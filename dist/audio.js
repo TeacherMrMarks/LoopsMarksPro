@@ -1,3 +1,4 @@
+import { appleMobile, configurePlaybackSession, unlockMobileAudio } from './audio-output.js';
 import { MIX_IDS, normalizeMix, effectiveGain, mixChannel } from './mixer.js';
 import { PARTS, DEFAULT_FILLS, FILL_IDS, ENTRY_OF, BASE_OF_ENTRY, fillBase, fillVariantId, firstPlayablePart, playableParts, extraSections, CRASH_STOPS, audioEntries, ATTACK_IDS, extraBreaks, cymbalSettings, containsCymbal, automaticCrashFor, partLabel, LAYER_IDS, layerPartEligible, layerVolume, passageTail, breakReturnBars } from './data.js';
 import { demoBuffer } from './demo.js';
@@ -69,7 +70,9 @@ export class Player {
     if (!this.ctx || this.ctx.state === 'closed') {
       const Context = window.AudioContext || window.webkitAudioContext;
       if (!Context) throw new Error('Este navegador não oferece reprodução de áudio para palco.');
-      this.ctx = new Context({ latencyHint: 'interactive' });
+      const nav=globalThis.navigator||{};
+      configurePlaybackSession(nav);
+      this.ctx = appleMobile(nav) ? new Context() : new Context({ latencyHint: 'interactive' });
       this.mix = this.ctx.createGain();
       this.mix.connect(this.ctx.destination);
       this.mixBuses = new Map();
@@ -325,6 +328,7 @@ export class Player {
   async start() {
     if (!this.ready || this.running) return;
     const ctx = this.context();
+    unlockMobileAudio(ctx,globalThis.navigator||{});
     await ctx.resume();
     if (!this.ready || this.running) return;
     this.epoch = ctx.currentTime + LEAD;

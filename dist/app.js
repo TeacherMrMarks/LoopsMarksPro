@@ -1,5 +1,5 @@
 import { musicianRoute, phoneDevice, stageOnly, allowedStageAction } from './access-mode.js';
-import { savedOutput, rememberOutput, resumeAudio, routeOutput, audioOutputs, mixerWarnings, testOutput } from './audio-output.js';
+import { savedOutput, rememberOutput, resumeAudio, routeOutput, audioOutputs, mixerWarnings, testOutput, appleMobile, outputSelectionAllowed, unlockMobileAudio, nativeAudioTest } from './audio-output.js';
 import { MIX_CHANNELS, MIX_IDS, normalizeMix, effectiveGain, mixChannel, readLocalMix, writeLocalMix, hasSolo, soloExcluded } from './mixer.js';
 import { Cloud, Repository, PARTS, PLAY_PARTS, MANUAL_PARTS, FINALES, newSong, MAX_FILE_BYTES, fillBase, fillVariantId, firstPlayablePart, liveCatalog, playableParts, extraSections, CRASH_STOPS, hasAudioPart, preparedCrashParts, crashSignature, AUTO_CRASHES, ATTACK_IDS, extraBreaks, cymbalSettings, RENAMEABLE_PARTS, partLabel, namedPart, renamePart, resetPartName, LAYER_IDS, LAYER_ACTIONS, layerVolume, stageFill, passageTail, breakReturnBars, validReturnBars } from './data.js';
 import { suggestSlot } from './importer.js';
@@ -12,7 +12,7 @@ import { emptyLibrary, cleanLibrary, songKind, inFolder, repertoireEntries, repe
 import { PreferenceSync, PEDAL_KEY } from './preferences.js';
 import { MIDI_KEY, MidiController, loadMidiSettings, saveMidiSettings } from './midi.js';
 
-const APP_VERSION = 'V33';
+const APP_VERSION = 'V34';
 // O link do músico carrega exclusivamente o Modo Palco Pro.
 const musicianLink = musicianRoute(new URL(location.href).search);
 const phoneOnly = phoneDevice(navigator);
@@ -1021,7 +1021,9 @@ function openMidiModal(){
   let connectionAttempt=0;
   const connect=async(e,force=false,compatible=false)=>{
     const el=e.currentTarget,attempt=++connectionAttempt;el.disabled=true;status.textContent='Solicitando acesso MIDI…';
-    try{if(midi.supported){try{player.context().resume().catch(()=>{});}catch{}}await (compatible?midi.connectCompatible():force?midi.reconnect():midi.connect());if(attempt!==connectionAttempt||!midi.access)return;
+    try{const connecting=compatible?midi.connectCompatible():force?midi.reconnect():midi.connect();
+      // Request MIDI on the real gesture before any audio initialization.
+      if(midi.supported){try{const ctx=player.context();unlockMobileAudio(ctx,navigator);ctx.resume().catch(()=>{});}catch{}}await connecting;if(attempt!==connectionAttempt||!midi.access)return;
       if(!midi.settings.enabled){midi.settings.enabled=true;persistMidi();}const checkbox=dialog.querySelector('#midi-enabled');if(checkbox)checkbox.checked=true;
       status.textContent=midi.devices.length?'Conexão MIDI autorizada. Pressione um controle para conferir o monitor.':'Acesso autorizado, mas sem entradas MIDI. Confira o cabo e tente Buscar dispositivos.';
       const raw=dialog.querySelector('#midi-raw');if(raw)raw.textContent='Sinais recebidos: '+midi.signalCount;
@@ -1036,7 +1038,7 @@ function openMidiModal(){
   dialog.querySelector('[data-action="midi-cancel"]').onclick=()=>{midi.cancelLearn();status.textContent='Aprendizado cancelado.';};
   dialog.querySelector('[data-action="midi-clear"]').onclick=()=>{if(!window.confirm('Apagar todas as atribuições MIDI deste navegador? O pedal não será alterado.'))return;midi.cancelLearn();midi.settings.mappings=[];persistMidi();paintMidiMappings();};
   // Unlock Web Audio on this real click, not on a MIDI event (which some browsers do not count as a gesture).
-  if(midi.supported){try{player.context().resume().catch(()=>{});}catch{}}
+  if(midi.supported){try{const ctx=player.context();unlockMobileAudio(ctx,navigator);ctx.resume().catch(()=>{});}catch{}}
   paintMidiMappings();updateMidiStatus();dialog.showModal();midi.checkPermission();
 }
 function receiveMidiCommand(command,value){
@@ -1645,36 +1647,46 @@ async function changeView(view) {
 }
 
 const audioRoutes=new WeakMap();
-let outputPreference=savedOutput(localStorage);
+let outputPreference=appleMobile(navigator)?'':savedOutput(localStorage);
 async function ensureAudioRoute(ctx,force=false){
+  if(!outputSelectionAllowed(ctx,navigator))return;
   if(!force&&audioRoutes.get(ctx)===outputPreference)return;
+  if(!outputPreference&&!force&&!audioRoutes.has(ctx)){audioRoutes.set(ctx,'');return;}
   try{await routeOutput(ctx,outputPreference);audioRoutes.set(ctx,outputPreference);}
   catch(error){if(!outputPreference)throw error;await routeOutput(ctx,'');audioRoutes.set(ctx,'');notice('Saída escolhida indisponível. Usando a saída padrão do sistema.');}
 }
 function openAudioModal(){
-  dialog.innerHTML='<section class="v12-settings-dialog"><div class="v12-settings-heading"><div><p class="eyebrow">ÁUDIO · SAÍDA LOCAL</p><h2>Configurações de áudio</h2></div>'+iconButton('audio-close','Fechar','x')+'</div><p class="subtle">Escolha a saída do computador, quando o navegador permitir. O teste usa um sinal baixo e independente do mixer.</p><label class="field"><span>Dispositivo de saída</span><select id="audio-output"><option value="">Padrão do sistema</option></select></label><div class="midi-recovery">'+button('audio-find','Buscar saídas','search','')+button('audio-authorize','Autorizar saída','headphones','')+button('audio-reconnect','Reconectar áudio','refresh','')+button('audio-restart','Reiniciar motor','refresh','')+button('audio-test','Testar áudio','volume','primary')+'</div><p id="audio-status" class="subtle" role="status"></p><p id="audio-mix-status" class="subtle"></p><p class="subtle">Se o teste não soar, confira o volume da aba, o mixer de volume do sistema e a saída física. O teste não confirma sozinho se o alto-falante está audível.</p></section>';
+  dialog.innerHTML='<section class="v12-settings-dialog"><div class="v12-settings-heading"><div><p class="eyebrow">ÁUDIO · SAÍDA LOCAL</p><h2>Configurações de áudio</h2></div>'+iconButton('audio-close','Fechar','x')+'</div><p class="subtle">Escolha a saída do computador, quando o navegador permitir. O teste usa um sinal baixo e independente do mixer.</p><label class="field"><span>Dispositivo de saída</span><select id="audio-output"><option value="">Padrão do sistema</option></select></label><div class="midi-recovery">'+button('audio-find','Buscar saídas','search','')+button('audio-authorize','Autorizar saída','headphones','')+button('audio-reconnect','Reconectar áudio','refresh','')+button('audio-restart','Reiniciar motor','refresh','')+button('audio-test','Testar motor Web Audio','volume','primary')+button('audio-native-test','Testar áudio nativo','volume','')+'</div><audio id="native-audio-test" preload="auto" src="./audio-test.wav"></audio><p id="audio-status" class="subtle" role="status"></p><p id="audio-mix-status" class="subtle"></p><p class="subtle">Se o teste não soar, confira o volume da aba, o mixer de volume do sistema e a saída física. O teste não confirma sozinho se o alto-falante está audível.</p></section>';
   const root=dialog.querySelector('section'),select=root.querySelector('#audio-output'),status=root.querySelector('#audio-status');
   let ctx=player.context();
-  const paint=(msg='')=>{status.textContent=(msg?msg+' · ':'')+'Motor: '+ctx.state+' · '+ctx.sampleRate+' Hz · WAVs preparados: '+player.buffers.size+' · '+(typeof ctx.setSinkId==='function'?'Seleção de saída disponível':'Saída controlada pelo sistema');const song=mixerSong();const warnings=mixerWarnings(song?profileFor(song):null,effectiveGain,MIX_IDS);root.querySelector('#audio-mix-status').textContent=warnings.length?'Mixer: '+warnings.join(' · '):'Mixer: nenhum bloqueio de Master/Loops identificado.';};
-  async function scan(){try{const rows=await audioOutputs(navigator.mediaDevices);select.replaceChildren(new Option('Padrão do sistema',''));rows.forEach((d,i)=>select.add(new Option(d.label||'Saída '+(i+1),d.deviceId)));if(outputPreference&&!rows.some(d=>d.deviceId===outputPreference))select.add(new Option('Saída salva (não listada)',outputPreference));select.value=outputPreference;select.disabled=typeof ctx.setSinkId!=='function';paint(rows.length?'Saídas encontradas: '+rows.length:'Nenhuma saída adicional listada.');}catch(e){paint(e.message);}}
+  const paint=(msg='')=>{status.textContent=(msg?msg+' · ':'')+'Motor: '+ctx.state+' · '+ctx.sampleRate+' Hz · WAVs preparados: '+player.buffers.size+' · '+(outputSelectionAllowed(ctx,navigator)?'Seleção de saída disponível':'Saída controlada pelo sistema');const song=mixerSong();const warnings=mixerWarnings(song?profileFor(song):null,effectiveGain,MIX_IDS);root.querySelector('#audio-mix-status').textContent=warnings.length?'Mixer: '+warnings.join(' · '):'Mixer: nenhum bloqueio de Master/Loops identificado.';};
+  async function scan(){try{const rows=await audioOutputs(navigator.mediaDevices);select.replaceChildren(new Option('Padrão do sistema',''));rows.forEach((d,i)=>select.add(new Option(d.label||'Saída '+(i+1),d.deviceId)));if(outputPreference&&!rows.some(d=>d.deviceId===outputPreference))select.add(new Option('Saída salva (não listada)',outputPreference));select.value=outputPreference;select.disabled=!outputSelectionAllowed(ctx,navigator);paint(rows.length?'Saídas encontradas: '+rows.length:'Nenhuma saída adicional listada.');}catch(e){paint(e.message);}}
   async function run(fn){try{await fn();}catch(e){paint(e.message||'Falha de áudio');}}
-  select.onchange=()=>run(async()=>{const id=select.value;await routeOutput(ctx,id);outputPreference=id;audioRoutes.set(ctx,id);rememberOutput(localStorage,id);if(previewContext&&previewContext.state!=='closed')await ensureAudioRoute(previewContext,true);paint('Saída aplicada');});
+  select.onchange=()=>run(async()=>{if(!outputSelectionAllowed(ctx,navigator))return;const id=select.value;await routeOutput(ctx,id);outputPreference=id;audioRoutes.set(ctx,id);rememberOutput(localStorage,id);if(previewContext&&previewContext.state!=='closed')await ensureAudioRoute(previewContext,true);paint('Saída aplicada');});
   root.querySelector('[data-action="audio-find"]').onclick=()=>scan();
-  const authorize=root.querySelector('[data-action="audio-authorize"]');authorize.hidden=typeof navigator.mediaDevices?.selectAudioOutput!=='function'||typeof ctx.setSinkId!=='function';authorize.onclick=()=>run(async()=>{const d=await navigator.mediaDevices.selectAudioOutput();await routeOutput(ctx,d.deviceId);outputPreference=d.deviceId;audioRoutes.set(ctx,outputPreference);rememberOutput(localStorage,outputPreference);await scan();paint('Saída autorizada');});
-  root.querySelector('[data-action="audio-reconnect"]').onclick=()=>run(async()=>{await resumeAudio(ctx);await ensureAudioRoute(ctx,true);if(player.mixProfile)player.updateMix(player.mixProfile);paint('Motor retomado; saída reavaliada');});
-  root.querySelector('[data-action="audio-restart"]').onclick=()=>run(async()=>{if(player.running||startPending||state.download){paint('Pare a reprodução e aguarde o preparo antes de reiniciar');return;}stopPreview();player.cancelPreparation();currentGeneration++;const old=ctx;player.ctx=null;ctx=player.context();const unlocking=resumeAudio(ctx);old.close?.().catch(()=>{});await unlocking;await ensureAudioRoute(ctx,true);if(state.view==='live'&&state.selected)await prepareLive();paint('Motor recriado; confira o teste de áudio');});
-  root.querySelector('[data-action="audio-test"]').onclick=()=>run(async()=>{await resumeAudio(ctx);await ensureAudioRoute(ctx);await testOutput(ctx);paint('Sinal de teste enviado');});
-  root.querySelector('[data-action="audio-close"]').onclick=()=>dialog.close();
+  const authorize=root.querySelector('[data-action="audio-authorize"]');authorize.hidden=typeof navigator.mediaDevices?.selectAudioOutput!=='function'||!outputSelectionAllowed(ctx,navigator);authorize.onclick=()=>run(async()=>{const d=await navigator.mediaDevices.selectAudioOutput();await routeOutput(ctx,d.deviceId);outputPreference=d.deviceId;audioRoutes.set(ctx,outputPreference);rememberOutput(localStorage,outputPreference);await scan();paint('Saída autorizada');});
+  root.querySelector('[data-action="audio-reconnect"]').onclick=()=>run(async()=>{unlockMobileAudio(ctx,navigator);await resumeAudio(ctx);await ensureAudioRoute(ctx,true);if(player.mixProfile)player.updateMix(player.mixProfile);paint('Motor retomado; saída reavaliada');});
+  root.querySelector('[data-action="audio-restart"]').onclick=()=>run(async()=>{if(player.running||startPending||state.download){paint('Pare a reprodução e aguarde o preparo antes de reiniciar');return;}stopPreview();player.cancelPreparation();currentGeneration++;const old=ctx;player.ctx=null;ctx=player.context();unlockMobileAudio(ctx,navigator);const unlocking=resumeAudio(ctx);old.close?.().catch(()=>{});await unlocking;await ensureAudioRoute(ctx,true);if(state.view==='live'&&state.selected)await prepareLive();paint('Motor recriado; confira o teste de áudio');});
+  root.querySelector('[data-action="audio-test"]').onclick=()=>run(async()=>{unlockMobileAudio(ctx,navigator);if(appleMobile(navigator)){await testOutput(ctx);}else{await resumeAudio(ctx);await ensureAudioRoute(ctx);await testOutput(ctx);}paint('Sinal Web Audio enviado: confirme se ouviu');});
+  const nativeTest=root.querySelector('#native-audio-test');
+  dialog.addEventListener('close',()=>nativeTest.pause(),{once:true});
+  nativeTest.addEventListener('ended',()=>paint('Teste nativo concluído: confirme se ouviu'));
+  root.querySelector('[data-action="audio-native-test"]').onclick=()=>run(async()=>{await nativeAudioTest(nativeTest,navigator);paint('Teste de mídia nativa iniciado');});
+  root.querySelector('[data-action="audio-close"]').onclick=()=>{nativeTest.pause();dialog.close();};
   dialog.showModal();paint();scan();
 }
 
 async function startPlayer() {
   if (startPending) return;
-  if (state.info.interrupted) { await resumeAudio(player.context()); return; }
+  if (state.info.interrupted) { const ctx=player.context();unlockMobileAudio(ctx,navigator);await resumeAudio(ctx); return; }
   startPending = true;
   try {
-    await resumeAudio(player.context());
-    await ensureAudioRoute(player.context());
+    // Mobile: call Player.start directly in the original click, as in V28.
+    // Desktop routing is optional; failures must not block the default output.
+    if(!appleMobile(navigator)&&outputPreference){
+      try{await resumeAudio(player.context());await ensureAudioRoute(player.context());}
+      catch(error){notice('Saída configurada indisponível: '+error.message);}
+    }
     player.updateMix(profileFor(state.selected));
     const warnings=mixerWarnings(player.mixProfile,effectiveGain,MIX_IDS);if(warnings.length)notice(warnings.join(' · ')+' — confira o Mixer.');
     const starting = player.start();

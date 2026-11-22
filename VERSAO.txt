@@ -1,4 +1,4 @@
-Loops Marks Pro V33
-Base: V32 preservada.
-Acesso mobile e músico somente Palco; saída/diagnóstico de áudio; recuperação MIDI.
-Validação: 220/220 testes locais. Build Netlify e hardware real pendentes.
+Loops Marks Pro V34
+Base: V33 preservada.
+Inicialização direta iOS; saída padrão; teste nativo independente; solicitação MIDI direta.
+Validação: 225/225 testes locais. Build Netlify e hardware real pendentes.
