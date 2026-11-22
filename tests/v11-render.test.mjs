@@ -5,13 +5,14 @@ import {readFileSync} from 'node:fs';
 import * as data from '../dist/data.js';
 import * as lib from '../dist/library-model.js';
 import * as meter from '../dist/meter.js';
+import * as midi from '../dist/midi.js';
 import {Player,bpmRange} from '../dist/audio.js';
 const source=readFileSync(new URL('../dist/app.js',import.meta.url),'utf8')
   .replace(/^import .*;\n/gm,'').split("document.addEventListener('keydown',")[0];
 function context(mode='central'){
-  const root={querySelector:()=>null};
+  const root={querySelector:()=>null,addEventListener:()=>{}};
   const sandbox={
-    ...data,...lib,...meter,Player,bpmRange,
+    ...data,...lib,...meter,...midi,Player,bpmRange,
     Cloud:class {enabled=true;session(){return {id:'u1',email:'editor@example.com'}}},
     location:{href:'https://loops.test/?modo='+mode},
     URL,crypto,structuredClone,

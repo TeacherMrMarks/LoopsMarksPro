@@ -1,7 +1,7 @@
-const VERSION = 'loops-marks-v21-crash-ui-20261121';
+const VERSION = 'loops-marks-v27-repertoire-isolation-20261121';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './netlify-client.js', './backup.js', './data.js', './library-model.js',
-  './audio.js', './meter.js', './stretch.js', './demo.js', './importer.js', './manifest.webmanifest',
+  './midi.js', './mixer.js', './audio.js', './meter.js', './stretch.js', './demo.js', './importer.js', './manifest.webmanifest',
   './icon.svg', './icon-192.png', './icon-512.png',
 ];
 const scope = new URL(self.registration.scope);

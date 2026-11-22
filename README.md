@@ -1,24 +1,57 @@
-# Loops Marks Pro — V21
+# Loops Marks Pro — V27
 
-Atualização pontual da **V20** para corrigir a organização da aba **Crash** e ocultar ataques sem WAV no **Modo Live**. A V20 permanece intacta. Esta versão preserva músicas, ritmos, repertórios, WAVs, identidade, backup e pedais.
+Base: V26. Preservação dos identificadores WAV, dados e chaves anteriores de armazenamento.
 
-## Correções V21
+## Novidades V27 — Repertórios independentes
 
-1. **Cadastro > aba Crash:** a seção **Crashes adicionais**, com os campos de **Crash 1, Crash 2 e Crash 3**, agora aparece DENTRO da aba Crash, e não na aba Loops. A aba deixa de aparecer vazia. Continuam disponíveis **Ouvir**, **Reutilizar**, **Importar/Trocar** e **Remover**, independentemente de o slot ter áudio.
-2. **Modo Live (computador e celular):** um botão Crash só aparece quando há **WAV vinculado** ao respectivo slot. Se não houver WAV, o botão não aparece. Se excluir o WAV, o respectivo botão some quando o player atualizar seu cadastro. Os três slots de cadastro permanecem disponíveis para novos envios.
-3. **Sem alterar o motor musical:** Crashes continuam iniciando no **próximo tempo 1**, por cima do loop, sem interromper a bateria. **Acabamento e Final** mantêm seu comportamento anterior. Não alteramos os identificadores `crashStop`, `crashStop2` ou `crashStop3`, para preservar dados e atribuições de pedal.
+- Na Central > Repertórios, clique na engrenagem ao lado de cada item para personalizar os nomes das partes (inclusive partes personalizadas com WAV) e os oito canais do mixer, MUTE e SOLO. Campos de nome vazios herdam o original; desmarcar Usar mixagem própria herda a mixagem original. Herdar original limpa personalizações de nomes e mixer, sem mudar título/BPM do item.
+- Cada ocorrência recebe um identificador estável, inclusive ao repetir o mesmo ritmo no mesmo repertório. V26 e anteriores são migrados sem perder título/BPM. Duplicar repertório cria identificadores novos. Os WAVs e IDs das partes, viradas, mapas e comandos continuam compartilhados por referência; ajustes do repertório não gravam no cadastro original. O item sem personalização acompanha as alterações intencionais na origem.
+- No Palco, a mixagem administrativa é salva automaticamente no item do repertório, sincronizada quando parado. Link do músico mantém ajustes de mixagem locais por item, sem editar a biblioteca. A preferência local de contagem também é separada por item. O BPM de origem não muda; continua valendo a faixa de ±10 BPM. Selecionar a música diretamente na biblioteca sai do contexto do repertório.
+- Exportação/restauração inclui identificadores, rótulos, mixagem e preferências locais por ocorrência, remapeando as referências na importação. O backup continua no esquema 4 e aceita backups anteriores. Restauração cria novas cópias. Atualize todos os aparelhos para V27 antes de editar repertórios: clientes antigos não entendem os novos campos.
+- O repositório impede salvar uma projeção de palco sobre um cadastro de origem. O limite de tamanho dos metadados na API foi ampliado para acomodar os perfis independentes (1,8 milhão de caracteres; limite de requisição 2 MB).
 
-## Comportamentos preservados da V20
+## Recursos preservados da V26
 
-- Contagem opcional antes de iniciar, com 1 ou 2 compassos.
-- Introdução musical automática ou em repetição, conforme configuração.
-- Viradas inteligentes e comando da mesma parte.
-- Reinício de ensaio pela Parte A, B, refrão ou outra parte.
-- Reutilização de WAVs, fórmulas de compasso, sincronização e Modo Live de músico.
+- Mixer: nomes dos oito canais em branco de alto contraste, maior peso e tamanho, incluindo no celular; botões MUTE e SOLO nos sete canais de fonte (Master continua com MUTE e volume geral). Múltiplos solos permitidos; MUTE explícito tem prioridade. Limpar SOLO restaura a escuta normal sem alterar os faders ou o MUTE. O fader Pratos continua único.
+- SOLO atua sobre os ganhos existentes, preservando agendamento, fontes e tempo musical. Estados do mixer persistem por música/ritmo; no acesso músico, são locais ao aparelho, como na V25. Verifique se nenhum SOLO está ativo antes do show.
+- Partes D e E opcionais com seus próprios loops, entradas com crash, viradas, importação inteligente de nomes e comandos MIDI/pedal. Só aparecem no palco quando houver WAV. A área Mais partes musicais permite adicionar partes F e seguintes, com o limite de segurança anterior de 36 partes personalizadas e 250 referências de áudio no total.
+- Renomeie a introdução musical e as partes contínuas na Central, aba Loops, com dois cliques/dois toques no nome ou pelo lápis. A caixa de edição permite retornar ao nome padrão. Partes personalizadas guardam o nome original para restauração. Os identificadores internos continuam estáveis; WAV, entrada, virada, mapa, pratos e comandos não são alterados. As etiquetas atualizadas aparecem também nos botões do Palco e nos seletores associados. Novos cadastros independentes começam com nomes padrão; uma música criada pela função de cópia de ritmo pode herdar os nomes do modelo, mas suas alterações são independentes.
+- Nomes e SOLO integram o salvamento, catálogo em nuvem e backup. Backups anteriores sem esses campos continuam compatíveis, com os nomes e mixagem padrão anteriores.
 
-## Testes e publicação
+## Recursos V25 preservados
 
-- **109/109 testes automatizados locais aprovados** com `npm test` (Node). Os novos testes cobrem organização da aba Crash, campos do editor e filtro de ataques sem áudio no Modo Live.
-- **Sintaxe JavaScript verificada** com `node --check`.
-- O `dist/netlify-client.js` no ZIP continua sendo um **placeholder para desenvolvimento**, substituído por `npm run build` durante o deploy no Netlify. **Não publique a pasta dist diretamente sem build**.
-- Use o **mesmo repositório GitHub e o mesmo site Netlify** da V20; faça backup antes, confira o deploy de teste, teste o celular e só então publique oficialmente.
+- Modo Palco Pro substitui o nome e a apresentação do antigo Modo Live, mantendo os links `modo=musico` e `modo=ao-vivo`. Botões adaptáveis, fase atual, próxima parte, pulsos, forma de onda, repertório e tela cheia (ou foco de palco quando a API não estiver disponível). Partes e viradas cadastradas, inclusive personalizadas, são exibidas conforme os WAVs; introdução possui comando para iniciar pela abertura, e as entradas com crash continuam ligadas à parte correspondente.
+- Mixer Marks Pro: ícone compacto ao lado do pedal e MIDI na Central e no Palco. Painel não modal, faders verticais, mute, restauração dos padrões. Oito canais: Master, Loops, Viradas, Pratos, Contratempos, Passagens, Contagem e Finais. Pratos agrupa crashes automáticos, manuais e condução; os volumes-base específicos da V24 continuam preservados. Pratos que estão gravados dentro de WAVs de bateria não podem ser separados por esse fader.
+- Ganhos independentes via Web Audio, com suavização de 12 ms (constante de tempo); não reiniciam fontes nem alteram o agendamento musical. Prévia dos WAVs na Central utiliza a mixagem do cadastro. Os faders podem ser atribuídos a mensagens MIDI CC. O pedal HID permanece funcional.
+- Mixagem administrativa por música/ritmo com gravação automática local e sincronização quando a execução para. No acesso individual de músico, ajustes do mixer são preferências locais, sem editar a biblioteca administrativa. Perfis e preferências locais entram na exportação/restauração do backup, junto com os mapeamentos MIDI e pedal. Cache offline inclui mixer.js.
+
+## Recursos preservados da V24
+- Crash automático: três WAVs de ataque independentes, acionados no tempo 1 da parte de destino após uma virada efetivamente agendada. Distribuição A/B/Refrão, demais partes existentes em rodízio; se faltarem pratos, usa os disponíveis. Com entrada Loop + Crash cadastrada ou WAV com prato/crash identificado, o ataque automático é suprimido. A expressão `sem prato` ou `sem crash` indica ausência; a identificação pode ser corrigida manualmente no cadastro. Volume independente e botão de ligar/desligar no Live. O botão Live é temporário; o padrão é configurado na área administrativa e sincronizado. Crashes manuais da V23 continuam separados.
+- Condução manual: WAV em compassos completos, ligado/desligado no próximo tempo 1. A condução para no início efetivo de viradas e trechos especiais; retoma no tempo 1 da parte seguinte quando ativada. Loops com condução já gravada (nome ou correção manual) suspendem a camada. Stop encerra todos os sons. Volume independente.
+- Contratempos e Passagens: duas abas antes de Finais. Adicionar, nomear, importar WAV, reutilizar, ouvir e excluir trechos. Duração inferida do WAV, de 1, 2 ou mais compassos inteiros, ajustável no cadastro. No Live entram no próximo tempo 1, executam uma vez e retornam à parte anterior ou à parte escolhida. A condução é suspensa durante o trecho. Apenas arquivos vinculados e preparados são exibidos. O limite de segurança preexistente do catálogo é de 250 referências de WAV por música/ritmo, com arquivos de até 32 MB cada; não há um número fixo de botões de contratempos ou passagens.
+- Pedal HID e MIDI Learn: comandos de ligar/desligar crash automático, condução, contratempos e passagens numerados. O seletor exibe os trechos existentes no catálogo; o número identifica o slot na música/ritmo atual. Adicione novas atribuições HID conforme necessário (seis campos iniciais). Mapeamentos MIDI anteriores mantidos.
+- Backup: completo inclui WAVs novos e antigos, nomes, duração, metadados de detecção, volumes, estado padrão de crash automático, repertórios, pastas, associações HID/MIDI e preferências locais de contagem remapeadas na restauração. Modo configurações não contém WAVs. Backups anteriores continuam aceitos. A restauração cria cópias conforme o mecanismo existente; valide em ambiente de teste. Os estados temporários do palco (condução tocando, fila de ações) não são restaurados como reprodução ativa.
+- Sincronização: novos dados enviados pelo catálogo da mesma conta Netlify; dispositivo músico recebe as configurações e arquivos após sincronizar/baixar. Preferências de controle por dispositivo continuam locais e transferíveis por backup.
+
+## MIDI Learn Pro
+
+- Ícone de teclado ao lado do pedal no Modo Palco Pro e cabeçalho da Central; também em Configurações da Central.
+- Conectar MIDI solicita Web MIDI apenas com `sysex:false`, mostra entradas reconhecidas e monitor de mensagens. USB e Bluetooth MIDI dependem do sistema operacional, navegador e equipamento.
+- Escolha uma função, clique em Aprender MIDI e pressione uma tecla/pad/botão ou mova um controle CC. Aprende Note On, CC e Program Change. Note Off e Note On com velocidade zero não disparam comandos. Não há número fixo de slots como no pedal antigo.
+- Para CC: pressão (cruza valor 64), variação (valor mudou) ou pulso relativo (cada mensagem). Para knobs/faders absolutos, volume utiliza 0–127 e BPM mapeia a faixa original permitida. BPM continua ajustável apenas quando parado, conforme V21.
+- Atribuições incluem Iniciar/Retomar, Iniciar/Parar, Parar, introdução musical (ao iniciar), partes, viradas manuais, crashes, acabamento, final, modo de virada, cancelamento, contagem, repertório, mapa, volume e BPM. Partes personalizadas cadastradas também são selecionáveis conforme a música/ritmo aberto.
+- Selecionar, editar ou excluir atribuições sem modificar os pedais. Aprender novamente o mesmo sinal específico substitui sua associação. Pode vincular a um dispositivo ou permitir qualquer dispositivo. Dispositivo específico tem prioridade.
+- A configuração é local ao navegador/origem. Incluída nas exportações de backup e na restauração. Em outro dispositivo ou navegador, restaure o backup ou configure novamente. Permalinks de origens diferentes não compartilham localStorage.
+- Dispositivos conectados/desconectados atualizam a lista. Reconexão automática quando o navegador concede acesso já autorizado; se necessário, clique em Conectar MIDI novamente. Durante o aprendizado, não são executados comandos musicais. Feche o painel para usar o Modo Palco Pro.
+- Controle MIDI e pedal HID podem funcionar na mesma sessão sem modificar os mapeamentos existentes. As ações MIDI reutilizam os controles do Modo Palco Pro e seus bloqueios. Crashes continuam dependentes de WAV e tocando sobre o loop no tempo 1.
+
+## Compatibilidade e primeiro teste
+
+Chrome de Chromebook/Windows/macOS e navegador Android compatível: conectar dispositivo reconhecido, abrir site HTTPS, permitir MIDI. No iPhone/iPad, Safari/PWA não disponibiliza Web MIDI nativo; pode-se testar uma ponte compatível, como Web MIDI Browser, mas não há garantia de compatibilidade com este site ou sua autenticação. A interface de áudio deve transmitir MIDI, não apenas áudio. Bluetooth MIDI depende da exposição pelo SO/navegador. Pedal HID continua disponível. O áudio pode exigir um gesto de desbloqueio: abra o painel MIDI por toque/clique ou toque Iniciar na tela antes de operar exclusivamente pelo controlador.
+
+## Validação V27
+
+- `npm test`: 166/166 testes aprovados (159 anteriores e 7 novos). Motor Web Audio testado por simulação de relógio, fontes e ganhos. O teste de backup utiliza um codec de teste substituto para validar exportação/restauração de metadados, WAVs e mapeamentos; não certifica a biblioteca ZIP real de produção.
+- `node --check`: módulos JS, scripts e funções Netlify sem erros de sintaxe.
+- `npm run build`: bloqueado porque o pacote `esbuild` não está instalado no ambiente. O Netlify precisa realizar o build, que substitui `dist/netlify-client.js` pelo cliente real de Identity/fflate. Não publique `dist` isoladamente.
+- Testes com navegador real, WAVs reais, hardware e Netlify/Identity/Blobs ainda pendentes. Validar no Permalink antes da publicação oficial.

@@ -14,4 +14,4 @@ writeFileSync(worker, readFileSync(worker, 'utf8').replace(
   /^const VERSION = 'loops-marks-[^']+';/m,
   `const VERSION = 'loops-marks-${hash.digest('hex').slice(0, 12)}';`,
 ));
-console.log('Loops Marks Pro V21: Identity, backup e cache offline preparados.');
+console.log('Loops Marks Pro V27: Identity, backup e cache offline preparados.');

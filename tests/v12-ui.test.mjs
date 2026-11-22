@@ -18,7 +18,7 @@ test('V12: menus compactos, bibliotecas na área principal e configurações flu
 test('V12: seis comandos HID personalizáveis com captura, proteção e memória offline',()=>{
   for(const code of ['v12-pedal-row','state.pedalLearn','event.code','pedalLastAt','localStorage.setItem(\'loops-v12-pedal-map\''])
     assert.ok(app.includes(code));
-  assert.match(app,/Array.from\(\{length:6\}/);
+  assert.match(app,/Array.from\(\{length:state.pedalSlots\}/);
   assert.match(app,/pedal-setup/);
   assert.match(app,/event.repeat/);
 });

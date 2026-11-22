@@ -1,10 +1,12 @@
-import { PARTS, DEFAULT_FILLS, FILL_IDS, ENTRY_OF, BASE_OF_ENTRY, fillBase, fillVariantId, firstPlayablePart, playableParts, extraSections, CRASH_STOPS } from './data.js';
+import { MIX_IDS, normalizeMix, effectiveGain, mixChannel } from './mixer.js';
+import { PARTS, DEFAULT_FILLS, FILL_IDS, ENTRY_OF, BASE_OF_ENTRY, fillBase, fillVariantId, firstPlayablePart, playableParts, extraSections, CRASH_STOPS, audioEntries, ATTACK_IDS, extraBreaks, cymbalSettings, containsCymbal, automaticCrashFor, partLabel } from './data.js';
 import { demoBuffer } from './demo.js';
 import { meterOf } from './meter.js';
 
 const LOOPS = new Set(Object.keys(ENTRY_OF)); // Somente partes contínuas, nunca a contagem
 const ENDINGS = new Set(['outro', 'finish']);
 const CRASHES = new Set(CRASH_STOPS.map(part => part.id));
+const ATTACKS = new Set(ATTACK_IDS);
 const LEAD = 0.075;           // antecedência para agendamento no relógio Web Audio
 const FADE = 0.004;
 const EPS = 0.0002;
@@ -49,6 +51,10 @@ export class Player {
   preparation = 0;
   segments = [];
   overlays = []; // Ataques adicionais: nunca modificam a linha principal da música.
+  autoCrashOverride = null;
+  rideEnabled = false;
+  rideLayers = [];
+  rideFrom = 0;
   countEnabled = true;
   countBars = 1;
   running = false;
@@ -64,9 +70,35 @@ export class Player {
       this.ctx = new Context({ latencyHint: 'interactive' });
       this.mix = this.ctx.createGain();
       this.mix.connect(this.ctx.destination);
+      this.mixBuses = new Map();
+      this.updateMix(this.mixProfile || normalizeMix(this.song?.mixer, this.song));
       this.ctx.addEventListener('statechange', () => this.onState?.());
     }
     return this.ctx;
+  }
+  // Stable gain buses live for the AudioContext lifetime. No segment is restarted.
+  bus(id) {
+    this.mixBuses ||= new Map();
+    if (!this.mixBuses.has(id)) {
+      const bus=this.ctx.createGain();
+      bus.gain.value=effectiveGain(this.mixProfile || normalizeMix(this.song?.mixer,this.song),id);
+      bus.connect(this.mix);this.mixBuses.set(id,bus);
+    }
+    return this.mixBuses.get(id);
+  }
+  updateMix(profile) {
+    this.mixProfile=normalizeMix(profile,this.song);
+    if(!this.ctx||!this.mix)return;
+    const now=this.ctx.currentTime;
+    this.smoothGain(this.mix.gain,effectiveGain(this.mixProfile,'master'),now);
+    for(const id of MIX_IDS.filter(id=>id!=='master')){
+      const gain=this.bus(id).gain;
+      this.smoothGain(gain,effectiveGain(this.mixProfile,id),now);
+    }
+  }
+  smoothGain(gain,value,now) {
+    gain.cancelScheduledValues?.(now);
+    if(gain.setTargetAtTime)gain.setTargetAtTime(value,now,.012);else gain.value=value;
   }
   cancelPreparation() {
     this.preparation++;
@@ -95,13 +127,14 @@ export class Player {
     const context = this.context();
     const buffers = new Map();
     this.song = song;
+    this.autoCrashOverride=null;
     const beatSeconds = 60 / song.bpm;
     const ratio = song.bpm / bpm;
-    const supported = new Set([...PARTS.map(part => part.id),...extraSections(song).flatMap(s=>[s.id,s.id+'Entry'])]);
+    const supported = new Set([...PARTS.map(part => part.id),...extraSections(song).flatMap(s=>[s.id,s.id+'Entry']),...extraBreaks(song).map(s=>s.id)]);
     this.loopKeys=new Set([...LOOPS,...extraSections(song).map(s=>s.id)]);
     if(song.introMode==='repeat')this.loopKeys.add('intro');
     this.loopKeys.delete('countIntro'); // Contagem é sempre um WAV de uma vez
-    for (const [key, part] of Object.entries(song.parts || {})) {
+    for (const [key, part] of audioEntries(song)) {
       if (!supported.has(key) && !this.isFill(key)) continue;
       const audio = song.demo ? demoBuffer(context, song, key) : await load(part.path);
       if (!audio) throw new Error('Falta o áudio de ' + this.label(key) + '. Baixe a música neste aparelho.');
@@ -109,7 +142,7 @@ export class Player {
         .catch(() => { throw new Error('Não foi possível ler o WAV de ' + this.label(key) + '.'); });
       if (this.preparation !== version) return false;
       const beats = partBeats(part, song.beats);
-      if (!ENDINGS.has(key) && !CRASHES.has(key)) {
+      if (!ENDINGS.has(key) && !ATTACKS.has(key)) {
         if (!Number.isInteger(beats) || beats < 1) {
           throw new Error(this.label(key) + ': configure a duração em tempos inteiros.');
         }
@@ -126,13 +159,13 @@ export class Player {
             ' s. Para ' + beats + ' pulsos em ' + meterOf(song) + ' deve medir ' + expected.toFixed(2) + ' s. Confira o BPM, o compasso e o corte na DAW.');
         }
       }
-      const target = (ENDINGS.has(key) || CRASHES.has(key)) ? decoded.duration * ratio : beats * (60 / bpm);
+      const target = (ENDINGS.has(key) || ATTACKS.has(key)) ? decoded.duration * ratio : beats * (60 / bpm);
       const frames = Math.max(1, Math.round(target * context.sampleRate));
       const adjusted = Math.abs(ratio - 1) < 0.00001
         ? decoded : await this.stretch(decoded, frames, decoded.length);
       if (this.preparation !== version) return false;
       const buffer = adjusted.length >= frames ? adjusted : this.copyWithPadding(adjusted, frames);
-      buffers.set(key, { buffer, seconds: (ENDINGS.has(key) || CRASHES.has(key)) ? buffer.duration : target, beats });
+      buffers.set(key, { buffer, seconds: (ENDINGS.has(key) || ATTACKS.has(key)) ? buffer.duration : target, beats });
     }
     this.initialPart = (song.sequence||[]).map(s=>s.part).find(k=>this.loopKeys.has(k)&&buffers.has(k)) || firstPlayablePart(song);
     this.armedPart = null;
@@ -181,7 +214,7 @@ export class Player {
       if (!Number.isFinite(meta.seconds) || meta.seconds <= 0) throw new Error('Duração inválida do loop: '+this.label(key));
       source.loopEnd = meta.seconds;
     }
-    source.connect(gate).connect(this.mix);
+    source.connect(gate).connect(this.bus(mixChannel(key,this.isFill(key))));
     const offset = offsetBeats * this.beatSeconds;
     const seconds = lengthBeats === null ? meta.seconds - offset : lengthBeats * this.beatSeconds;
     if (seconds <= 0 || seconds > meta.seconds - offset + .005) {
@@ -195,7 +228,27 @@ export class Player {
     this.segments.push(segment);
     return segment;
   }
-  scheduleDestination(dest, at) {
+  autoCrashEnabled() {return this.autoCrashOverride??cymbalSettings(this.song).autoEnabled;}
+  scheduleAutoCrash(dest,at,fillKey) {
+    const config=cymbalSettings(this.song);
+    if(fillKey && !ENDINGS.has(dest) && this.autoCrashEnabled() && this.loopKeys.has(dest) &&
+      !this.entryFor(dest) && !containsCymbal(this.song.parts?.[dest],'crash') && !containsCymbal(this.song.parts?.[fillKey],'crash')) {
+      const key=automaticCrashFor(this.song,dest,k=>this.buffers.has(k));
+      if(key)this.attack(key,at,config.autoVolume,true);
+    }
+  }
+  toggleAutoCrash() {
+    if(!this.ready||!ATTACK_IDS.slice(3).some(k=>this.buffers.has(k)))return false;
+    this.autoCrashOverride=!this.autoCrashEnabled();
+    if(this.running){
+      const now=this.ctx.currentTime;
+      if(!this.autoCrashOverride){for(const e of this.overlays.filter(e=>e.automatic&&e.at>now+EPS))this.discard(e);this.overlays=this.overlays.filter(e=>!e.automatic||e.at<=now+EPS);}
+      else if(this.pending?.entry>now+LEAD&&this.isFill(this.pending.fill||'none'))this.scheduleAutoCrash(this.pending.dest,this.pending.entry,this.pending.fill);
+    }
+    this.onState?.();return true;
+  }
+  scheduleDestination(dest,at,fillKey=null) {
+    this.scheduleAutoCrash(dest,at,fillKey);
     if (ENDINGS.has(dest)) return this.segment(dest, at);
     const attack = this.entryFor(dest);
     if (attack) {
@@ -233,6 +286,8 @@ export class Player {
     }
     this.segments = still;
     this.pending = null;
+    for(const effect of this.overlays.filter(e=>e.automatic&&e.at>now+EPS))this.discard(effect);
+    this.overlays=this.overlays.filter(e=>!e.automatic||e.at<=now+EPS);
   }
   async start() {
     if (!this.ready || this.running) return;
@@ -271,6 +326,7 @@ export class Player {
       } else this.scheduleDestination(this.initialPart || 'a', openingAt);
       const opening = this.segments.find(seg=>this.baseFor(seg.key)===(selected||this.initialPart));
       this.sequenceEnteredAt = opening?.at ?? openingAt;
+      this.syncRide();
     } catch (error) {
       this.stop();
       throw error;
@@ -285,11 +341,11 @@ export class Player {
       if (start > intro.at + EPS) { this.silence(intro, start); this.segment(fill, start); }
       else {
         this.segment(fill, intro.end);
-        this.scheduleDestination(this.initialPart || 'a', intro.end + this.buffers.get(fill).seconds);
+        this.scheduleDestination(this.initialPart || 'a', intro.end + this.buffers.get(fill).seconds,fill);
         return;
       }
     }
-    this.scheduleDestination(this.initialPart || 'a', intro.naturalEnd);
+    this.scheduleDestination(this.initialPart || 'a', intro.naturalEnd,fill);
   }
   current(now = this.ctx.currentTime) {
     return this.segments.findLast(s => s.at <= now && s.end > now) || null;
@@ -337,7 +393,13 @@ export class Player {
     const active = this.current(now);
     if (ENDINGS.has(active?.key)) return false;
     if (this.pending && ENDINGS.has(this.pending.dest) && !ENDINGS.has(dest)) return false;
-    if (this.pending && now >= this.pending.changeAt - LEAD && !ENDINGS.has(dest)) return false;
+    if (this.pending && now >= this.pending.changeAt - LEAD && !ENDINGS.has(dest)) {
+      if(!manual&&this.pending.entry>now+LEAD&&extraBreaks(this.song).some(p=>p.id===this.pending.fill)&&this.loopKeys.has(dest)){
+        const at=this.pending.entry;for(const seg of this.segments.filter(seg=>seg.at>=at-EPS))this.discard(seg);
+        this.segments=this.segments.filter(seg=>seg.at<at-EPS);this.scheduleDestination(dest,at);this.pending.dest=dest;this.syncRide();return true;
+      }
+      return false;
+    }
     const from = this.pending && now < this.pending.changeAt - LEAD ? this.pending.from : this.fromKey();
     // Só trocas de partes e encerramentos passam por aqui; crashes são camadas separadas.
     const chosenManual = manual || (this.pending?.manual && this.pending.changeAt > now + LEAD
@@ -368,7 +430,8 @@ export class Player {
     if (fill) this.segment(fill, changeAt, {
       offsetBeats: plan.offsetBeats, lengthBeats: plan.fillBeats,
     });
-    this.scheduleDestination(dest, entry);
+    this.scheduleDestination(dest, entry,fill);
+    this.syncRide();
     this.pending = { from, dest, fill, family, manual: Boolean(chosenManual), changeAt, entry,
       fillBeats: plan?.fillBeats || 0, offsetBeats: plan?.offsetBeats || 0 };
     return true;
@@ -405,6 +468,9 @@ export class Player {
     if (!current || !this.loopKeys.has(this.baseFor(current.key))) return false;
     const at = nextBoundary(this.epoch, this.bar, now);
     if (!Number.isFinite(at)) return false;
+    return this.attack(key,at);
+  }
+  attack(key,at,volume=1,automatic=false) {
     // Evita duplicar acidentalmente o mesmo prato no mesmo tempo 1.
     if (this.overlays.some(item => item.key===key && Math.abs(item.at-at)<EPS)) return true;
     const source = this.ctx.createBufferSource();
@@ -412,16 +478,65 @@ export class Player {
     const meta = this.buffers.get(key);
     source.buffer = meta.buffer;
     source.loop = false;
-    source.connect(gate).connect(this.mix);
+    source.connect(gate).connect(this.bus(mixChannel(key)));
+    gate.gain.setValueAtTime(volume,at);
     source.start(at); // WAV completo, com possível cauda; mixado em paralelo.
-    const overlay = {key,at,end:at+meta.seconds,source,gate};
+    const overlay = {key,at,end:at+meta.seconds,source,gate,automatic};
     this.overlays.push(overlay);
     source.onended = () => {
       this.overlays = this.overlays.filter(item=>item!==overlay);
       try {source.disconnect();gate.disconnect();} catch {}
     };
-    this.onState?.();
+    if(!automatic)this.onState?.();
     return true;
+  }
+  toggleRide() {
+    if(!this.running||!this.buffers.has('rideLoop')||ENDINGS.has(this.current()?.key)||ENDINGS.has(this.pending?.dest))return false;
+    const at=nextBoundary(this.epoch,this.bar,this.ctx.currentTime);
+    this.rideEnabled=!this.rideEnabled;
+    this.rideFrom=at;
+    this.syncRide();this.onState?.();return true;
+  }
+  syncRide() {
+    if(!this.running||!this.buffers.has('rideLoop'))return;
+    const now=this.ctx.currentTime, volume=cymbalSettings(this.song).rideVolume;
+    const eligible=s=>this.loopKeys.has(this.baseFor(s.key))&&!this.isFill(s.key)&&!containsCymbal(this.song.parts?.[s.key],'conduction');
+    const update=(l,end)=>{
+      l.end=end;l.gate.gain.cancelScheduledValues(now);
+      l.gate.gain.setValueAtTime(volume,Math.max(now,l.at));
+      if(Number.isFinite(end))l.gate.gain.setValueAtTime(0,Math.max(now,end));
+    };
+    // Preserve phase of already sounding layers; remove cancelled future transitions.
+    for(const l of [...this.rideLayers]){
+      if(!this.segments.includes(l.segment)||(!this.rideEnabled&&l.at>=this.rideFrom)||!eligible(l.segment)){
+        this.discard(l);this.rideLayers=this.rideLayers.filter(x=>x!==l);continue;
+      }
+      const end=this.rideEnabled?l.segment.end:Math.min(l.segment.end,this.rideFrom);
+      if(end<=l.at||end<=now){this.discard(l);this.rideLayers=this.rideLayers.filter(x=>x!==l);}else update(l,end);
+    }
+    if(!this.rideEnabled)return;
+    for(const s of this.segments){
+      if(!eligible(s)||this.rideLayers.some(l=>l.segment===s))continue;
+      const at=Math.max(s.at,this.rideFrom, s.at<now+LEAD?nextBoundary(this.epoch,this.bar,now):s.at);
+      if(at>=s.end-EPS)continue;
+      const data=this.buffers.get('rideLoop'), source=this.ctx.createBufferSource(),gate=this.ctx.createGain();
+      source.buffer=data.buffer;source.loop=true;source.loopEnd=data.seconds;source.connect(gate).connect(this.bus('cymbals'));
+      const l={segment:s,source,gate,at,end:s.end};update(l,s.end);source.start(at);this.rideLayers.push(l);
+    }
+  }
+  playBreak(key) {
+    if(!this.running||!extraBreaks(this.song).some(p=>p.id===key)||!this.buffers.has(key))return false;
+    const now=this.ctx.currentTime, active=this.current(now);
+    if(!active||!this.loopKeys.has(this.baseFor(active.key))||ENDINGS.has(this.pending?.dest)||this.pending&&now>=this.pending.changeAt-LEAD)return false;
+    const from=this.fromKey(), dest=this.pending?.dest||from;
+    if(!this.loopKeys.has(dest)||!this.buffers.has(dest))return false;
+    this.sequenceAuto=false;this.sequenceScheduled=null;
+    this.clearPlan();const at=nextBoundary(this.epoch,this.bar,now);
+    const current=this.current(now);this.silence(current,at);
+    if(Number.isFinite(current.naturalEnd)&&current.naturalEnd<at-EPS){const bridge=this.segment(from,current.naturalEnd);this.silence(bridge,at);}
+    const section=this.segment(key,at), entry=section.naturalEnd;
+    this.scheduleDestination(dest,entry);this.pending={from,dest,fill:key,changeAt:at,entry,fillBeats:this.buffers.get(key).beats,offsetBeats:0};
+    this.syncRide();return true;
   }
   fill(key) {
     if(this.sequenceAuto)this.sequenceAuto=false;
@@ -433,6 +548,7 @@ export class Player {
   cancel() {
     if (!this.pending || this.ctx.currentTime >= this.pending.changeAt - LEAD) return false;
     this.clearPlan();
+    this.syncRide();
     return true;
   }
   stop() {
@@ -444,6 +560,9 @@ export class Player {
       try {overlay.source.stop();overlay.source.disconnect();overlay.gate.disconnect();} catch {}
     }
     this.overlays = [];
+    this.rideEnabled=false;
+    for(const layer of this.rideLayers)this.discard(layer);
+    this.rideLayers=[];
     this.segments = [];
   }
   initSequence() {
@@ -504,18 +623,17 @@ export class Player {
   }
   volume(value) {
     this.context();
-    this.mix.gain.setTargetAtTime(value, this.ctx.currentTime, 0.015);
+    const profile=normalizeMix(this.mixProfile||this.song?.mixer,this.song);
+    profile.master.level=value;this.updateMix(profile);
   }
   label(key) {
     const base = fillBase(key);
-    const name = PARTS.find(part => part.id === base)?.label ||
-      this.song?.customSections?.find(part => part.id === base)?.label ||
-      this.song?.customFills?.find(part => part.id === base)?.label || key;
+    const name = partLabel(this.song,base);
     const variant = key.match(/__(\d+)$/);
     return variant ? name + ' (' + variant[1] + 'T)' : name;
   }
   summary() {
-    if (!this.running) return { running: false, beat: -1, armed: this.armedPart || null };
+    if (!this.running) return { running: false, beat: -1, armed: this.armedPart || null,autoCrashEnabled:this.autoCrashEnabled() };
     this.tickSequence(this.ctx.currentTime);
     const now = this.ctx.currentTime;
     this.segments = this.segments.filter(seg => {
@@ -525,6 +643,8 @@ export class Player {
     });
     if (this.pending && now >= this.pending.entry + EPS) this.pending = null;
     this.overlays = this.overlays.filter(effect => effect.end > now-EPS);
+    for(const layer of this.rideLayers.filter(l=>l.end<=now-EPS&&!this.segments.includes(l.segment)||!this.rideEnabled&&l.end<=now-EPS))this.discard(layer);
+    this.rideLayers=this.rideLayers.filter(l=>!(l.end<=now-EPS&&(!this.segments.includes(l.segment)||!this.rideEnabled)));
     const active = this.current(now);
     if (!active && !this.segments.some(seg => seg.at > now)) {
       this.stop();
@@ -541,6 +661,8 @@ export class Player {
       canCancel: Boolean(this.pending && this.pending.changeAt > now + LEAD),
       nextIn: this.pending ? Math.max(0, this.pending.entry - now) : 0,
       progress: activePosition,
+      autoCrashEnabled:this.autoCrashEnabled(),
+      rideState: this.rideEnabled ? (this.rideLayers.some(l=>l.at<=now&&l.end>now)?'playing':'suspended') : 'off',
       crashQueued: this.overlays.filter(effect=>effect.at>now).map(effect=>effect.key),
       crashPlaying: this.overlays.filter(effect=>effect.at<=now).map(effect=>effect.key),
       armed: this.armedPart || null,

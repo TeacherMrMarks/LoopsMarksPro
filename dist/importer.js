@@ -18,7 +18,7 @@ export function suggestSlot(filename) {
   const base = text.replace(/(?:_|^)[1-9]\d?(?:t|tempo|tempos)(?:_|$)/g, '_')
     .replace(/(?:_|^)(entrada|com_crash|crash|ataque|primeiro_loop|loop_1)(?:_|$)/g, '_');
   const role = roleSlot(base);
-  if (entry && ['a','b','c','pre','chorus','low','high'].includes(role)) return role + 'Entry';
+  if (entry && ['a','b','c','d','e','pre','chorus','low','high'].includes(role)) return role + 'Entry';
   if (duration && role?.startsWith('fill')) return role + '__' + Number(duration);
   return role;
 }
@@ -35,8 +35,8 @@ function roleSlot(text) {
     if (/(refrao|chorus)/.test(text)) return 'fillChorus';
     if (/(parte_baixa|low|baixa)/.test(text)) return 'fillLow';
     if (/(parte_alta|high|alta)/.test(text)) return 'fillHigh';
-    const match = text.match(/(?:parte_?)?([abc])(?:$|_)/);
-    return match ? {a:'fillA',b:'fillB',c:'fillC'}[match[1]] : '';
+    const match = text.match(/(?:^|_)(?:parte_?)?([abcde])(?:$|_)/);
+    return match ? {a:'fillA',b:'fillB',c:'fillC',d:'fillD',e:'fillE'}[match[1]] : '';
   }
   if (/(contagem|count_?in|count_?off|baquetas?|click_?intro|intro_?1|introducao_?1)/.test(text)) return 'countIntro';
   if (/(intro|introducao)/.test(text)) return 'intro';
@@ -44,6 +44,6 @@ function roleSlot(text) {
   if (/(refrao|chorus)/.test(text)) return 'chorus';
   if (/(parte_baixa|low|baixa)/.test(text)) return 'low';
   if (/(parte_alta|high|alta)/.test(text)) return 'high';
-  const match = text.match(/(?:^|_)(?:loop_?)?(?:parte_?)?([abc])(?:$|_)/);
+  const match = text.match(/(?:^|_)(?:loop_?)?(?:parte_?)?([abcde])(?:$|_)/);
   return match ? match[1] : '';
 }

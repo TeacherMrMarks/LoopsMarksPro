@@ -1,13 +1,16 @@
-import { Cloud, Repository, PARTS, PLAY_PARTS, MANUAL_PARTS, FINALES, newSong, MAX_FILE_BYTES, fillBase, fillVariantId, firstPlayablePart, liveCatalog, playableParts, extraSections, CRASH_STOPS, hasAudioPart } from './data.js';
+import { MIX_CHANNELS, MIX_IDS, normalizeMix, effectiveGain, mixChannel, readLocalMix, writeLocalMix, hasSolo, soloExcluded } from './mixer.js';
+import { Cloud, Repository, PARTS, PLAY_PARTS, MANUAL_PARTS, FINALES, newSong, MAX_FILE_BYTES, fillBase, fillVariantId, firstPlayablePart, liveCatalog, playableParts, extraSections, CRASH_STOPS, hasAudioPart, preparedCrashParts, crashSignature, AUTO_CRASHES, ATTACK_IDS, extraBreaks, cymbalSettings, RENAMEABLE_PARTS, partLabel, namedPart, renamePart, resetPartName } from './data.js';
 import { suggestSlot } from './importer.js';
 import { Player, bpmRange } from './audio.js';
 import { METERS, meterOf, meterHint, meterChoice, beatUnitForChoice, countForMeter, classifyDuration, wavMeasure } from './meter.js';
 import { exampleSongs } from './demo.js';
 import { makeBackup, restoreBackup, triggerDownload } from './backup.js';
-import { emptyLibrary, cleanLibrary, songKind, inFolder, repertoireEntries } from './library-model.js';
+import { emptyLibrary, cleanLibrary, songKind, inFolder, repertoireEntries, repertoireSong, entryId, cleanEntryLabels } from './library-model.js';
 
-const APP_VERSION = 'V21';
-// O link do músico carrega exclusivamente o Modo Live.
+import { MidiController, loadMidiSettings, saveMidiSettings } from './midi.js';
+
+const APP_VERSION = 'V27';
+// O link do músico carrega exclusivamente o Modo Palco Pro.
 const musicianLink = new URL(location.href).searchParams.get('modo') === 'musico';
 const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
 const app = document.querySelector('#app');
@@ -15,6 +18,10 @@ const dialog = document.querySelector('#dialog');
 const toast = document.querySelector('#toast');
 const cloud = new Cloud(window.LOOPS_CONFIG);
 const icons = {
+  pencil:'<path d="m15 5 4 4M4 20l4-1L20 7l-4-4L4 15z"/>',
+  mixer:'<path d="M5 3v18m7-18v18m7-18v18M2 8h6m1 8h6m1-11h6"/>',
+  fullscreen:'<path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/>',
+  midi: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 4v16m5-16v16m5-16v16"/><path d="M6 4h3v9H6zm5 0h3v9h-3zm5 0h3v9h-3z" fill="currentColor" stroke="none"/>',
   wave: '<path d="M3 10v4m4-8v12m5-16v20m5-14v8m4-6v4"/>',
   grid: '<rect x="3" y="3" width="7" height="7" rx="1.3"/><rect x="14" y="3" width="7" height="7" rx="1.3"/><rect x="3" y="14" width="7" height="7" rx="1.3"/><rect x="14" y="14" width="7" height="7" rx="1.3"/>',
   current: '<path d="M2 12h4l3-6 4 12 3-6h6"/>',
@@ -54,7 +61,7 @@ const escape = text => String(text ?? '').replace(/[&<>"']/g, key =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[key]);
 const get = name => app.querySelector(name);
 const safeStored = key => { try{return localStorage.getItem(key);}catch{return null;} };
-const label = key => PARTS.find(item => item.id === fillBase(key))?.label || state.admin?.customFills?.find(item => item.id === fillBase(key))?.label || state.admin?.customSections?.find(item=>item.id===fillBase(key))?.label || key;
+const label = key => partLabel(state.admin,fillBase(key));
 const idle = { running: false, beat: -1 };
 const state = {
   view: !musicianLink && new URL(location.href).searchParams.get('modo') === 'central' ? 'admin' : 'live',
@@ -66,7 +73,7 @@ const state = {
   managementOpen:safeStored('loops-v12-management')!=='closed',
   sidebarCollapsed:safeStored('loops-v12-sidebar')==='collapsed',
   introOpen:safeStored('loops-v12-editor-intro')!=='closed',
-  editorTab:(()=>{const remembered=safeStored('loops-v15-editor-tab') || (safeStored('loops-v14-editor-tab')==='crash'?'loopcrash':safeStored('loops-v14-editor-tab'));return ['dados','loops','loopcrash','crash','viradas','mapa','finais'].includes(remembered)?remembered:'dados';})(),
+  editorTab:(()=>{const remembered=safeStored('loops-v15-editor-tab') || (safeStored('loops-v14-editor-tab')==='crash'?'loopcrash':safeStored('loops-v14-editor-tab'));return ['dados','loops','loopcrash','crash','viradas','mapa','counter','passage','finais'].includes(remembered)?remembered:'dados';})(),
   catalogView:safeStored('loops-v14-catalog-view')==='lista'?'lista':'cards',
   pedalLearn:null,pedalMap:loadPedalMap(),pedalLastAt:0,
   liveCountEnabled:true,liveCountBars:1,
@@ -93,10 +100,53 @@ let previewSound = null;
 let previewToken = 0;
 const ownEdits = new Map();
 
+let mixerOpen=false;
+const mixerPending=new Map();
+let mixerWriteTimer;
+function mixerSong(){return state.view==='live'?state.selected:(state.adminPanel==='editor'?state.admin:null);}
+function profileFor(song){if(!song)return normalizeMix(null);if(song.repertoireKey)return ((musicianLink||song.demo)?readLocalMix(localStorage,song):null)||normalizeMix(song.mixer,song);return mixerPending.get(song.id)?.profile || ((musicianLink||song.demo)?readLocalMix(localStorage,song):null) || normalizeMix(song.mixer,song);}
+function previewGain(part,song){const profile=profileFor(song), channel=mixChannel(part,Boolean(song?.customFills?.some(p=>p.id===fillBase(part))));const trims=cymbalSettings(song);const trim=part==='rideLoop'?trims.rideVolume:/^autoCrash[123]$/.test(part)?trims.autoVolume:1;return effectiveGain(profile,'master')*effectiveGain(profile,channel)*trim;}
+function hideMixer(){get('#mixer-panel')?.remove();app.querySelectorAll('[data-action="mixer-open"]').forEach(b=>b.setAttribute('aria-expanded','false'));}
+function showMixer(){
+  hideMixer();const song=mixerSong();if(!song){mixerOpen=false;notice('Selecione uma música ou ritmo para mixar.');return;}
+  const profile=profileFor(song);
+  app.insertAdjacentHTML('beforeend','<aside id="mixer-panel" class="mixer-panel" aria-label="Mixer Marks Pro"><div class="mixer-heading"><div><strong>Mixer Marks Pro</strong><small>'+escape(song.name||'Sem título')+'</small></div>'+iconButton('mixer-close','Fechar mixer','x')+'</div><div class="mixer-channels">'+MIX_CHANNELS.map(([id,name])=>'<div class="mixer-channel" data-mix-strip="'+id+'"><label for="mix-'+id+'">'+escape(name)+'</label><output data-mix-output="'+id+'">'+Math.round(profile[id].level*100)+'%</output><input type="range" class="mixer-fader" id="mix-'+id+'" data-mix-level="'+id+'" aria-label="Volume '+escape(name)+'" min="0" max="100" step="1" value="'+Math.round(profile[id].level*100)+'"><button type="button" class="mixer-mute" data-action="mixer-mute" data-channel="'+id+'" aria-pressed="'+profile[id].muted+'">MUTE</button>'+(id==='master'?'':'<button type="button" class="mixer-solo" data-action="mixer-solo" data-channel="'+id+'" aria-pressed="'+profile[id].solo+'">SOLO</button>')+'</div>').join('')+'</div><div class="mixer-footer">'+button('mixer-reset','Restaurar padrão','refresh','ghost')+button('mixer-clear-solo','Limpar SOLO','x','ghost')+'<small id="mixer-solo-status"></small><small>'+ (musicianLink?'Mix salvo neste aparelho':song.repertoireKey?'Mix salvo somente neste item · nuvem quando parado':'Salvamento automático · nuvem quando parado') +'</small></div></aside>');
+  app.querySelectorAll('[data-action="mixer-open"]').forEach(b=>b.setAttribute('aria-expanded','true'));paintMixer(profile);
+}
+function paintMixer(profile){for(const id of MIX_IDS){const input=get('[data-mix-level="'+id+'"]'),output=get('[data-mix-output="'+id+'"]'),mute=get('[data-action="mixer-mute"][data-channel="'+id+'"]');if(input&&Number(input.value)!==Math.round(profile[id].level*100))input.value=String(Math.round(profile[id].level*100));if(output)output.textContent=Math.round(profile[id].level*100)+'%';if(mute)mute.setAttribute('aria-pressed',String(profile[id].muted));const solo=get('[data-action="mixer-solo"][data-channel="'+id+'"]');if(solo)solo.setAttribute('aria-pressed',String(profile[id].solo));get('[data-mix-strip="'+id+'"]')?.classList.toggle('solo-excluded',soloExcluded(profile,id));}const status=get('#mixer-solo-status');if(status)status.textContent=hasSolo(profile)?'SOLO ativo':'Mixagem normal';}
+function setMixerValue(id,field,value){const song=mixerSong();if(!song||!MIX_IDS.includes(id))return;const profile=normalizeMix(profileFor(song),song);profile[id]={...profile[id],[field]:value};applyMixer(song,profile);}
+function applyMixer(song,raw){
+  const profile=normalizeMix(raw,song);if(!(song.repertoireKey&&(musicianLink||song.demo)))song.mixer=profile;
+  if(state.view==='live'){state.volume=profile.master.level;player.updateMix(profile);}
+  if(previewSound?.songId===song.id&&previewContext)previewSound.gain.gain.setTargetAtTime(previewGain(previewSound.part,song),previewContext.currentTime,.012);
+  paintMixer(profile);
+  if(song.repertoireKey){if(state.selected===song)state.selectedSignature=selectionSignature(song);if(musicianLink||song.demo){try{writeLocalMix(localStorage,song,profile);}catch{notice('Não foi possível salvar a mixagem neste aparelho.');}}else queueEntryMix(song,profile);return;}
+  if(musicianLink||song.demo){try{writeLocalMix(localStorage,song,profile);}catch{notice('Não foi possível salvar a mixagem neste aparelho.');}return;}
+  if(state.view==='admin'){delayedSave();return;}
+  mixerPending.set(song.id,{profile,repository:repo});clearTimeout(mixerWriteTimer);mixerWriteTimer=setTimeout(flushMixerWrites,350);
+}
+const entryMixPending=new Map();let entryMixTimer,entryMixWrites=0;
+function queueEntryMix(song,profile){
+  const rep=state.libraryData.repertoires.find(r=>r.id===song.repertoireId);
+  const item=rep?.items.find((i,n)=>entryId(i,n)===song.repertoireItemId);if(!item)return;
+  item.itemId=song.repertoireItemId;item.mixer=structuredClone(profile);
+  entryMixPending.set(song.repertoireKey,{repId:rep.id,itemId:item.itemId,profile:structuredClone(profile),repository:repo});
+  clearTimeout(entryMixTimer);entryMixTimer=setTimeout(flushEntryMixWrites,350);
+}
+function flushEntryMixWrites(){clearTimeout(entryMixTimer);if(!entryMixPending.size)return;
+  const batch=[...entryMixPending.values()];entryMixPending.clear();writesPending++;entryMixWrites++;
+  draftWrites=draftWrites.catch(()=>{}).then(async()=>{const current=batch[0].repository;if(current!==repo)return;
+    const library=await current.libraryState();for(const e of batch){if(e.repository!==current)continue;const rep=library.repertoires.find(r=>r.id===e.repId);const item=rep?.items.find((i,n)=>entryId(i,n)===e.itemId);if(item){item.itemId=e.itemId;item.mixer=e.profile;}}
+    await current.saveLibrary(library);requestSync();
+  }).catch(e=>notice(e.message||'Falha ao salvar a mixagem do repertório.')).finally(()=>{writesPending--;entryMixWrites--;});
+}
+function flushMixerWrites(){flushEntryMixWrites();clearTimeout(mixerWriteTimer);for(const [id,entry] of mixerPending){mixerPending.delete(id);writesPending++;draftWrites=draftWrites.catch(()=>{}).then(async()=>{const current=entry.repository;if(!current||current!==repo)return;const stored=await current.song(id);if(!stored||stored.deleted||stored.demo)return;const saved=await current.save({...stored,mixer:entry.profile});if(current!==repo)return;ownEdits.set(id,saved.edit);replaceLocalSong(saved);if(state.admin?.id===id&&!draftTimer&&state.view!=='admin')state.admin=structuredClone(saved);if(state.selected?.id===id&&!state.selected.repertoireKey){state.selected={...state.selected,mixer:mixerPending.get(id)?.profile||state.selected.mixer||entry.profile,edit:saved.edit,revision:saved.revision};state.selectedSignature=selectionSignature(state.selected);}requestSync();}).catch(e=>notice(e.message||'Não foi possível salvar a mixagem.')).finally(()=>writesPending--);}}
+async function stageFullScreen(){if(document.fullscreenElement){await document.exitFullscreen?.();return;}if(document.documentElement.requestFullscreen){try{await document.documentElement.requestFullscreen();return;}catch{}}document.body.classList.toggle('palco-focus');}
+
 function brand(extra = '') {
   return '<div class="brand ' + extra + '"><span class="mark">' + icon('wave') +
     '</span><span class="brand-titles"><strong>Loops Marks Pro <span class="brand-version">' + APP_VERSION +
-    '</span></strong><small>Studio Marks</small></span></div>';
+    '</span></strong><small>'+ (state.view==='live'?'Modo Palco Pro':'Studio Marks') +'</small></span></div>';
 }
 
 function button(action, text, sign, classes = '', props = '') {
@@ -137,7 +187,7 @@ function adminSidebar() {
     '<button type="button" class="nav-link" data-action="show-kind" data-kind="rhythm" title="Ritmos" '+(state.adminKind==='rhythm'&&state.adminPanel==='catalog'?'aria-current="page"':'')+'>'+icon('wave')+'<span>Ritmos</span></button>'+
     '<button type="button" class="nav-link" data-action="show-repertoires" title="Repertórios" '+(state.adminPanel==='repertoires'?'aria-current="page"':'')+'>'+icon('list')+'<span>Repertórios</span></button>'+
     '<button type="button" class="nav-link" data-action="show-folders" title="Gerenciar pastas" '+(state.adminPanel==='folders'?'aria-current="page"':'')+'>'+icon('folder')+'<span>Gerenciar pastas</span></button></div>'+
-    '<div class="sidebar-rule"></div><button class="nav-link v15-primary-nav" data-action="live" title="Modo ao vivo">'+icon('current')+'<span>Modo ao vivo</span></button></nav>'+
+    '<div class="sidebar-rule"></div><button class="nav-link v15-primary-nav" data-action="live" title="Modo Palco Pro">'+icon('current')+'<span>Modo Palco Pro</span></button></nav>'+
     '<div class="v12-sidebar-bottom">'+settingsMenu(user)+'</div></aside>';
 }
 function shell() {
@@ -146,8 +196,8 @@ function shell() {
   if(live) return '<div class="stage-shell'+(musicianLink?' musician-shell':'')+'"><header class="stage-topbar">'+
     (musicianLink?'<span class="stage-top-left"></span>':iconButton('admin','Central Administrativa','grid','data-stage-back'))+
     brand('stage-brand')+'<div class="stage-tools"><span class="stage-connection" title="'+escape(status)+'" id="sync-label">'+icon(statusIcon)+'<span>'+escape(status)+'</span></span>'+
-    iconButton('pedal-setup','Configurar pedal Bluetooth','wave')+
-    iconButton('open-library','Selecionar repertório','list','id="repertoire-toggle" aria-expanded="false" aria-controls="live-drawer"')+
+    iconButton('pedal-setup','Configurar pedal Bluetooth','wave')+midiIcon()+iconButton('mixer-open','Mixer Marks Pro','mixer','aria-expanded="false"')+
+    iconButton('stage-fullscreen','Tela cheia','fullscreen')+iconButton('open-library','Selecionar repertório','list','id="repertoire-toggle" aria-expanded="false" aria-controls="live-drawer"')+
     '</div></header><main class="stage-main">'+liveView()+'</main></div>';
   return '<div class="shell admin-shell v11-shell v12-shell '+(state.sidebarCollapsed?'v12-collapsed':'')+'">'+adminSidebar()+
     '<main class="main admin-main v11-main">'+adminView()+'</main></div>';
@@ -158,7 +208,7 @@ function loginView() {
     '<h1>Acesso do músico</h1><p>'+escape(cloud.authError||'Abra o link individual que você recebeu do administrador.')+'</p>'+
     '<p>O link de acesso pode ter sido revogado ou expirado.</p><div class="login-footer">Loops Marks Pro '+APP_VERSION+'</div></section></main>';
   return '<main class="login"><section class="frame login-card">' + brand() +
-    '<h1>' + (musicianLink ? 'Entrar no Modo Live' : 'Entrar na central') + '</h1><p>Acesse com o e-mail convidado no Netlify Identity. No primeiro acesso, abra o convite para criar sua senha.</p>' +
+    '<h1>' + (musicianLink ? 'Entrar no Modo Palco Pro' : 'Entrar na central') + '</h1><p>Acesse com o e-mail convidado no Netlify Identity. No primeiro acesso, abra o convite para criar sua senha.</p>' +
     '<form id="login-form"><label class="field"><span>E-mail</span><input type="email" name="email" required autocomplete="username"></label>' +
     '<label class="field"><span>Senha</span><input type="password" name="password" required autocomplete="current-password"></label>' +
     '<button class="button primary" type="submit">' + icon('user') + 'Entrar</button>' +
@@ -237,15 +287,19 @@ function deck() {
   if (!openingPart) return '<div class="frame blank"><h2>' + escape(song.name || 'Música sem título') +
     '</h2><p>Cadastro encontrado. Para reproduzir, importe pelo menos um WAV no campo <strong>Loop contínuo</strong> (Parte A, Refrão ou outra parte). Entradas com prato e viradas não substituem o loop contínuo.</p>' +
     (musicianLink ? '' : button('admin', 'Completar cadastro', 'grid', 'primary')) + '</div>';
-  const parts = playableParts(song).filter(part => song.parts?.[part.id]);
+  const parts = playableParts(song).filter(part => hasAudioPart(song,part.id));
   const countPresent = Boolean(song.parts?.countIntro?.path);
   const countReady = countPresent && state.liveCountEnabled;
   const introReady = Boolean(song.parts?.intro?.path);
   const openingLabel = (countReady ? 'Contagem de baquetas ('+state.liveCountBars+' comp.) → ' : '') +
     (introReady ? 'Introdução musical ('+(song.introMode==='repeat'?'repete até comando':'uma vez')+') → ' : '') + 'Parte escolhida';
-  const manual = MANUAL_PARTS.filter(part => Object.keys(song.parts || {}).some(id => fillBase(id) === part.id));
-  const endings = FINALES.filter(part => song.parts?.[part.id]);
+  const manual = [...PARTS.filter(p=>p.group==='manuais'||p.group==='automaticas').map(p=>namedPart(song,p)),...(song.customFills||[]).map(p=>({...p,icon:'wave'}))].filter(part => Object.keys(song.parts || {}).some(id => fillBase(id) === part.id && hasAudioPart(song,id)));
+  const endings = FINALES.filter(part => hasAudioPart(song,part.id));
   const crashStops = CRASH_STOPS.filter(part => hasAudioPart(song, part.id));
+  const ride=hasAudioPart(song,'rideLoop');
+  const autoCrash= AUTO_CRASHES.some(p=>hasAudioPart(song,p.id));
+  const liveBreaks=extraBreaks(song).filter(p=>hasAudioPart(song,p.id));
+  const breakPads=group=>{const items=liveBreaks.filter(p=>p.group===group);return items.length?'<div class="live-break-group" hidden><div class="section-head live-subsection"><h2>'+(group==='counter'?'Contratempos':'Passagens')+'</h2><span>Tempo 1 · retorno automático</span></div><div class="pads">'+items.map(p=>'<button type="button" class="pad fill-pad" data-action="break" data-part="'+escape(p.id)+'" hidden disabled>'+icon('wave')+'<strong>'+escape(p.label)+'</strong><small>'+escape(song.parts[p.id].bars)+' comp.</small></button>').join('')+'</div></div>':'';};
   const activeRep=(state.libraryData.repertoires||[]).find(r=>r.id===state.activeRepId);
   const repEntries=activeRep?repertoireEntries(activeRep,songsFor('live')):[];
   const repNav=repEntries.length?'<div class="live-rep-strip"><span>'+icon('list')+' '+escape(activeRep.name)+' · '+(state.activeRepPos+1)+'/'+repEntries.length+'</span><div>'+iconButton('rep-prev-live','Música anterior','arrowup',''+(state.activeRepPos===0?'disabled':''))+iconButton('rep-next-live','Próxima música','arrowdown',''+(state.activeRepPos===repEntries.length-1?'disabled':''))+'</div></div>':'';
@@ -265,8 +319,7 @@ function deck() {
     '</div><div class="meter" aria-label="Tempos do compasso">' +
     Array.from({ length: song.beats }, (_, index) => '<span class="pulse">' + (index + 1) + '</span>').join('') +
     '</div></div><div class="deck-line"><p class="player-message" id="player-message" aria-live="polite"></p>' +
-    '<label class="vol" title="Volume">' + icon('volume') + '<input type="range" id="volume" aria-label="Volume" min="0" max="1" step="0.01" value="' +
-    escape(state.volume) + '"></label></div>' +
+    '</div>' +
     '<div class="queue-tools">' + button('cancel-queue', 'Cancelar troca agendada', 'x', 'ghost', 'id="cancel-btn" disabled hidden') +
     '<button type="button" class="mode-toggle" data-action="mode-toggle" id="fill-mode" title="Alternar motor de viradas" ' +
     'aria-label="Modo de virada: inteligente ou completa">' +
@@ -275,19 +328,21 @@ function deck() {
     '<label class="live-count-bars" for="live-count-bars" title="Compassos da contagem inicial">Compassos <select id="live-count-bars" aria-label="Compassos da contagem inicial" '+(!countPresent?'disabled':'')+'><option value="1" '+(state.liveCountBars===1?'selected':'')+'>1 comp.</option><option value="2" '+(state.liveCountBars===2?'selected':'')+'>2 comp.</option></select></label>'+
     '<span id="pedal-status-live" class="pedal-live-feedback" aria-live="polite"></span></div></section>' +
     '<section class="frame live-sections"><div class="section-head"><h2>Partes da música</h2><span>Entrada no tempo 1</span></div>' +
-    '<div class="pads">' + parts.map(part => '<button type="button" class="pad" data-action="part" data-part="' + part.id +
+    '<div class="pads">' + (hasAudioPart(song,'intro')?'<button class="pad" type="button" data-action="restart-intro" data-part="intro" disabled>'+icon('spark')+'<strong>'+escape(partLabel(song,'intro'))+'</strong><small>Iniciar pela abertura</small></button>':'') + parts.map(part => '<button type="button" class="pad" data-action="part" data-part="' + part.id +
     '" disabled>' + icon(part.icon) + '<strong>' + escape(part.label) + '</strong><small>' + (song.parts?.[part.id + 'Entry'] ? 'Entrada + contínuo' : 'Loop contínuo') + '</small></button>').join('') +
-    '</div><p class="v19-opening-hint" id="opening-path">'+icon('music')+' <strong>Abertura:</strong> '+escape(openingLabel)+'</p>' + (song.kind!=='rhythm'&&(song.sequence||[]).length ? '<div class="live-map-toolbar"><span id="live-map-status">Mapa musical · '+escape(song.sequenceMode==='automatic'?'Automático':'Assistido')+'</span>'+iconButton('map-previous','Etapa anterior','arrowup')+button('map-next','Próxima parte','arrowdown','ghost')+'</div>':'') + (manual.length ? '<div class="section-head live-subsection"><h2>Viradas manuais</h2><span>Retorna ao loop</span></div>' +
+    '</div><p class="v19-opening-hint" id="opening-path">'+icon('music')+' <strong>Abertura:</strong> '+escape(openingLabel)+'</p>' + (song.kind!=='rhythm'&&(song.sequence||[]).length ? '<div class="live-map-toolbar"><span id="live-map-status">Mapa musical · '+escape(song.sequenceMode==='automatic'?'Automático':'Assistido')+'</span>'+iconButton('map-previous','Etapa anterior','arrowup')+button('map-next','Próxima parte','arrowdown','ghost')+'</div>':'') + (manual.length ? '<div class="section-head live-subsection"><h2>Viradas disponíveis</h2><span>Retorna ao loop</span></div>' +
     '<div class="pads manual-pads">' + manual.map(part => '<button type="button" class="pad fill-pad" data-action="fill" data-part="' +
     part.id + '" disabled>' + icon(part.icon) + '<strong>' + escape(part.label) + '</strong><small>Virada avulsa</small></button>').join('') +
-    '</div>' : '') + (crashStops.length ? '<div class="section-head live-subsection"><h2>Crash · Ataques adicionais</h2><span>Tocam no próximo tempo 1, sem parar a bateria</span></div>' +
-    '<div class="pads crash-pads">' + crashStops.map(part => '<button type="button" class="pad crash-stop-pad" data-action="crash" data-part="' + part.id + '" disabled>' +
-    icon('spark') + '<strong>' + escape(part.label) + '</strong><small>Prato sobre o loop</small></button>').join('') + '</div>' : '') +
+    '</div>' : '') + (crashStops.length ? '<div id="live-crashes" hidden><div class="section-head live-subsection"><h2>Crash · Ataques adicionais</h2><span>Tocam no próximo tempo 1, sem parar a bateria</span></div>' +
+    '<div class="pads crash-pads">' + crashStops.map(part => '<button type="button" class="pad crash-stop-pad" data-action="crash" data-part="' + part.id + '" hidden disabled>' +
+    icon('spark') + '<strong>' + escape(part.label) + '</strong><small>Prato sobre o loop</small></button>').join('') + '</div></div>' : '') +
+    (autoCrash?'<div id="live-auto-crash" hidden><div class="section-head live-subsection"><h2>Crash automático</h2><span>Após viradas</span></div><button type="button" class="mode-toggle" data-action="auto-crash-toggle" id="auto-crash-toggle" disabled>'+icon('spark')+'<span>Crash automático</span></button></div>':'') +
+    (ride?'<div id="live-ride" hidden><div class="section-head live-subsection"><h2>Prato de condução</h2><span>Camada contínua · tempo 1</span></div><div class="pads"><button type="button" class="pad" data-action="ride-toggle" data-part="rideLoop" disabled>'+icon('wave')+'<strong>Condução</strong><small>Desativada</small></button></div></div>':'') + breakPads('counter')+breakPads('passage')+
     (endings.length ? '<div class="section-head live-subsection"><h2>Encerramentos</h2><span>Toque uma vez</span></div>' +
     '<div class="pads end-pads">' + endings.map(part => '<button type="button" class="pad final ' + (part.id === 'finish' ? 'finish' : '') +
     '" data-action="part" data-part="' + part.id + '" disabled>' + icon(part.icon) + '<strong>' + escape(part.label) +
     '</strong><small>Finaliza a execução</small></button>').join('') + '</div>' : '') +
-    (!manual.length && !endings.length && !crashStops.length ? '<p class="subtle note">Cadastre viradas, crash e acabamentos na Central Administrativa.</p>' : '') +
+    (!manual.length && !endings.length && !crashStops.length && !ride && !autoCrash && !liveBreaks.length ? '<p class="subtle note">Cadastre viradas, crash e acabamentos na Central Administrativa.</p>' : '') +
     '</section>';
 }
 
@@ -300,6 +355,7 @@ function adminView() {
     ['editor','catalog'].includes(state.adminPanel)?button('new',state.adminKind==='rhythm'?'Novo ritmo':'Nova música','plus','primary'):'';
   const [syncStatus,syncIcon]=statusText();
   return '<div class="v11-heading"><div><h1>'+title+'</h1><p>'+desc+'</p></div><div class="admin-quick-actions">'+action+
+    iconButton('pedal-setup','Configurar pedal Bluetooth','wave')+midiIcon()+iconButton('mixer-open','Mixer Marks Pro','mixer','aria-expanded="false"')+
     '<span class="v15-sync-status" id="sync-label" title="'+escape(syncStatus)+'" role="status">'+icon(syncIcon)+'<span>'+escape(syncStatus)+'</span></span></div></div>'+ 
     (state.errors?'<div class="warning" role="status">'+escape(state.errors)+' '+button('sync','Tentar sincronizar','refresh','ghost')+'</div>':'')+
     '<section class="frame admin-editor v11-editor">'+(state.adminPanel==='folders'?foldersPanel():state.adminPanel==='catalog'?catalogPanel():
@@ -340,17 +396,18 @@ function repertoiresPanel() {
     '<div class="rep-detail">'+(!rep?'<div class="blank"><h2>Crie seu primeiro repertório</h2><p>Adicione músicas ou ritmos e organize a ordem da apresentação.</p></div>':
       '<div class="rep-detail-head"><label class="field"><span>Nome do repertório</span><input data-rep-field="name" maxlength="90" value="'+escape(rep.name)+'"></label>'+
       '<label class="field"><span>Data (opcional)</span><input data-rep-field="date" type="date" value="'+escape(rep.date||'')+'"></label></div>'+
-      '<div class="rep-actions">'+button('use-repertoire','Abrir no Modo Live','play','primary')+button('duplicate-repertoire','Duplicar','layers','ghost')+button('delete-repertoire','Excluir','trash','ghost danger')+'</div>'+
+      '<div class="rep-actions">'+button('use-repertoire','Abrir no Modo Palco Pro','play','primary')+button('duplicate-repertoire','Duplicar','layers','ghost')+button('delete-repertoire','Excluir','trash','ghost danger')+'</div>'+
       '<div class="section-head"><h2>Ordem de execução</h2><span>'+entries.length+' itens disponíveis</span></div>'+
       '<div class="rep-tracks">'+(rep.items.map((item,index)=>{
         const song=songs.find(s=>s.id===item.songId);
         return '<div class="rep-track"><span class="rep-track-num">'+(index+1)+'</span><span class="rep-track-name"><input type="text" maxlength="90" data-rep-title="'+index+'" aria-label="Nome da música neste repertório" placeholder="Nome neste repertório" value="'+escape(item.title||song?.name||'')+'"><small>'+(songKind(song)==='rhythm'?'Ritmo':'Música')+(song?' · '+song.bpm+' BPM':'')+'</small></span>'+
           '<label class="rep-bpm">BPM<input type="number" min="'+(song?bpmRange(song.bpm)[0]:30)+'" max="'+(song?bpmRange(song.bpm)[1]:280)+'" data-rep-bpm="'+index+'" placeholder="Original" value="'+(item.bpm||'')+'" aria-label="BPM do item '+(index+1)+'" title="Ajuste seguro: até 10 BPM acima ou abaixo do WAV original"></label>'+
+          iconButton('rep-customize','Personalizar partes e mixagem deste item','settings','data-index="'+index+'" '+(song?'':'disabled'))+
           iconButton('rep-up','Subir item','arrowup','data-index="'+index+'" '+(index===0?'disabled':''))+
           iconButton('rep-down','Descer item','arrowdown','data-index="'+index+'" '+(index===rep.items.length-1?'disabled':''))+
           iconButton('rep-remove','Remover do repertório','trash','data-index="'+index+'"')+'</div>';}).join('')||'<p class="subtle">Adicione uma música ou ritmo abaixo.</p>')+'</div>'+
       '<div class="v11-form-row rep-add"><label class="field"><span>Nome da música no repertório</span><input id="rep-add-name" maxlength="90" placeholder="Ex.: Deus Cuida de Mim"></label><label class="field"><span>Selecionar música ou ritmo existente</span><select id="rep-add-song">'+
-      songs.map(s=>'<option value="'+escape(s.id)+'">'+escape(s.name||'Sem título')+' · '+(songKind(s)==='rhythm'?'Ritmo':'Música')+'</option>').join('')+'</select></label><label class="field"><span>BPM desta música (opcional)</span><input id="rep-add-bpm" type="number" min="30" max="280" placeholder="BPM original"></label>'+button('rep-add','Adicionar ao repertório','plus','primary',songs.length?'':'disabled')+'</div><p class="v17-rep-help">Ao selecionar um ritmo, informe o nome da música e seu BPM. O ritmo original e os arquivos WAV permanecem intactos. O ajuste seguro de andamento é de até ±10 BPM do WAV original.</p>')+'</div></div>';
+      songs.map(s=>'<option value="'+escape(s.id)+'">'+escape(s.name||'Sem título')+' · '+(songKind(s)==='rhythm'?'Ritmo':'Música')+'</option>').join('')+'</select></label><label class="field"><span>BPM desta música (opcional)</span><input id="rep-add-bpm" type="number" min="30" max="280" placeholder="BPM original"></label>'+button('rep-add','Adicionar ao repertório','plus','primary',songs.length?'':'disabled')+'</div><p class="v17-rep-help">Ao selecionar um ritmo, informe o nome da música e seu BPM. Use a engrenagem para personalizar nomes e mixagem de cada item. O ritmo original e os arquivos WAV permanecem intactos. O ajuste seguro de andamento é de até ±10 BPM do WAV original.</p>')+'</div></div>';
 }
 
 function field(key, title, value, attrs = '') {
@@ -359,21 +416,21 @@ function field(key, title, value, attrs = '') {
 }
 
 function editorSection(song, group, title, helper, open = false) {
-  const items = PARTS.filter(part => part.group === group);
-  const count = items.filter(part => song.parts?.[part.id]).length;
+  const items = PARTS.filter(part => part.group === group).map(p=>namedPart(song,p));
+  const count = items.filter(part => group === 'crashstops' ? hasAudioPart(song,part.id) : song.parts?.[part.id]).length;
   return '<details class="editor-group" ' + (open ? 'open' : '') + '><summary><span>' + icon(group === 'loops' ? 'music' :
     group === 'finais' ? 'flag' : 'wave') + '<strong>' + escape(title) + '</strong></span><small>' + count + '/' + items.length +
     ' áudios</small></summary><p class="group-hint">' + escape(helper) + '</p><div class="file-list">' +
-    items.map(part => fileRow(part, song.parts?.[part.id], song)).join('') + '</div></details>';
+    items.map(part => fileRow(part, group === 'crashstops' && !hasAudioPart(song,part.id) ? undefined : song.parts?.[part.id], song)).join('') + '</div></details>';
 }
 
 function availableFillChoices(song) {
-  return [...PARTS.filter(p => p.type === 'virada'), ...(song.customFills || [])]
+  return [...PARTS.filter(p => p.type === 'virada').map(p=>namedPart(song,p)), ...(song.customFills || [])]
     .filter(part => Object.keys(song.parts || {}).some(id => fillBase(id) === part.id));
 }
 
 function variantEditor(song) {
-  const variants = [...PARTS.filter(p => p.type === 'virada'), ...(song.customFills || [])];
+  const variants = [...PARTS.filter(p => p.type === 'virada').map(p=>namedPart(song,p)), ...(song.customFills || [])];
   const count = Object.keys(song.parts || {}).filter(id => /__\d+$/.test(id)).length;
   return '<details class="editor-group"><summary><span>' + icon('wave') +
     '<strong>Variações de virada (opcional)</strong></span><small>' + count + ' WAVs</small></summary>' +
@@ -391,7 +448,7 @@ function variantEditor(song) {
 }
 
 function transitionEditor(song) {
-  const loopOptions = [{id:'intro',label:'Introdução musical'}, ...playableParts(song)];
+  const loopOptions = [{id:'intro',label:partLabel(song,'intro')}, ...playableParts(song)];
   const targetOptions = [...playableParts(song), ...FINALES];
   const fills = availableFillChoices(song);
   const rows = Object.entries(song.transitions || {});
@@ -409,7 +466,7 @@ function transitionEditor(song) {
       const [from, dest] = key.split('>');
       const fromLabel = loopOptions.find(p=>p.id===from)?.label || from;
       const toLabel = targetOptions.find(p=>p.id===dest)?.label || dest;
-      const fillLabel = value==='none' ? 'Sem virada' : [...PARTS,...(song.customFills||[])].find(p=>p.id===value)?.label || value;
+      const fillLabel = value==='none' ? 'Sem virada' : partLabel(song,value);
       return '<div class="transition-row"><span><strong>'+escape(fromLabel)+' → '+escape(toLabel)+'</strong><small>'+escape(fillLabel)+'</small></span>' +
         iconButton('remove-transition','Remover regra','trash','data-key="'+escape(key)+'"')+'</div>';
     }).join('') + '</div></details>';
@@ -417,8 +474,8 @@ function transitionEditor(song) {
 
 
 function sequenceEditor(song) {
-  if(songKind(song)==='rhythm') return '<div class="v13-rhythm-map-note">Ritmo livre: controle as partes, viradas e o final diretamente no Modo Live ou pelo pedal.</div>';
-  const sections=[...(song.parts?.intro?[{id:'intro',label:'Introdução musical'}]:[]),...playableParts(song).filter(p=>song.parts?.[p.id]),...FINALES.filter(p=>song.parts?.[p.id]),...CRASH_STOPS.filter(p=>song.parts?.[p.id])];
+  if(songKind(song)==='rhythm') return '<div class="v13-rhythm-map-note">Ritmo livre: controle as partes, viradas e o final diretamente no Modo Palco Pro ou pelo pedal.</div>';
+  const sections=[...(song.parts?.intro?[{id:'intro',label:partLabel(song,'intro')}]:[]),...playableParts(song).filter(p=>song.parts?.[p.id]),...FINALES.filter(p=>song.parts?.[p.id]),...CRASH_STOPS.filter(p=>song.parts?.[p.id])];
   const stages=song.sequence||[];
   const lookup=id=>sections.find(p=>p.id===id)?.label || id;
   return '<details class="editor-group v13-sequence-editor" open><summary><span>'+icon('list')+'<strong>04 · Mapa da sequência musical</strong></span><small>'+stages.length+' etapas</small></summary>'+
@@ -434,13 +491,13 @@ function sequenceEditor(song) {
       '<label class="field v13-small-field"><span>Depois</span><select data-seq-jump="'+index+'"><option value="-1">Próxima</option>'+stages.filter(s=>s.part!=='intro').map((s)=>{const n=stages.indexOf(s);return '<option value="'+n+'" '+(step.jumpTo===n?'selected':'')+'>'+String(n+1).padStart(2,'0')+' · '+escape(lookup(s.part))+'</option>';}).join('')+'</select></label>'+
       '<div class="v13-step-actions">'+iconButton('seq-up','Subir etapa','arrowup','data-index="'+index+'" '+(index===0?'disabled':''))+iconButton('seq-down','Descer etapa','arrowdown','data-index="'+index+'" '+(index===stages.length-1?'disabled':''))+iconButton('seq-remove','Excluir etapa','trash','data-index="'+index+'"')+'</div></div>').join('')||'<p class="subtle">Adicione uma primeira etapa para montar sua música.</p>')+'</div>'+
     '<div class="v13-sequence-add"><label class="field"><span>Adicionar parte</span><select id="seq-add-part">'+sections.map(part=>'<option value="'+escape(part.id)+'">'+escape(part.label)+'</option>').join('')+'</select></label>'+button('seq-add','Adicionar etapa','plus','ghost',sections.length?'':'disabled')+'</div>'+
-    '<p class="subtle">No Modo Live, Próxima parte segue o mapa. No modo automático, cada loop é contado em compassos e as entradas são agendadas pelo relógio do áudio. Etapas “Até comando” aguardam sua decisão.</p></details>';
+    '<p class="subtle">No Modo Palco Pro, Próxima parte segue o mapa. No modo automático, cada loop é contado em compassos e as entradas são agendadas pelo relógio do áudio. Etapas “Até comando” aguardam sua decisão.</p></details>';
 }
 function customSectionsEditor(song){
   const sections=extraSections(song);
   return '<details class="editor-group v13-extra-sections"><summary><span>'+icon('layers')+'<strong>Mais partes musicais</strong></span><small>'+sections.length+' personalizadas</small></summary>'+
     '<p class="group-hint">Acrescente Verso 2, Ponte, Solo, Interlúdio, Coda, Parte D, E e outros loops. Cada um pode ter uma entrada com prato.</p>'+
-    '<div class="v13-extra-list">'+sections.map(part=>'<div class="v13-extra-item"><div class="v13-extra-heading"><label class="field"><span>Nome da parte</span><input maxlength="52" data-section-name="'+part.id+'" value="'+escape(part.label)+'"></label>'+iconButton('section-remove','Excluir esta parte','trash','data-id="'+part.id+'"')+'</div>'+fileRow(part,song.parts?.[part.id],song)+'</div>').join('')+'</div>'+button('section-add','Criar nova parte','plus','ghost')+'</details>';
+    '<div class="v13-extra-list">'+sections.map(part=>'<div class="v13-extra-item"><div class="v13-extra-heading"><span class="subtle">Parte personalizada · edite o nome abaixo</span>'+iconButton('section-remove','Excluir esta parte','trash','data-id="'+part.id+'"')+'</div>'+fileRow(part,song.parts?.[part.id],song)+'</div>').join('')+'</div>'+button('section-add','Criar nova parte','plus','ghost')+'</details>';
 }
 
 
@@ -494,7 +551,7 @@ function editor() {
     '<div class="import-toolbar"><div><h2>03 · Biblioteca de áudios</h2><p>WAVs separados da sua DAW · Até 32 MB por arquivo</p></div>' +
     button('batch-import','Importar vários WAVs','plus','ghost') + '<input type="file" id="batch-files" accept=".wav,audio/wav,audio/x-wav" multiple hidden></div>' +
     editorSection(song, 'loops', 'Loops contínuos e introduções',
-      'O WAV contínuo NÃO deve ter crash de entrada repetido. Ele fica em repetição até a próxima troca.', true) +
+      'O WAV contínuo NÃO deve ter crash de entrada repetido. Ele fica em repetição até a próxima troca. Dê dois toques/cliques no nome ou use o lápis para renomear neste cadastro.', true) +
     editorSection(song, 'entradas', 'Loop + Crash · Entradas por parte (opcional)',
       'WAV de um ou mais compassos com o prato de ataque. Toca UMA vez a cada entrada na parte; depois vem o loop contínuo. O WAV precisa ter o mesmo BPM e compasso.') +
     editorSection(song, 'automaticas', 'Viradas automáticas', 'Opcional: entram no tempo certo quando você pede outra parte.', true) +
@@ -508,23 +565,39 @@ function editor() {
     button('remove-custom', 'Excluir virada específica', 'trash', 'ghost danger', 'data-part="' + escape(part.id) + '"') + '</div>').join('') +
     '</div>' + button('add-custom', 'Adicionar virada específica', 'plus', 'ghost') + '</details>' +
     editorSection(song, 'crashstops', 'Crashes adicionais', 'Crash 1, 2 e 3: WAVs de ataque que tocam JUNTOS do loop no próximo tempo 1, sem interromper a bateria. Para encerrar, use Acabamento ou Final. Se quiser prato em outro pulso, prepare o deslocamento dentro do WAV, começando o arquivo no tempo 1.') +
+    cymbalEditor(song) + breakEditor(song,'counter') + breakEditor(song,'passage') +
     editorSection(song, 'finais', 'Acabamento e final', 'Arquivos de encerramento de execução única, inclusive cauda do prato.') +
     customSectionsEditor(song) +
     customEntryEditor(song) +
     transitionEditor(song) +
     sequenceEditor(song) +
-    '<div class="footer-actions"><small class="subtle">O cadastro aparece no Modo Live automaticamente. Para tocar, importe ao menos um loop contínuo. Confira os WAVs offline antes do evento.</small></div>';
+    '<div class="footer-actions"><small class="subtle">O cadastro aparece no Modo Palco Pro automaticamente. Para tocar, importe ao menos um loop contínuo. Confira os WAVs offline antes do evento.</small></div>';
 }
 
+function cymbalEditor(song){
+  const config=cymbalSettings(song);
+  return '<details class="editor-group" open><summary><span>'+icon('spark')+'<strong>Crashes automáticos pós-virada</strong></span></summary><p class="group-hint">Ataque no tempo 1 após a virada. A → prato 1, B → prato 2, Refrão → prato 3; demais partes em rodízio. WAVs com prato/crash no nome não recebem ataque adicional.</p><label class="field"><span>Crash automático</span><select data-cymbal="autoEnabled"><option value="true" '+(config.autoEnabled?'selected':'')+'>Ligado</option><option value="false" '+(!config.autoEnabled?'selected':'')+'>Desligado</option></select></label><label class="field"><span>Volume automático (%)</span><input type="number" min="0" max="100" data-cymbal="autoVolume" value="'+Math.round(config.autoVolume*100)+'"></label><div class="file-list">'+AUTO_CRASHES.map(p=>fileRow(p,song.parts?.[p.id],song)).join('')+'</div></details>'+ 
+    '<details class="editor-group" open><summary><span>'+icon('wave')+'<strong>Prato de condução manual</strong></span></summary><p class="group-hint">WAV em compassos completos, suspenso durante viradas, passagens e loops que já contêm condução.</p><label class="field"><span>Volume da condução (%)</span><input type="number" min="0" max="100" data-cymbal="rideVolume" value="'+Math.round(config.rideVolume*100)+'"></label>'+fileRow(PARTS.find(p=>p.id==='rideLoop'),song.parts?.rideLoop,song)+'</details>';
+}
+function breakEditor(song,group){
+  const title=group==='counter'?'Contratempo':'Passagem', items=extraBreaks(song).filter(p=>p.group===group);
+  return '<details class="editor-group" open><summary><span>'+icon('wave')+'<strong>'+(group==='counter'?'Contratempos':'Passagens')+'</strong></span><small>'+items.length+' cadastrados</small></summary><p class="group-hint">Importe WAV de 1, 2 ou mais compassos. A duração é reconhecida na importação. O trecho toca uma vez no tempo 1, com retorno à parte musical.</p><div class="custom-list">'+items.map(p=>'<div class="custom-fill-item"><label class="field"><span>Nome</span><input maxlength="52" data-break-name="'+escape(p.id)+'" value="'+escape(p.label)+'"></label>'+fileRow(p,song.parts?.[p.id],song)+button('remove-break','Excluir '+title.toLowerCase(),'trash','ghost danger','data-part="'+escape(p.id)+'"')+'</div>').join('')+'</div>'+button('add-break','Adicionar '+title.toLowerCase(),'plus','ghost','data-part="'+group+'"')+'</details>';
+}
+function cymbalOverrides(part,audio){
+  if(!audio||ATTACK_IDS.includes(part.id)||['rideLoop','finish','outro','countIntro'].includes(part.id))return '';
+  const options=(key)=>[['auto','Pelo nome do WAV'],['yes','Já contém'],['no','Não contém']].map(([value,label])=>'<option value="'+value+'" '+((audio[key]||'auto')===value?'selected':'')+'>'+label+'</option>').join('');
+  return '<div class="cymbal-overrides"><label>Prato de ataque <select data-wav-cymbal="hasCrash" data-part="'+escape(part.id)+'">'+options('hasCrash')+'</select></label><label>Condução <select data-wav-cymbal="hasConduction" data-part="'+escape(part.id)+'">'+options('hasConduction')+'</select></label></div>';
+}
 function fileRow(part, audio, song = state.admin) {
-  const finishing = ['finais','crashstops'].includes(part.group) || ['finish','outro',...CRASH_STOPS.map(p=>p.id)].includes(part.id);
+  const finishing = ['finais','crashstops','autocrashes'].includes(part.group) || ['finish','outro',...ATTACK_IDS].includes(part.id);
   const filling = part.type === 'virada';
   const variant = part.id.match(/__(\d+)$/);
   const unit = filling ? 'tempos' : 'comp.';
   const count = variant ? Number(variant[1]) : filling ?
     (audio?.lengthBeats || (audio?.bars || 1) * song.beats) : (audio?.bars || 1);
-  return '<div class="file-row" data-row="' + escape(part.id) + '">' + icon(part.icon || 'wave') + '<div><strong>' + escape(part.label) +
-    '</strong><small title="' + escape(audio?.name) + '">' + escape(audio?.name || 'Sem arquivo') + '</small></div>' +
+  const renameable=part.group==='loops'&&part.id!=='countIntro';
+  const title=renameable?'<span class="part-name-tools"><button type="button" class="part-name-edit" data-rename-part="'+escape(part.id)+'" title="Dois cliques ou toques para renomear">'+escape(part.label)+'</button><button type="button" class="part-rename-pencil" data-action="rename-part" data-part="'+escape(part.id)+'" aria-label="Renomear '+escape(part.label)+'">'+icon('pencil')+'</button></span>':'<strong>'+escape(part.label)+'</strong>';
+  return '<div class="file-row" data-row="' + escape(part.id) + '">' + icon(part.icon || 'wave') + '<div>'+title+'<small title="' + escape(audio?.name) + '">' + escape(audio?.name || 'Sem arquivo') + '</small></div>' +
     (finishing ? '<span class="subtle"><small>Uma vez</small></span>' :
       '<label class="field length-field"><input type="number" min="1" max="' + (filling ? 128 : 64) + '" data-length="' + escape(part.id) + '" ' +
       'data-unit="' + (filling ? 'beats' : 'bars') + '" aria-label="' + unit + ' de ' + escape(part.label) + '" value="' + escape(count) + '" ' +
@@ -535,7 +608,7 @@ function fileRow(part, audio, song = state.admin) {
     button('browse', audio ? 'Trocar' : 'Importar', audio ? 'refresh' : 'plus', 'ghost',
       'data-part="' + escape(part.id) + '" aria-label="Importar WAV de ' + escape(part.label) + '"') +
     iconButton('remove-file', 'Remover WAV de ' + escape(part.label), 'trash', 'data-part="' + escape(part.id) + '" ' +
-      (audio ? '' : 'disabled')) + '</div>';
+      (audio ? '' : 'disabled')) + '</div>'+cymbalOverrides(part,audio);
 }
 
 // V14: apresentação apenas. Move os mesmos campos originais para abas, sem recriar
@@ -547,13 +620,17 @@ const V14_EDITOR_TABS = [
   ['crash','Crash','spark'],
   ['viradas','Viradas','wave'],
   ['mapa','Mapa musical','layers'],
+  ['counter','Contratempos','wave'],
+  ['passage','Passagens','music'],
   ['finais','Finais','flag'],
 ];
 function editorGroupTab(element) {
   const title=(element.querySelector(':scope > summary strong')?.textContent||'').toLowerCase();
   if(title.includes('loops contínuos')||title.includes('mais partes musicais'))return 'loops';
   if(title.includes('loop + crash')||title.includes('primeira entrada'))return 'loopcrash';
-  if(title==='crash' || title==='crashes adicionais')return 'crash';
+  if(title==='crash' || title==='crashes adicionais'||title.includes('crashes automáticos')||title.includes('prato de condução'))return 'crash';
+  if(title==='contratempos')return 'counter';
+  if(title==='passagens')return 'passage';
   if(title.includes('viradas')||title.includes('variações de virada'))return 'viradas';
   if(title.includes('mapa'))return 'mapa';
   if(title.includes('acabamento')||title.includes('final'))return 'finais';
@@ -612,6 +689,7 @@ function render() {
   document.body.classList.remove('drawer-visible');
   state.libraryOpen = false;
   app.innerHTML = shell();
+  if(mixerOpen&&mixerSong())showMixer();
   setupEditorTabs();
   updateLibrary();
   if (state.view === 'live') updatePlayback(true);
@@ -683,6 +761,38 @@ function notice(message) {
   toastTimer = setTimeout(() => toast.classList.remove('show'), 3300);
 }
 
+async function openPartRename(id){
+  const song=state.admin;if(state.view!=='admin'||!song||!(RENAMEABLE_PARTS.some(p=>p.id===id)||extraSections(song).some(p=>p.id===id))||document.querySelector('#part-rename-dialog'))return;
+  const ask=document.createElement('dialog');ask.id='part-rename-dialog';
+  ask.innerHTML='<h2>Renomear parte</h2><p>Somente neste ritmo ou música. WAVs, viradas e controles permanecem vinculados.</p><form method="dialog"><label class="field"><span>Nome</span><input required maxlength="52" value="'+escape(partLabel(song,id))+'"></label><menu><button type="button" class="button ghost" data-default>Nome padrão</button><button class="button ghost" value="cancel" formnovalidate>Cancelar</button><button class="button primary" value="save">Salvar</button></menu></form>';
+  document.body.appendChild(ask);const input=ask.querySelector('input');
+  const standard=RENAMEABLE_PARTS.find(p=>p.id===id)?.label||song.customSections?.find(p=>p.id===id)?.defaultLabel;
+  const reset=ask.querySelector('[data-default]');reset.disabled=!standard;reset.onclick=()=>{input.value=standard;input.setCustomValidity('');input.focus();};
+  const form=ask.querySelector('form');form.addEventListener('submit',event=>{if(event.submitter?.value!=='cancel'&&!input.value.trim()){event.preventDefault();input.setCustomValidity('Informe um nome.');input.reportValidity();}});input.addEventListener('input',()=>input.setCustomValidity(''));
+  ask.showModal();input.focus();input.select();
+  await new Promise(resolve=>ask.addEventListener('close',resolve,{once:true}));
+  const value=input.value,save=ask.returnValue==='save';ask.remove();
+  if(!save||state.admin?.id!==song.id)return;
+  if(standard&&value.trim()===standard)resetPartName(state.admin,id);else if(!renamePart(state.admin,id,value))return;
+  await persistDraft();render();notice('Nome atualizado somente neste cadastro.');
+}
+
+async function openEntryEditor(index){
+  const rep=currentRepertoire(),item=rep?.items[index],source=state.songs.find(s=>s.id===item?.songId&&!s.deleted);
+  if(!source||musicianLink||document.querySelector('#rep-custom-dialog'))return;
+  let resetAll=false;const id=entryId(item,index), labels=cleanEntryLabels(item.partLabels), profile=normalizeMix(item.mixer||source.mixer,source);
+  const parts=[...RENAMEABLE_PARTS,...extraSections(source)].filter(p=>hasAudioPart(source,p.id)||hasAudioPart(source,p.id+'Entry'));
+  const ask=document.createElement('dialog');ask.id='rep-custom-dialog';ask.className='rep-custom-dialog';
+  ask.innerHTML='<h2>Personalizar '+escape(item.title||source.name)+'</h2><p>Somente este item do repertório. O cadastro original permanece intacto.</p><form method="dialog"><h3>Nomes das partes</h3><div class="rep-custom-fields">'+(parts.map(p=>'<label class="field"><span>'+escape(partLabel(source,p.id))+'</span><input data-entry-name="'+escape(p.id)+'" maxlength="52" placeholder="'+escape(partLabel(source,p.id))+'" value="'+escape(labels[p.id]||'')+'"></label>').join('')||'<p>Cadastre os WAVs das partes na biblioteca primeiro.</p>')+'</div><h3>Mixagem deste item</h3><label class="rep-use-mix"><input type="checkbox" id="rep-own-mix" '+(item.mixer?'checked':'')+'> Usar mixagem própria</label><div class="rep-custom-mix">'+MIX_CHANNELS.map(([key,name])=>'<div><label>'+escape(name)+' <output>'+Math.round(profile[key].level*100)+'%</output><input data-entry-level="'+key+'" type="range" min="0" max="100" value="'+Math.round(profile[key].level*100)+'"></label><label><input data-entry-mute="'+key+'" type="checkbox" '+(profile[key].muted?'checked':'')+'> MUTE</label>'+(key==='master'?'':'<label><input data-entry-solo="'+key+'" type="checkbox" '+(profile[key].solo?'checked':'')+'> SOLO</label>')+'</div>').join('')+'</div><menu><button type="button" class="button ghost" data-entry-reset>Herdar original</button><button class="button ghost" value="cancel">Cancelar</button><button class="button primary" value="save">Salvar item</button></menu></form>';
+  document.body.appendChild(ask);const own=ask.querySelector('#rep-own-mix');
+  const enable=()=>ask.querySelectorAll('[data-entry-level],[data-entry-mute],[data-entry-solo]').forEach(el=>el.disabled=!own.checked);own.onchange=enable;enable();
+  ask.querySelectorAll('[data-entry-level]').forEach(el=>el.oninput=()=>el.parentElement.querySelector('output').textContent=el.value+'%');
+  ask.querySelector('[data-entry-reset]').onclick=()=>{resetAll=true;ask.querySelectorAll('[data-entry-name]').forEach(el=>el.value='');own.checked=false;enable();};
+  ask.showModal();await new Promise(resolve=>ask.addEventListener('close',resolve,{once:true}));
+  const save=ask.returnValue==='save';if(save){const dest=state.libraryData.repertoires.find(r=>r.id===rep.id)?.items.find((i,n)=>entryId(i,n)===id);if(dest){dest.itemId=id;const next=resetAll?{}:{...labels};for(const el of ask.querySelectorAll('[data-entry-name]')){if(el.value.trim())next[el.dataset.entryName]=el.value.trim();else delete next[el.dataset.entryName];}dest.partLabels=cleanEntryLabels(next);if(own.checked){for(const key of MIX_IDS){profile[key]={level:Number(ask.querySelector('[data-entry-level="'+key+'"]').value)/100,muted:ask.querySelector('[data-entry-mute="'+key+'"]').checked,solo:ask.querySelector('[data-entry-solo="'+key+'"]')?.checked||false};}dest.mixer=profile;}else delete dest.mixer;}}
+  ask.remove();if(save){await saveLibraryData();render();notice('Personalização salva somente neste item.');}
+}
+
 function confirmChoice(title, description, ok) {
   const ask=document.createElement('dialog');
   ask.innerHTML='<h2>'+escape(title)+'</h2><p>'+escape(description)+'</p>'+
@@ -748,12 +858,13 @@ async function openSettingsModal(){
       button('settings-backup','Backup e restauração','download','v12-setting-tile')+
       button('settings-link','Gerenciar link do músico','link','v12-setting-tile')+
       button('settings-pedal','Controle por pedal','wave','v12-setting-tile')+
+      button('settings-midi','MIDI Learn Pro','midi','v12-setting-tile')+
       (!cloud.musician ? button('settings-password','Redefinir minha senha','settings','v12-setting-tile') : '')+
       button('settings-sync','Sincronizar agora','cloud','v12-setting-tile')+
       button('settings-logout','Sair da conta','exit','v12-setting-tile danger')+'</div><p class="subtle">Versão '+APP_VERSION+' · Todas as alterações são salvas automaticamente.</p></section>';
   dialog.querySelector('[data-action="close-settings"]').onclick=()=>dialog.close();
   for(const [action,run] of [['settings-backup',()=>openBackupCenter()],['settings-link',()=>copyMobile()],
-    ['settings-pedal',()=>openPedalModal()],['settings-password',()=>openPasswordSettingsModal()],['settings-sync',()=>syncCatalog()],
+    ['settings-pedal',()=>openPedalModal()],['settings-midi',()=>openMidiModal()],['settings-password',()=>openPasswordSettingsModal()],['settings-sync',()=>syncCatalog()],
     ['settings-logout',()=>handleAction({dataset:{action:'logout'}})]]){
     dialog.querySelector('[data-action="'+action+'"]').onclick=async()=>{
       dialog.close();try{await run();}catch(e){notice(e.message);}
@@ -793,20 +904,30 @@ const pedalActions=[
   ...MANUAL_PARTS.map(p=>['fill:'+p.id,'Virada: '+p.label]),
   ...FINALES.map(p=>['part:'+p.id,'Encerramento: '+p.label]),
   ...CRASH_STOPS.map(p=>['crash:'+p.id,'Acionar '+p.label]),
+  ['ride-toggle','Prato de condução · ligar/desligar'],['auto-crash-toggle','Crash automático · ligar/desligar'],
   ['rep-prev-live','Música anterior'],['rep-next-live','Próxima música'],['open-library','Abrir repertório']
 ];
-function pedalOptions(value){return '<option value="">Não atribuir</option>'+pedalActions.map(([id,txt])=>
+function controlActions(){
+  const current=state.view==='admin'?state.admin:state.selected;
+  const actions=pedalActions.map(([id,name])=>[id,id.startsWith('part:')&&PLAY_PARTS.some(p=>p.id===id.slice(5))?'Ir para '+partLabel(current,id.slice(5)):name]);
+  for(const song of [current,...state.songs])for(const p of [...PARTS.filter(p=>p.group==='automaticas'),...(song?.customFills||[])])if(Object.keys(song?.parts||{}).some(key=>fillBase(key)===p.id&&hasAudioPart(song,key))&&!actions.some(([id])=>id==='fill:'+p.id))actions.push(['fill:'+p.id,'Virada: '+partLabel(song,p.id)]);
+  for(const song of [current,...state.songs])for(const p of extraSections(song))if(hasAudioPart(song,p.id)&&!actions.some(([id])=>id==='part:'+p.id))actions.push(['part:'+p.id,'Ir para '+p.label]);
+  for(const song of [current,...state.songs])for(const b of extraBreaks(song))if(!actions.some(([id])=>id==='break:'+b.id))actions.push(['break:'+b.id,(b.group==='counter'?'Contratempo':'Passagem')+' '+b.id.split('_')[1]+' · '+b.label]);
+  return actions;
+}
+function pedalOptions(value){const actions=controlActions();if(value&&!actions.some(([id])=>id===value))actions.push([value,value]);return '<option value="">Não atribuir</option>'+actions.map(([id,txt])=>
   '<option value="'+escape(id)+'" '+(id===value?'selected':'')+'>'+escape(txt)+'</option>').join('');}
 async function openPedalModal(){
   state.pedalLearn=null;
+  state.pedalSlots=Math.max(6,state.pedalSlots||6,...Object.values(state.pedalMap).map(x=>(Number(x.slot)||0)+1));
   dialog.innerHTML='<section class="v12-settings-dialog"><div class="v12-settings-heading"><div><p class="eyebrow">BLUETOOTH HID</p><h2>Controle por pedal</h2></div>'+iconButton('close-pedals','Fechar','x')+'</div>'+
     '<p class="subtle">Conecte o pedal no Bluetooth do iPhone ou computador em modo teclado. Selecione a função e clique em Aprender: depois pise no pedal. Sem internet durante o show.</p>'+
-    '<div class="v12-pedal-list">'+Array.from({length:6},(_,i)=>{
+    '<div class="v12-pedal-list">'+Array.from({length:state.pedalSlots},(_,i)=>{
       const code=Object.keys(state.pedalMap).find(k=>state.pedalMap[k]?.slot===i);
       const item=code?state.pedalMap[code]:{};
       return '<div class="v12-pedal-row"><strong>Pedal '+(i+1)+'</strong><select data-pedal-action="'+i+'">'+pedalOptions(item.command)+'</select>'+
         '<code data-pedal-key="'+i+'">'+escape(code||'Não associado')+'</code>'+button('learn-pedal','Aprender','wave','ghost','data-slot="'+i+'"')+'</div>';
-    }).join('')+'</div><div class="v12-modal-actions">'+button('clear-pedals','Limpar comandos','trash','ghost')+
+    }).join('')+'</div><div class="v12-modal-actions">'+button('add-pedal-slot','Adicionar controle','plus','ghost')+button('clear-pedals','Limpar comandos','trash','ghost')+
     button('close-pedals','Concluir','check','primary')+'</div><p class="subtle" id="pedal-status" aria-live="polite"></p></section>';
   dialog.querySelectorAll('[data-action="close-pedals"]').forEach(el=>el.onclick=()=>{state.pedalLearn=null;dialog.close();});
   dialog.querySelectorAll('[data-action="learn-pedal"]').forEach(el=>el.onclick=()=>{
@@ -816,6 +937,7 @@ async function openPedalModal(){
     const slot=Number(el.dataset.pedalAction);const entry=Object.entries(state.pedalMap).find(([,v])=>v.slot===slot);
     if(entry){state.pedalMap[entry[0]].command=el.value;persistPedals();}
   });
+  dialog.querySelector('[data-action="add-pedal-slot"]').onclick=()=>{if(state.pedalSlots>=512)return;state.pedalSlots++;dialog.close();openPedalModal();};
   dialog.querySelector('[data-action="clear-pedals"]').onclick=()=>{
     state.pedalMap={};persistPedals();dialog.close();openPedalModal();
   };
@@ -827,20 +949,101 @@ function receivePedal(code){
   const now=Date.now();if(now-state.pedalLastAt<170)return;
   state.pedalLastAt=now;
   const [prefix,part]=entry.command.split(':');
-  const action=['part','fill','crash'].includes(prefix)?prefix:entry.command;
+  const action=['part','fill','crash','break'].includes(prefix)?prefix:entry.command;
   handleAction({dataset:{action:action==='play'&&player.running?'stop':action,part}}).catch(e=>notice(e.message));
-  const label=pedalActions.find(([key])=>key===entry.command)?.[1]||entry.command;
+  const label=controlActions().find(([key])=>key===entry.command)?.[1]||entry.command;
   const live=get('#pedal-status-live');if(live)live.textContent='Pedal: '+label;
 }
 
+// MIDI Learn Pro V22 — local to the browser, with no dependency on the cloud.
+const midi = new MidiController({navigator,settings:loadMidiSettings(localStorage),
+  onChange:updateMidiStatus,onSignal:(message,device)=>{
+    if(midi.learning&&(!dialog.open||!dialog.querySelector('.midi-dialog')))midi.cancelLearn();
+    const el=dialog.querySelector('#midi-monitor');if(el)el.textContent=(device.name||'MIDI')+' · '+midiSignalLabel(message)+' · valor '+message.value;
+  },onLearn:()=>{persistMidi();paintMidiMappings();const el=dialog.querySelector('#midi-learn-status');if(el)el.textContent='Comando aprendido. Você pode ensinar outro.';},
+  onCommand:receiveMidiCommand});
+function midiIcon(){return iconButton('midi-setup','Configurar MIDI Learn Pro','midi','aria-pressed="'+(midi.settings.enabled&&midi.devices.length>0)+'"');}
+function midiActions(){
+  const items=[...MIX_CHANNELS.map(([id,name])=>['mix:'+id,'Mixer · '+name+' (fader CC)']),['start','Iniciar / Retomar'],['restart-intro','Iniciar pela introdução musical'],...controlActions(),
+    ['mode-toggle','Alternar modo de virada'],['cancel-queue','Cancelar troca'],['slower','Diminuir BPM (1)'],['faster','Aumentar BPM (1)'],['bpm-absolute','BPM por knob/fader (parado)'],['volume-absolute','Volume por knob/fader'],
+    ['toggle-live-count','Ligar / desligar contagem'],['count-one','Contagem: 1 compasso'],['count-two','Contagem: 2 compassos'],['map-next','Próxima etapa do mapa'],['map-previous','Etapa anterior do mapa']];
+  for(const p of extraSections(state.view==='admin'?state.admin:state.selected))if(!items.some(([id])=>id==='part:'+p.id))items.push(['part:'+p.id,'Ir para '+p.label]);
+  for(const m of midi.settings.mappings)if(!items.some(([id])=>id===m.command))items.push([m.command,m.command]);
+  return items;
+}
+function midiOptions(value,nonCC=false){return midiActions().filter(([id])=>!nonCC||!['bpm-absolute','volume-absolute'].includes(id)&&!id.startsWith('mix:')).map(([id,txt])=>'<option value="'+escape(id)+'" '+(id===value?'selected':'')+'>'+escape(txt)+'</option>').join('');}
+function midiSignalLabel(m){return ({note:'Nota',cc:'CC',program:'Programa'}[m.type]||m.type)+' '+m.number+' · canal '+(m.channel+1);}
+function persistMidi(){try{saveMidiSettings(localStorage,midi.settings);}catch{notice('O navegador não permitiu salvar o MIDI localmente.');}updateMidiStatus();}
+function updateMidiStatus(){
+  const active=midi.settings.enabled&&midi.devices.length>0;
+  app.querySelectorAll('[data-action="midi-setup"]').forEach(el=>el.setAttribute('aria-pressed',String(active)));
+  const el=dialog.querySelector('#midi-devices');if(el)el.textContent=!midi.supported?'Web MIDI indisponível neste navegador. No iPhone, experimente uma ponte Web MIDI; o pedal HID continua disponível.':!midi.access?'Aguardando autorização. Clique em Conectar MIDI.':midi.devices.length?midi.devices.map(p=>p.name||p.manufacturer||p.id||'Entrada MIDI').join(' · '):'Nenhuma entrada MIDI detectada. Verifique a conexão USB/Bluetooth.';
+}
+function paintMidiMappings(){
+  const list=dialog.querySelector('#midi-mappings');if(!list)return;
+  list.innerHTML=midi.settings.mappings.map((m,i)=>'<div class="midi-map-row"><div><strong>'+escape(midiSignalLabel(m))+'</strong><small>'+escape(m.anyDevice?'Qualquer dispositivo':m.device.name||m.device.id||'Dispositivo MIDI')+(m.type==='cc'?' · '+(m.mode==='relative'?'pulso':m.mode==='change'?'variação':'pressão'):'')+'</small></div><select aria-label="Função MIDI" data-midi-edit="'+i+'">'+midiOptions(m.command,m.type!=='cc')+'</select>'+iconButton('midi-delete','Excluir atribuição','trash','data-index="'+i+'"')+'</div>').join('')||'<p class="subtle">Nenhuma atribuição. Escolha uma função e clique em Aprender MIDI.</p>';
+  list.querySelectorAll('[data-midi-edit]').forEach(el=>el.onchange=()=>{const m=midi.settings.mappings[Number(el.dataset.midiEdit)];if(m){m.command=el.value;persistMidi();}});
+  list.querySelectorAll('[data-action="midi-delete"]').forEach(el=>el.onclick=()=>{midi.settings.mappings.splice(Number(el.dataset.index),1);persistMidi();paintMidiMappings();});
+}
+function openMidiModal(){
+  state.pedalLearn=null;midi.cancelLearn();
+  dialog.innerHTML='<section class="v12-settings-dialog midi-dialog"><div class="v12-settings-heading"><div><p class="eyebrow">USB · BLUETOOTH MIDI · CORE MIDI VIA PONTE</p><h2>MIDI Learn Pro</h2></div>'+iconButton('midi-close','Fechar','x')+'</div>'+
+    '<p class="subtle">Conecte o controlador e autorize o navegador. Teclas, pads, botões e controles CC podem acionar as funções. O pedal HID continua independente.</p>'+
+    '<div class="midi-connection"><label><input type="checkbox" id="midi-enabled" '+(midi.settings.enabled?'checked':'')+'> Ativar controle MIDI</label>'+button('midi-connect','Conectar MIDI','midi','primary')+'</div><p id="midi-devices" class="subtle" role="status"></p><p id="midi-monitor" class="midi-monitor" role="status">Monitor: aguardando sinal MIDI…</p>'+
+    '<div class="midi-learn-panel"><label class="field"><span>Função a atribuir</span><select id="midi-command">'+midiOptions('start')+'</select></label><label class="field"><span>Comportamento CC</span><select id="midi-cc-mode"><option value="press">Botão / pad (valor ≥ 64)</option><option value="change">Knob / fader (a cada alteração)</option><option value="relative">Encoder relativo (cada mensagem)</option></select></label><label class="midi-any"><input type="checkbox" id="midi-any"> Aceitar esta mensagem de qualquer dispositivo</label>'+button('midi-learn','Aprender MIDI','midi','primary')+button('midi-cancel','Cancelar aprendizado','x','ghost')+'<p id="midi-learn-status" class="subtle" role="status"></p></div>'+
+    '<h3>Atribuições salvas</h3><div id="midi-mappings" class="midi-mappings"></div><div class="v12-modal-actions">'+button('midi-clear','Limpar atribuições','trash','ghost')+button('midi-close','Concluir','check','primary')+'</div><p class="subtle">Salvamento automático neste navegador. Incluído no backup. Para iniciar áudio, o navegador pode exigir primeiro um toque na tela. BPM continua ajustável somente com a reprodução parada.</p></section>';
+  const status=dialog.querySelector('#midi-learn-status');
+  dialog.querySelectorAll('[data-action="midi-close"]').forEach(el=>el.onclick=()=>{midi.cancelLearn();dialog.close();});
+  dialog.querySelector('#midi-enabled').onchange=e=>{midi.settings.enabled=e.target.checked;persistMidi();if(!midi.settings.enabled)midi.cancelLearn();};
+  dialog.querySelector('[data-action="midi-connect"]').onclick=async e=>{
+    const el=e.currentTarget;el.disabled=true;status.textContent='Solicitando acesso MIDI…';
+    try{if(midi.supported){try{player.context().resume().catch(()=>{});}catch{}}await midi.connect();midi.settings.enabled=true;const checkbox=dialog.querySelector('#midi-enabled');if(checkbox)checkbox.checked=true;persistMidi();status.textContent='Conexão MIDI autorizada. Pressione um controle para conferir o monitor.';}
+    catch(error){status.textContent=error.message||'Acesso MIDI negado ou indisponível.';}finally{el.disabled=false;}
+  };
+  dialog.querySelector('[data-action="midi-learn"]').onclick=()=>{if(!midi.access||!midi.devices.length){status.textContent='Conecte e autorize uma entrada MIDI primeiro.';return;}const command=dialog.querySelector('#midi-command').value;const mode=dialog.querySelector('#midi-cc-mode').value;midi.learn(command,{mode,anyDevice:dialog.querySelector('#midi-any').checked});status.textContent='Pressione uma tecla, pad ou botão, ou mova um controle CC agora…';};
+  dialog.querySelector('[data-action="midi-cancel"]').onclick=()=>{midi.cancelLearn();status.textContent='Aprendizado cancelado.';};
+  dialog.querySelector('[data-action="midi-clear"]').onclick=()=>{if(!window.confirm('Apagar todas as atribuições MIDI deste navegador? O pedal não será alterado.'))return;midi.cancelLearn();midi.settings.mappings=[];persistMidi();paintMidiMappings();};
+  // Unlock Web Audio on this real click, not on a MIDI event (which some browsers do not count as a gesture).
+  if(midi.supported){try{player.context().resume().catch(()=>{});}catch{}}
+  paintMidiMappings();updateMidiStatus();dialog.showModal();
+}
+function receiveMidiCommand(command,value){
+  if(!repo||dialog.open||document.querySelector('#part-rename-dialog[open]')||(cloud.enabled&&!cloud.session())||document.visibilityState==='hidden')return;
+  if(command.startsWith('mix:')||command==='volume-absolute'){const id=command==='volume-absolute'?'master':command.slice(4);if(mixerSong()&&MIX_IDS.includes(id))setMixerValue(id,'level',value/127);return;}
+  if(state.view!=='live'||!state.selected)return;
+  if(state.capture||state.libraryOpen&&command!=='stop')return;
+  const [prefix,part]=command.split(':');
+  const feedback=()=>{const el=get('#pedal-status-live');if(el)el.textContent='MIDI: '+(midiActions().find(([id])=>id===command)?.[1]||command);};
+  if(command==='bpm-absolute'){if(player.running||startPending)return;const [min,max]=bpmRange(state.selected.bpm);setLiveBpm(Math.round(min+(max-min)*value/127));feedback();return;}
+  if(command==='count-one'||command==='count-two'){if(player.running||startPending||!player.buffers.has('countIntro'))return;updateLiveCount(state.liveCountEnabled,command==='count-one'?1:2);updatePlayback(true);const select=get('#live-count-bars');if(select)select.value=String(state.liveCountBars);feedback();return;}
+  if(command==='restart-intro'){if(player.running||startPending||!player.ready||!player.buffers.has('intro'))return;player.armedPart=null;}
+  const action=command==='start'||command==='restart-intro'?'play':command==='play'&&player.running&&!state.info.interrupted?'stop':prefix;
+  const target=[...app.querySelectorAll('[data-action]')].find(el=>el.dataset.action===action&&(!part||el.dataset.part===part));
+  // Route through the same panel controls, including disabled/unavailable crash and part checks.
+  if(!target||target.disabled||target.hidden)return;
+  handleAction(target).then(feedback).catch(error=>notice(error.message||'Comando MIDI indisponível.'));
+}
+function setLiveBpm(value){
+  if(!state.selected||player.running||startPending)return;
+  const [min,max]=bpmRange(state.selected.bpm);const next=Math.min(max,Math.max(min,value));if(next===state.bpm)return;
+  state.bpm=next;player.cancelPreparation();currentGeneration++;state.preparation='Preparando áudio…';clearTimeout(prepTimer);updatePlayback(true);prepTimer=setTimeout(()=>prepareLive(),190);
+}
+async function reconnectMidi(){
+  if(!midi.settings.enabled||!midi.supported)return;
+  try{const permission=await navigator.permissions?.query({name:'midi',sysex:false});if(permission?.state==='granted')await midi.connect();}catch{/* manual connect is available for bridges and browsers without MIDI permissions API */}
+}
+dialog.addEventListener('close',()=>{if(!dialog.open)midi.cancelLearn();});
+dialog.addEventListener('cancel',()=>midi.cancelLearn());
+
 // Central de Backup V3. O backup completo é independente da nuvem: inclui todos os WAVs.
 async function openBackupCenter() {
+  await saveBeforeLeaving();
   stopPreview();
   if (!repo) return;
   if (player.running) { notice('Pare a reprodução antes de abrir os backups.'); return; }
   await saveBeforeLeaving();
   dialog.innerHTML = '<section class="backup-dialog v13-backup-dialog"><div class="v13-modal-title"><div><p class="eyebrow">SEUS DADOS PROTEGIDOS</p><h2>Backup e restauração</h2></div>'+iconButton('backup-x','Fechar','x')+'</div>'+
-    '<p class="v13-backup-caption">Exportar, importar ou recuperar versões anteriores. Inclui repertórios, mapas, pastas e WAVs.</p>'+
+    '<p class="v13-backup-caption">Exportar, importar ou recuperar versões anteriores. Inclui repertórios, mapas, pastas, pratos, contratempos, passagens, nomes das partes, mixagem, controles MIDI/pedal e WAVs.</p>'+
     '<div class="backup-choices">'+
     '<button type="button" class="button primary" data-backup="completo">' + icon('download') + 'Backup completo</button>'+
     '<button type="button" class="button ghost" data-backup="configuracoes">' + icon('cloud') + 'Configurações</button>'+
@@ -876,6 +1079,7 @@ async function openBackupCenter() {
       if(!await confirmBackupRestore(file))return;
       message.textContent='Restaurando…';
       const result=await restoreBackup(repo,file,(n,total)=>{message.textContent='Restaurando '+n+'/'+total;});
+      state.pedalMap=loadPedalMap();midi.settings=loadMidiSettings(localStorage);midi.cancelLearn();if(!midi.settings.enabled)midi.disconnect();updateMidiStatus();
       await refreshLocal();requestSync();
       message.textContent=result.imported+' músicas restauradas. A sincronização será feita com o Netlify.';
     });
@@ -907,7 +1111,8 @@ async function confirmBackupRestore(file) {
   return confirm('Importar o arquivo "'+file.name+'"? As músicas serão criadas como novas cópias.');
 }
 
-function sortedSignature(song) { return song ? song.id + ':' + (song.edit || song.revision) : ''; }
+function selectionSignature(song){return sortedSignature(song)+(song?.repertoireKey?JSON.stringify([song.repertoireKey,song.repertoireBpm,song.name,song.partLabels,song.customSections,song.mixer]):'');}
+function sortedSignature(song) { return song ? song.id + ':' + (song.edit || song.revision) + ':' + crashSignature(song) : ''; }
 
 async function refreshLocal() {
   const current = repo;
@@ -915,7 +1120,7 @@ async function refreshLocal() {
   if (repo !== current) return;
   state.songs = rows;
   const previousLibrary=JSON.stringify(cleanLibrary(state.libraryData));
-  state.libraryData = await current.libraryState();
+  if(!entryMixPending.size&&!entryMixWrites)state.libraryData = await current.libraryState();
   const libraryChanged=previousLibrary!==JSON.stringify(cleanLibrary(state.libraryData));
   const downloads = await Promise.all(rows.filter(row => !row.deleted).map(async row => [row.id, await current.offline(row.id)]));
   if (repo !== current) return;
@@ -937,12 +1142,16 @@ async function refreshLocal() {
   }
   const available = songsFor('live');
   const preferred = available.find(song => song.id === state.selected?.id) || available[0] || null;
-  const latest = await preferDownloaded(preferred);
+  let latest = await preferDownloaded(preferred);
+  if(state.activeRepId){const rep=state.libraryData.repertoires.find(r=>r.id===state.activeRepId);const entries=repertoireEntries(rep,available);
+    const index=state.selected?.repertoireItemId?entries.findIndex(e=>e.itemId===state.selected.repertoireItemId):state.activeRepPos;
+    if(index>=0&&entries[index]){state.activeRepPos=index;latest=repertoireSong(entries[index],rep.id);}else{state.activeRepId=null;state.activeRepPos=0;}
+  }
   if (repo !== current) return;
-  const editingLibrary=document.activeElement?.matches('[data-folder-name],[data-rep-field],[data-rep-bpm]');
+  const editingLibrary=document.activeElement?.matches('[data-folder-name],[data-rep-field],[data-rep-bpm],[data-rep-title]')||Boolean(document.querySelector('#rep-custom-dialog'));
   if(libraryChanged&&state.view==='admin'&&['folders','repertoires'].includes(state.adminPanel)&&!editingLibrary){render();return;}
-  if (!player.running && sortedSignature(latest) !== state.selectedSignature) {
-    selectLive(latest);
+  if (!player.running && selectionSignature(latest) !== state.selectedSignature && !entryMixPending.size && !entryMixWrites) {
+    selectLive(latest,repertoireTempo(latest));
   } else {
     updateLibrary();
     updateTop();
@@ -954,6 +1163,9 @@ async function refreshLocal() {
 async function syncCatalog() {
   if (!repo || !cloud.enabled || !navigator.onLine || !cloud.session() || player.running) return;
   if (syncTask) return syncTask;
+  flushEntryMixWrites();await draftWrites.catch(()=>{});
+  if(syncTask)return syncTask;
+  if(!repo||player.running)return;
   const current = repo;
   state.errors = '';
   state.syncLabel = 'Sincronizando';
@@ -994,7 +1206,7 @@ function loadLiveCount(song) {
   if (!song) return {enabled:false,bars:1};
   const defaults={enabled:song.countIntroEnabled!==false,bars:Math.min(2,Math.max(1,Number(song.parts?.countIntro?.bars)||1))};
   try {
-    const saved=JSON.parse(localStorage.getItem('loops-v20-count-'+song.id)||'null');
+    const saved=JSON.parse(localStorage.getItem('loops-v20-count-'+(song.repertoireKey||song.id))||'null');
     if(saved && typeof saved.enabled==='boolean' && [1,2].includes(saved.bars)) return saved;
   } catch {}
   return defaults;
@@ -1005,7 +1217,7 @@ function updateLiveCount(enabled,bars) {
   state.liveCountBars=bars===2?2:1;
   player.setCountControl(state.liveCountEnabled,state.liveCountBars);
   if(state.selected?.id) {
-    try {localStorage.setItem('loops-v20-count-'+state.selected.id,JSON.stringify({enabled:state.liveCountEnabled,bars:state.liveCountBars}));} catch {}
+    try {localStorage.setItem('loops-v20-count-'+(state.selected.repertoireKey||state.selected.id),JSON.stringify({enabled:state.liveCountEnabled,bars:state.liveCountBars}));} catch {}
   }
 }
 function selectLive(song,bpmOverride=null) {
@@ -1016,7 +1228,8 @@ function selectLive(song,bpmOverride=null) {
   player.setCountControl(state.liveCountEnabled,state.liveCountBars);
   clearTimeout(prepTimer);
   state.selected = song;
-  state.selectedSignature = sortedSignature(song);
+  state.volume=profileFor(song).master.level;
+  state.selectedSignature = selectionSignature(song);
   state.bpm = bpmOverride || song?.bpm || 0;
   state.preparation = '';
   wavePeaks = [];
@@ -1064,7 +1277,7 @@ async function prepareLive() {
       updatePlayback(true);
       updateDownload();
       try {
-        await current.download(shown, (count, all) => {
+        await current.download(state.songs.find(s=>s.id===shown.id)||shown, (count, all) => {
           if (generation !== currentGeneration) return;
           state.preparation = 'Baixando WAVs ' + count + '/' + all + '…';
           state.download = 'Baixando ' + count + '/' + all;
@@ -1078,14 +1291,14 @@ async function prepareLive() {
         }
       }
       if (generation !== currentGeneration) return;
-      state.offline.set(shown.id, shown);
+      state.offline.set(shown.id, state.songs.find(s=>s.id===shown.id)||shown);
       updateLibrary();
       local = await current.available(shown);
       if (!local) throw new Error('Os WAVs não ficaram completos no aparelho. Tente Baixar para offline.');
     }
     const ready = await player.prepare(shown, state.bpm, path => current.audio(path));
     if (!ready || generation !== currentGeneration) return;
-    player.volume(state.volume);
+    player.updateMix(profileFor(state.selected));
     computePeaks(player.initialPart || 'a');
     state.preparation = '';
   } catch (error) {
@@ -1156,6 +1369,18 @@ function drawWave(progress) {
   }
 }
 
+// V23: só mostra ataques com WAV associado e confirmado na preparação atual.
+function updateLiveCrashVisibility() {
+  const section = get('#live-crashes');
+  if (!section) return;
+  const available = new Set(preparedCrashParts(state.selected, player).map(part => part.id));
+  for (const pad of section.querySelectorAll('[data-action="crash"]')) {
+    pad.hidden = !available.has(pad.dataset.part);
+    if (pad.hidden) pad.disabled = true;
+  }
+  section.hidden = available.size === 0;
+}
+
 function updatePlayback(force = false) {
   const playing = player.summary();
   const previous = state.info;
@@ -1166,7 +1391,7 @@ function updatePlayback(force = false) {
     const name = playing.active ? player.label(playing.active) :
       (player.ready ? player.label(playing.armed || player.initialPart || 'a') : 'Aguardando');
     const mode = !playing.running ? (player.ready ? (playing.armed?'Parte selecionada · Pronto para iniciar':'Pronto para iniciar') : 'Preparando áudio') :
-      isFill ? 'Virada em execução' : playing.entryAttack ? 'Entrada com crash' :
+      extraBreaks(state.selected).some(p=>p.id===playing.active)?'Trecho em execução · retorno automático':isFill ? 'Virada em execução' : playing.entryAttack ? 'Entrada com crash' :
       playing.active === 'countIntro' ? 'Contagem de baquetas' : playing.active === 'intro' ? 'Introdução musical' : 'Loop contínuo';
     const next = playing.next ? 'PRÓXIMO · ' + player.label(playing.next) : (playing.sequenceTotal ? 'MAPA · '+(playing.sequenceIndex+1)+'/'+playing.sequenceTotal : '');
     const mapStatus=get('#live-map-status');if(mapStatus&&playing.sequenceTotal)mapStatus.textContent='Mapa '+(playing.sequenceAuto?'automático':'assistido')+' · '+(playing.sequenceIndex+1)+'/'+playing.sequenceTotal;
@@ -1193,7 +1418,7 @@ function updatePlayback(force = false) {
     ['finish','outro'].includes(playing.active);
   const crashChanged=(previous.crashQueued||[]).join('|')!==(playing.crashQueued||[]).join('|') ||
     (previous.crashPlaying||[]).join('|')!==(playing.crashPlaying||[]).join('|');
-  if (force || crashChanged || previous.running !== playing.running || previous.next !== playing.next ||
+  if (force || crashChanged || previous.rideState!==playing.rideState || previous.autoCrashEnabled!==playing.autoCrashEnabled || previous.running !== playing.running || previous.next !== playing.next ||
       previous.fill !== playing.fill || previous.active !== playing.active || previous.armed !== playing.armed || previous.entryAttack !== playing.entryAttack || previous.canCancel !== playing.canCancel || previous.interrupted !== playing.interrupted) {
     const text = get('#player-message');
     if (text && text.textContent !== message) text.textContent = message;
@@ -1208,22 +1433,29 @@ function updatePlayback(force = false) {
     get('#bpm').textContent = state.bpm;
     get('#slower').disabled = playing.running || startPending || state.bpm <= min;
     get('#faster').disabled = playing.running || startPending || state.bpm >= max;
+    const autoSection=get('#live-auto-crash'),autoBtn=get('#auto-crash-toggle');
+    if(autoSection&&autoBtn){const available=player.ready&&player.song?.id===state.selected.id&&AUTO_CRASHES.some(p=>hasAudioPart(state.selected,p.id)&&player.song.parts?.[p.id]?.path===state.selected.parts?.[p.id]?.path&&player.buffers.has(p.id));autoSection.hidden=!available;autoBtn.disabled=!available;autoBtn.setAttribute('aria-pressed',String(playing.autoCrashEnabled));autoBtn.querySelector('span').textContent='Crash automático: '+(playing.autoCrashEnabled?'LIGADO':'DESLIGADO');}
+    const rideSection=get('#live-ride');if(rideSection)rideSection.hidden=!(player.ready&&player.buffers.has('rideLoop')&&player.song?.id===state.selected.id&&hasAudioPart(state.selected,'rideLoop')&&player.song.parts?.rideLoop?.path===state.selected.parts?.rideLoop?.path);
+    updateLiveCrashVisibility();
     for (const pad of app.querySelectorAll('.pad')) {
       const key = pad.dataset.part;
+      if(pad.dataset.action==='restart-intro'){pad.disabled=playing.running||startPending||!player.ready||!player.buffers.has('intro');pad.classList.toggle('active',playing.active==='intro');continue;}
       const isCrash = pad.dataset.action==='crash';
-      const current = isCrash ? Boolean(playing.crashPlaying?.includes(key)) : playing.active === key;
-      const inQueue = isCrash ? Boolean(playing.crashQueued?.includes(key)) : (playing.next === key || playing.fill === key);
+      const current = pad.dataset.action==='ride-toggle'?playing.rideState==='playing':isCrash ? Boolean(playing.crashPlaying?.includes(key)) : playing.active === key;
+      const inQueue = pad.dataset.action==='ride-toggle'?playing.rideState==='suspended':isCrash ? Boolean(playing.crashQueued?.includes(key)) : (playing.next === key || playing.fill === key);
       const armed = !playing.running && playing.armed === key;
       pad.classList.toggle('active', current);
       pad.classList.toggle('queued', inQueue);
       pad.classList.toggle('armed', armed);
+      if(pad.dataset.action==='break')pad.hidden=!(player.ready&&player.song?.id===state.selected.id&&hasAudioPart(state.selected,key)&&player.song.parts?.[key]?.path===state.selected.parts?.[key]?.path&&player.buffers.has(key));
       const selectableStopped = pad.dataset.action==='part' && player.loopKeys.has(key) && player.ready;
-      pad.disabled = (!playing.running && !selectableStopped) || (pad.dataset.action === 'fill' ? !player.fillExists(key) : !player.buffers.has(key)) || closing;
+      pad.disabled = pad.hidden || (!playing.running && !selectableStopped) || (pad.dataset.action === 'fill' ? !player.fillExists(key) : !player.buffers.has(key)) || closing;
       const info = pad.querySelector('small');
-      if (info) info.textContent = armed ? 'Selecionada para iniciar' : current ? (playing.entryAttack ? 'Com crash' : 'Tocando') : inQueue ? 'Na fila' :
+      if (info) info.textContent = pad.dataset.action==='ride-toggle'?(playing.rideState==='playing'?'ATIVADA · tocando':playing.rideState==='suspended'?'ATIVADA · aguardando tempo 1 / suspensa':'DESATIVADA'):pad.dataset.action==='break'?(current?'Em execução':inQueue?'Na fila':(state.selected.parts?.[key]?.bars||1)+' comp. · retorno automático'):armed ? 'Selecionada para iniciar' : current ? (playing.entryAttack ? 'Com crash' : 'Tocando') : inQueue ? 'Na fila' :
         pad.dataset.action === 'fill' ? 'Virada avulsa' : isCrash ? (inQueue ? 'Ataque no próximo tempo 1' : current ? 'Crash soando sobre a bateria' : 'Adicionar crash no tempo 1') : ['finish','outro'].includes(key) ? 'Finalizar' :
         (state.selected.parts?.[key + 'Entry'] ? 'Entrada + contínuo' : 'Loop contínuo');
     }
+    for(const group of app.querySelectorAll('.live-break-group'))group.hidden=![...group.querySelectorAll('.pad')].some(p=>!p.hidden);
     const cancel = get('#cancel-btn');
     if (cancel) { cancel.hidden = !playing.canCancel; cancel.disabled = !playing.canCancel; }
     get('#wave-caption').textContent = playing.active ? player.label(playing.active) + (playing.entryAttack ? ' · Crash' : '') : player.label(playing.armed || player.initialPart || 'a');
@@ -1277,6 +1509,7 @@ function stopPlayback() {
   cancelAnimationFrame(animation);
   releaseScreen();
   updatePlayback(true);
+  flushEntryMixWrites();requestSync();
 }
 
 function replaceLocalSong(song) {
@@ -1329,6 +1562,7 @@ function delayedSave() {
 }
 
 async function saveBeforeLeaving() {
+  flushMixerWrites();
   if (draftTimer) await persistDraft();
   else await draftWrites;
 }
@@ -1336,6 +1570,7 @@ async function saveBeforeLeaving() {
 async function changeView(view) {
   if (musicianLink && view !== 'live') return; // Link do músico nunca mostra a Central de edição.
   if (state.view === view) return;
+  mixerOpen=false;hideMixer();
   stopPreview();
   if (state.capture || startPending) return;
   if (player.running) {
@@ -1344,6 +1579,7 @@ async function changeView(view) {
   }
   await saveBeforeLeaving();
   state.view = view;
+  if(view!=='live'){document.body.classList.remove('palco-focus');if(document.fullscreenElement)document.exitFullscreen?.().catch(()=>{});}
   state.libraryOpen = false;
   document.body.classList.remove('drawer-visible');
   const url = new URL(location.href);
@@ -1390,7 +1626,7 @@ async function download() {
     state.offline.set(song.id, song);
     updateLibrary();
     if (state.selected?.id === song.id) {
-      if (sortedSignature(song) !== state.selectedSignature) selectLive(song);
+      if (sortedSignature(song) !== sortedSignature(state.selected) && !state.selected?.repertoireKey) selectLive(song);
       else await prepareLive();
     }
     notice('Música salva para usar offline.');
@@ -1403,7 +1639,7 @@ async function download() {
 }
 
 function slotInfo(song, id) {
-  return PARTS.find(part => part.id === id) || song.customFills?.find(part => part.id === id) || extraSections(song).find(part=>part.id===id) || extraSections(song).map(part=>({...part,id:part.id+'Entry',type:'entrada'})).find(part=>part.id===id);
+  return PARTS.find(part => part.id === id) || extraBreaks(song).find(p=>p.id===id) || song.customFills?.find(part => part.id === id) || extraSections(song).find(part=>part.id===id) || extraSections(song).map(part=>({...part,id:part.id+'Entry',type:'entrada'})).find(part=>part.id===id);
 }
 
 async function inspectWav(file, part, song) {
@@ -1417,7 +1653,7 @@ async function inspectWav(file, part, song) {
   try { duration = (await player.context().decodeAudioData(await file.arrayBuffer())).duration; }
   catch { throw new Error(file.name + ': não foi possível ler o WAV. Tente PCM 16/24 bits.'); }
   const secondsPerBeat = 60 / song.bpm;
-  const ending = ['outro','finish',...CRASH_STOPS.map(p=>p.id)].includes(part);
+  const ending = ['outro','finish',...ATTACK_IDS].includes(part);
   const variant = part.match(/__(\d+)$/);
   const fill = slotInfo(song,fillBase(part))?.type === 'virada';
   if (variant && (!fill || Number(variant[1]) > song.beats)) throw new Error('Variação inválida para o compasso atual.');
@@ -1479,7 +1715,7 @@ function batchPreview(source) {
   const fills = [...PARTS.filter(p=>p.type==='virada'), ...(song.customFills || [])];
   const variants = fills.flatMap(fill => Array.from({length:song.beats}, (_,index) => ({
     id:fillVariantId(fill.id,index+1),label:fill.label+' · '+(index+1)+'T',type:'virada'})));
-  const slots = [...PARTS, ...(song.customFills || []), ...variants];
+  const slots = [...PARTS, ...(song.customFills || []), ...variants,...extraBreaks(song)];
   dialog.innerHTML = '<h2>Importar WAVs em lote</h2><p>Identificamos os arquivos pelo nome. Confira os destinos antes de salvar.</p>' +
     '<div class="batch-list">' + batchFiles.map((file,index) => {
       const suggestion = suggestSlot(file.name);
@@ -1551,10 +1787,10 @@ async function previewWav(part) {
   if (ticket !== previewToken) return;
   const source = previewContext.createBufferSource();
   const gain = previewContext.createGain();
-  gain.gain.value = 0.85;
+  gain.gain.value = previewGain(part,state.admin);
   source.buffer = buffer;
   source.connect(gain).connect(previewContext.destination);
-  previewSound = {part, source, gain};
+  previewSound = {part, source, gain, songId:state.admin.id};
   source.onended = () => { if (previewSound?.source === source) stopPreview(); };
   source.start();
   paintPreviewButtons();
@@ -1577,8 +1813,8 @@ async function reuseWavInPart(target) {
     const source=song.parts?.[key];if(!source)return;
     const srcFill=slotInfo(song,fillBase(key))?.type==='virada';
     const dstFill=slotInfo(song,fillBase(target))?.type==='virada';
-    const srcEnding=['finish','outro',...CRASH_STOPS.map(p=>p.id)].includes(key);
-    const dstEnding=['finish','outro',...CRASH_STOPS.map(p=>p.id)].includes(target);
+    const srcEnding=['finish','outro',...ATTACK_IDS].includes(key);
+    const dstEnding=['finish','outro',...ATTACK_IDS].includes(target);
     const beats=Number(source.lengthBeats||source.bars*song.beats);
     const variant=target.match(/__(\d+)$/);
     if(srcEnding!==dstEnding){notice('Para manter a duração correta, reutilize encerramentos apenas em outros encerramentos.');return;}
@@ -1593,21 +1829,24 @@ async function reuseWavInPart(target) {
 }
 
 async function saveLibraryData() {
+  flushEntryMixWrites();await draftWrites;
   state.libraryData=await repo.saveLibrary(state.libraryData);
   requestSync();
 }
 function currentRepertoire(){return (state.libraryData.repertoires||[]).find(r=>r.id===state.repEditingId)||state.libraryData.repertoires?.[0]||null;}
+function repertoireTempo(song){if(!song?.repertoireBpm)return null;const [min,max]=bpmRange(song.bpm);return Math.max(min,Math.min(max,song.repertoireBpm));}
 async function playRepertoire(id,index=0){
   const rep=(state.libraryData.repertoires||[]).find(r=>r.id===id);
   const entries=repertoireEntries(rep,songsFor('live'));
   if(!entries.length){notice('Este repertório não possui músicas ou ritmos disponíveis.');return;}
   if(player.running && !await confirmChoice('Trocar de música?','A bateria atual será interrompida.','Trocar'))return;
   if(player.running)stopPlayback();
+  flushEntryMixWrites();await draftWrites;
   state.activeRepId=id;state.activeRepPos=Math.max(0,Math.min(index,entries.length-1));
   const entry=entries[state.activeRepPos];
   let tempo=entry.bpm;
   if(tempo){const [min,max]=bpmRange(entry.song.bpm);if(tempo<min||tempo>max){tempo=Math.min(max,Math.max(min,tempo));notice('BPM do repertório ajustado ao limite de ±10 do arquivo original.');}}
-  selectLive({...entry.song,name:entry.title||entry.song.name},tempo);
+  selectLive(repertoireSong(entry,rep.id),tempo);
   toggleLibrary(false);
   window.scrollTo?.(0,0);
 }
@@ -1618,6 +1857,13 @@ async function mutateRepertoire(task){
 }
 async function handleAction(element) {
   const { action, id, part } = element.dataset;
+  if(action==='mixer-open'){mixerOpen=!mixerOpen;if(mixerOpen)showMixer();else hideMixer();return;}
+  if(action==='mixer-close'){mixerOpen=false;hideMixer();return;}
+  if(action==='mixer-mute'){const id=element.dataset.channel;const song=mixerSong();if(song&&MIX_IDS.includes(id))setMixerValue(id,'muted',!profileFor(song)[id].muted);return;}
+  if(action==='mixer-solo'){const id=element.dataset.channel;const song=mixerSong();if(song&&id!=='master'&&MIX_IDS.includes(id))setMixerValue(id,'solo',!profileFor(song)[id].solo);return;}
+  if(action==='mixer-clear-solo'){const song=mixerSong();if(song){const profile=normalizeMix(profileFor(song),song);for(const id of MIX_IDS)profile[id].solo=false;applyMixer(song,profile);}return;}
+  if(action==='mixer-reset'){const song=mixerSong();if(song)applyMixer(song,normalizeMix(null,song));return;}
+  if(action==='stage-fullscreen'){await stageFullScreen();return;}
   if(action==='editor-tab'){showEditorTab(element.dataset.tab,true);return;}
   if(action==='catalog-view'){
     state.catalogView=element.dataset.mode==='lista'?'lista':'cards';
@@ -1630,6 +1876,7 @@ async function handleAction(element) {
     try{localStorage.setItem('loops-v12-sidebar',state.sidebarCollapsed?'collapsed':'open');}catch{}render();return;}
   if(action==='settings'){await openSettingsModal();return;}
   if(action==='pedal-setup'){await openPedalModal();return;}
+  if(action==='midi-setup'){openMidiModal();return;}
 
   if(action==='drawer-tab'){state.drawerTab=element.dataset.tab;updateLibrary();return;}
   if(action==='choose-repertoire'){await playRepertoire(id);return;}
@@ -1668,12 +1915,16 @@ async function handleAction(element) {
     state.adminKind='music';state.adminFolder='';state.adminPanel='editor';
     await persistDraft();render();notice('Música criada compartilhando os WAVs do ritmo.');return;
   }
+  if(action==='rename-part'){await openPartRename(part);return;}
   if(action==='section-add'){
     if(!state.admin||songKind(state.admin)==='rhythm'&&false)return;
     state.admin.customSections ||= [];
     if(state.admin.customSections.length>=36){notice('Limite de 36 partes adicionais.');return;}
     const newId='section_'+crypto.randomUUID().replace(/-/g,'').slice(0,12);
-    state.admin.customSections.push({id:newId,label:'Nova parte'});
+    const used=new Set([...playableParts(state.admin).map(p=>p.label),...PLAY_PARTS.map(p=>p.label),...extraSections(state.admin).map(p=>p.defaultLabel)]);
+    let letter=70;while(letter<=90&&used.has('Parte '+String.fromCharCode(letter)))letter++;
+    let name=letter<=90?'Parte '+String.fromCharCode(letter):'Parte extra '+(state.admin.customSections.length+1);
+    state.admin.customSections.push({id:newId,label:name,defaultLabel:name});
     await persistDraft();render();return;
   }
   if(action==='section-remove'){
@@ -1726,8 +1977,9 @@ async function handleAction(element) {
     const raw=get('#rep-add-bpm')?.value.trim()||'';const tempo=raw?Number(raw):null;
     const [min,max]=bpmRange(source.bpm);
     if(tempo!==null&&(!Number.isInteger(tempo)||tempo<min||tempo>max)){notice('Este WAV permite BPM entre '+min+' e '+max+'. O ritmo original não será modificado.');get('#rep-add-bpm')?.focus();return;}
-    await mutateRepertoire(rep=>{rep.items.push({songId:selected,bpm:tempo,title});});return;
+    await mutateRepertoire(rep=>{rep.items.push({songId:selected,bpm:tempo,title,itemId:crypto.randomUUID()});});return;
   }
+  if(action==='rep-customize'){await openEntryEditor(Number(element.dataset.index));return;}
   if(['rep-up','rep-down','rep-remove'].includes(action)){
     const index=Number(element.dataset.index);
     await mutateRepertoire(rep=>{
@@ -1739,7 +1991,7 @@ async function handleAction(element) {
   }
   if(action==='duplicate-repertoire'){
     const rep=currentRepertoire();if(!rep)return;
-    const clone=structuredClone(rep);clone.id=crypto.randomUUID();clone.name=(rep.name+' (cópia)').slice(0,90);
+    const clone=structuredClone(rep);clone.id=crypto.randomUUID();clone.items=clone.items.map(item=>({...item,itemId:crypto.randomUUID()}));clone.name=(rep.name+' (cópia)').slice(0,90);
     state.libraryData.repertoires.push(clone);state.repEditingId=clone.id;
     await saveLibraryData();render();return;
   }
@@ -1776,7 +2028,7 @@ async function handleAction(element) {
     finally {element.disabled=false;}
     return;
   }
-  if (action === 'open-library') { toggleLibrary(true); return; }
+  if (action === 'open-library') {mixerOpen=false;hideMixer();toggleLibrary(true); return;}
   if (action === 'close-library') { toggleLibrary(false); return; }
   if (action === 'live' || action === 'admin') {
     if(action==='admin'&&state.view==='admin'){state.adminPanel='editor';render();return;}
@@ -1784,10 +2036,14 @@ async function handleAction(element) {
   }
   if (action === 'link') { await copyMobile(); return; }
   if (action === 'backup') { await openBackupCenter(); return; }
+  if (action === 'restart-intro') {if(!player.running&&player.ready&&player.buffers.has('intro')){player.armedPart=null;await startPlayer();}return;}
   if (action === 'play') { await startPlayer(); return; }
   if (action === 'stop') { stopPlayback(); return; }
   if (action === 'part') { if (!player.go(part)) notice('Parte indisponível ou aguarde a troca atual.'); updatePlayback(true); return; }
-  if (action === 'crash') { if (!player.crash(part)) notice('Inicie um loop musical antes de acionar o crash.'); updatePlayback(true); return; }
+  if (action === 'crash') { if (!preparedCrashParts(state.selected, player).some(item => item.id === part)) return; if (!player.crash(part)) notice('Inicie um loop musical antes de acionar o crash.'); updatePlayback(true); return; }
+  if(action==='auto-crash-toggle'){if(player.ready&&player.song?.id===state.selected?.id)player.toggleAutoCrash();updatePlayback(true);return;}
+  if(action==='ride-toggle'){if(player.ready&&player.song?.id===state.selected?.id&&hasAudioPart(state.selected,'rideLoop')&&player.song.parts?.rideLoop?.path===state.selected.parts?.rideLoop?.path&&player.buffers.has('rideLoop'))player.toggleRide();updatePlayback(true);return;}
+  if(action==='break'){if(player.ready&&player.song?.id===state.selected?.id&&hasAudioPart(state.selected,part)&&player.song.parts?.[part]?.path===state.selected.parts?.[part]?.path&&player.buffers.has(part))player.playBreak(part);updatePlayback(true);return;}
   if (action === 'toggle-live-count') {
     if(player.running){notice('Pare a reprodução para alterar a contagem inicial.');return;}
     updateLiveCount(!state.liveCountEnabled,state.liveCountBars);
@@ -1808,14 +2064,7 @@ async function handleAction(element) {
   if (action === 'sync') { await syncCatalog(); render(); return; }
   if (action === 'slower' || action === 'faster') {
     if (!state.selected || player.running || startPending) return;
-    const [min, max] = bpmRange(state.selected.bpm);
-    state.bpm = Math.min(max, Math.max(min, state.bpm + (action === 'slower' ? -1 : 1)));
-    player.cancelPreparation();
-    currentGeneration++;
-    state.preparation = 'Preparando áudio…';
-    clearTimeout(prepTimer);
-    updatePlayback(true);
-    prepTimer = setTimeout(() => prepareLive(), 190);
+    setLiveBpm(state.bpm + (action === 'slower' ? -1 : 1));
     return;
   }
   if (action === 'auth-back') {
@@ -1844,15 +2093,16 @@ async function handleAction(element) {
   }
   if (state.capture) return;
   if (action === 'preview') { if (state.view === 'admin') await previewWav(part); return; }
-  if (musicianLink && ['new','browse','remove-file','delete','batch-import','add-custom','remove-custom','add-transition','remove-transition','backup','link'].includes(action)) return;
+  if (musicianLink && ['new','browse','remove-file','delete','batch-import','add-custom','remove-custom','add-break','remove-break','add-transition','remove-transition','backup','link'].includes(action)) return;
   if (action === 'song') {
     const song = songsFor(state.view).find(row => row.id === id);
     if (!song) return;
     if (state.view === 'live') {
       if (startPending || state.download) return;
-      if(state.selected?.id===song.id){toggleLibrary(false);return;}
+      if(state.selected?.id===song.id&&!state.activeRepId){toggleLibrary(false);return;}
       if (player.running && !await confirmChoice('Trocar de música?', 'A reprodução atual vai parar.', 'Trocar música')) return;
       if (player.running) stopPlayback();
+      flushEntryMixWrites();await draftWrites;
       state.activeRepId=null;state.activeRepPos=0;
       toggleLibrary(false);
       selectLive(await preferDownloaded(song));
@@ -1877,6 +2127,12 @@ async function handleAction(element) {
   }
   if (!state.admin) return;
   if (action === 'batch-import') { get('#batch-files')?.click(); return; }
+  if(action==='add-break'){
+    if(!['counter','passage'].includes(part))return;state.admin.customBreaks||=[];if(state.admin.customBreaks.length>=250){notice('Limite de segurança do catálogo atingido.');return;}
+    const items=extraBreaks(state.admin).filter(p=>p.group===part);const n=1+Math.max(0,...items.map(p=>Number(p.id.split('_')[1])));
+    state.admin.customBreaks.push({id:part+'_'+n,label:(part==='counter'?'Contratempo ':'Passagem ')+n});await persistDraft();render();return;
+  }
+  if(action==='remove-break'){if(!await confirmChoice('Excluir este trecho?','O WAV será desvinculado deste cadastro.','Excluir'))return;state.admin.customBreaks=(state.admin.customBreaks||[]).filter(p=>p.id!==part);delete state.admin.parts[part];await persistDraft();render();return;}
   if (action === 'add-custom') {
     state.admin.customFills ||= [];
     state.admin.customFills.push({id:'fillCustom_'+crypto.randomUUID().replace(/-/g,'').slice(0,14),label:'Nova virada específica'});
@@ -1946,7 +2202,7 @@ document.addEventListener('keydown', event => {
     return;
   }
   if(event.repeat||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey)return;
-  if(['INPUT','TEXTAREA','SELECT'].includes(event.target?.tagName)||dialog.open)return;
+  if((['INPUT','TEXTAREA','SELECT'].includes(event.target?.tagName)&&!event.target?.dataset?.mixLevel)||dialog.open||document.querySelector('#part-rename-dialog[open]'))return;
   const code=event.code||('key-'+event.key);
   if(state.pedalMap[code]&&state.view==='live'){
     event.preventDefault();receivePedal(code);
@@ -1954,10 +2210,15 @@ document.addEventListener('keydown', event => {
 });
 
 document.addEventListener('keydown', event => {
+  if(event.key==='Escape'&&mixerOpen){mixerOpen=false;hideMixer();return;}
   if (event.key === 'Escape' && state.libraryOpen) { event.preventDefault(); toggleLibrary(false); }
 });
 
+let lastRenameTap=null;
 app.addEventListener('click', event => {
+  const name=event.target.closest('[data-rename-part]');
+  if(name){const now=Date.now(),id=name.dataset.renamePart;const songId=state.admin?.id;
+    if(lastRenameTap?.id===id&&lastRenameTap.songId===songId&&now-lastRenameTap.time<=450){lastRenameTap=null;openPartRename(id).catch(e=>notice(e.message));}else lastRenameTap={id,songId,time:now};return;}
   const target = event.target.closest('[data-action]');
   if (!target || target.disabled) return;
   handleAction(target).catch(error => notice(error.message || 'Não foi possível concluir.'));
@@ -1979,11 +2240,7 @@ app.addEventListener('input', event => {
     updateLibrary();
     return;
   }
-  if (input.id === 'volume') {
-    state.volume = Number(input.value);
-    player.volume(state.volume);
-    return;
-  }
+  if(input.dataset.mixLevel){setMixerValue(input.dataset.mixLevel,'level',Number(input.value)/100);return;}
   if(input.id==='live-count-bars'){
     if(player.running){input.value=String(state.liveCountBars);notice('Pare a reprodução para alterar os compassos da contagem.');return;}
     updateLiveCount(state.liveCountEnabled,Number(input.value));
@@ -1992,6 +2249,9 @@ app.addEventListener('input', event => {
   }
   if (!state.admin || !input.validity.valid) return;
   if(input.dataset.sectionName){const entry=state.admin.customSections?.find(s=>s.id===input.dataset.sectionName);if(entry){entry.label=input.value.slice(0,52);delayedSave();}return;}
+  if(input.dataset.breakName){const b=state.admin.customBreaks?.find(p=>p.id===input.dataset.breakName);if(b&&input.value.trim()){b.label=input.value.trim().slice(0,52);delayedSave();}return;}
+  if(input.dataset.cymbal){const key=input.dataset.cymbal;state.admin.cymbals=cymbalSettings(state.admin);state.admin.cymbals[key]=key==='autoEnabled'?input.value==='true':Number(input.value)/100;delayedSave();return;}
+  if(input.dataset.wavCymbal){const meta=state.admin.parts?.[input.dataset.part];if(meta){meta[input.dataset.wavCymbal]=input.value;delayedSave();}return;}
   if (input.dataset.customName) {
     const custom = state.admin.customFills?.find(item => item.id === input.dataset.customName);
     if (custom) { custom.label = input.value.slice(0,52); delayedSave(); }
@@ -2204,7 +2464,7 @@ if(musicianLink&&cloud.musicianToken){
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {
   notice('Não foi possível ativar a abertura offline neste navegador.');
 });
-boot().catch(error => { cloud.authError = error.message || 'Falha ao abrir a central.'; render(); notice(cloud.authError); });
+boot().then(()=>reconnectMidi()).catch(error => { cloud.authError = error.message || 'Falha ao abrir a central.'; render(); notice(cloud.authError); });
 
 // Janelas de configurações também fecham ao tocar no fundo ou pressionar Esc.
 dialog.addEventListener('click',event=>{if(event.target===dialog)dialog.close();});

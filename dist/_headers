@@ -2,7 +2,7 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   X-Frame-Options: DENY
-  Permissions-Policy: microphone=(), camera=(), geolocation=()
+  Permissions-Policy: microphone=(), camera=(), geolocation=(), midi=(self)
 /sw.js
   Cache-Control: no-cache
 /netlify-client.js
@@ -17,3 +17,6 @@
 
 /.netlify/functions/loops-session
   Cache-Control: private, no-store
+
+/midi.js
+  Cache-Control: no-cache, must-revalidate

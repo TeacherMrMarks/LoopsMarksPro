@@ -39,6 +39,17 @@ function validateContent(content, owner) {
       (content.introMode && !['once','repeat'].includes(content.introMode)) ||
       (content.countIntroEnabled!==undefined && typeof content.countIntroEnabled!=='boolean') ||
       (content.sequenceMode && !['automatic','assisted'].includes(content.sequenceMode))) return false;
+  const breaks=content.customBreaks||[];
+  if(!Array.isArray(breaks)||breaks.length>250||new Set(breaks.map(s=>s?.id)).size!==breaks.length||breaks.some(s=>!(/^(counter|passage)_[1-9][0-9]{0,5}$/.test(s?.id||''))||typeof s.label!=='string'||!s.label.trim()||s.label.length>52))return false;
+  const cymbals=content.cymbals;
+  if(cymbals!==undefined&&(!cymbals||typeof cymbals.autoEnabled!=='boolean'||!['autoVolume','rideVolume'].every(k=>Number.isFinite(cymbals[k])&&cymbals[k]>=0&&cymbals[k]<=1)))return false;
+  if(content.mixer!==undefined){
+    const keys=['master','loops','fills','cymbals','counter','passage','count','endings'];
+    const m=content.mixer;
+    if(!m||typeof m!=='object'||Array.isArray(m)||Object.keys(m).length!==keys.length||!keys.every(k=>m[k]&&Number.isFinite(m[k].level)&&m[k].level>=0&&m[k].level<=1&&typeof m[k].muted==='boolean'&&(m[k].solo===undefined||typeof m[k].solo==='boolean')))return false;
+  }
+  const names=content.partLabels;
+  if(names!==undefined&&(!names||typeof names!=='object'||Array.isArray(names)||Object.entries(names).some(([id,name])=>!['intro','a','b','c','d','e','pre','chorus','low','high'].includes(id)||typeof name!=='string'||!name.trim()||name.length>52)))return false;
   const extra=content.customSections||[];
   if(!Array.isArray(extra)||extra.length>36||extra.some(s=>!/^section_[a-f0-9]{12}$/.test(s?.id||'')||typeof s.label!=='string'||!s.label.trim()||s.label.length>52))return false;
   const stages=content.sequence||[];
@@ -75,10 +86,10 @@ export default async function handler(req) {
       return json(doc || {revision:0,content:{folders:[],repertoires:[]}});
     }
     if (req.method==='POST' && op==='library-save') {
-      if(Number(req.headers.get('content-length')||0)>160000)return fail('Biblioteca muito grande.',413);
+      if(Number(req.headers.get('content-length')||0)>2000000)return fail('Biblioteca muito grande.',413);
       const {revision,content}=await req.json();
       if(!Number.isSafeInteger(revision)||revision<0||!validLibrary(content)||
-        JSON.stringify(content).length>130000) return fail('Pastas e repertórios inválidos.',400);
+        JSON.stringify(content).length>1800000) return fail('Pastas e repertórios inválidos.',400);
       const store=libraryStore(),key=owner+'/index';
       const current=await store.getWithMetadata(key,{type:'json',consistency:'strong'});
       if((current?.data?.revision||0)!==revision)return fail('Biblioteca alterada em outro aparelho.',409);

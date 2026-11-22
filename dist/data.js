@@ -1,3 +1,4 @@
+import { normalizeMix } from './mixer.js';
 export const PARTS = [
   { id: 'countIntro', label: 'Introdução 1 · Contagem de baquetas', icon: 'wave', type: 'uma vez', group: 'loops' },
   { id: 'intro', label: 'Introdução 2 · Musical', icon: 'spark', type: 'uma vez ou repetir', group: 'loops' },
@@ -15,6 +16,7 @@ export const PARTS = [
   { id: 'lowEntry', label: 'Entrada Parte baixa · com crash', icon: 'spark', type: 'entrada', group: 'entradas' },
   { id: 'high', label: 'Parte alta', icon: 'current', type: 'loop', group: 'loops' },
   { id: 'highEntry', label: 'Entrada Parte alta · com crash', icon: 'spark', type: 'entrada', group: 'entradas' },
+  ...['d','e'].flatMap(id=>[{id,label:'Parte '+id.toUpperCase(),icon:'layers',type:'loop',group:'loops'},{id:id+'Entry',label:'Entrada Parte '+id.toUpperCase()+' · com crash',icon:'spark',type:'entrada',group:'entradas'}]),
   { id: 'fillIntro', label: 'Virada da introdução', icon: 'wave', type: 'virada', group: 'automaticas' },
   { id: 'fillA', label: 'Virada para Parte A', icon: 'wave', type: 'virada', group: 'automaticas' },
   { id: 'fillB', label: 'Virada para Parte B', icon: 'wave', type: 'virada', group: 'automaticas' },
@@ -23,17 +25,44 @@ export const PARTS = [
   { id: 'fillChorus', label: 'Virada para Refrão', icon: 'wave', type: 'virada', group: 'automaticas' },
   { id: 'fillLow', label: 'Virada para Parte baixa', icon: 'wave', type: 'virada', group: 'automaticas' },
   { id: 'fillHigh', label: 'Virada para Parte alta', icon: 'wave', type: 'virada', group: 'automaticas' },
+  ...['D','E'].map(letter=>({id:'fill'+letter,label:'Virada para Parte '+letter,icon:'wave',type:'virada',group:'automaticas'})),
   { id: 'fillLight', label: 'Virada leve', icon: 'wave', type: 'virada', group: 'manuais' },
   { id: 'fillStrong', label: 'Virada forte', icon: 'wave', type: 'virada', group: 'manuais' },
   { id: 'fillSpecial', label: 'Virada especial', icon: 'wave', type: 'virada', group: 'manuais' },
   { id: 'crashStop', label: 'Crash 1 · Ataque adicional', icon: 'spark', type: 'uma vez', group: 'crashstops' },
   { id: 'crashStop2', label: 'Crash 2 · Ataque adicional', icon: 'spark', type: 'uma vez', group: 'crashstops' },
   { id: 'crashStop3', label: 'Crash 3 · Ataque adicional', icon: 'spark', type: 'uma vez', group: 'crashstops' },
+  ...[1,2,3].map(n=>({id:'autoCrash'+n,label:'Prato automático '+n,icon:'spark',type:'uma vez',group:'autocrashes'})),
+  {id:'rideLoop',label:'Prato de condução',icon:'wave',type:'condução',group:'conduction'},
   { id: 'finish', label: 'Acabamento', icon: 'check', type: 'uma vez', group: 'finais' },
   { id: 'outro', label: 'Final', icon: 'flag', type: 'uma vez', group: 'finais' },
 ];
 export const extraSections = song => (song?.customSections||[]).filter(s=>/^section_[a-f0-9]{12}$/.test(s.id)&&typeof s.label==='string').map(s=>({...s,icon:'layers',group:'loops',type:'loop'}));
-export const playableParts = song => [...PARTS.filter(p=>p.group==='loops' && !['intro','countIntro'].includes(p.id)),...extraSections(song)];
+export const RENAMEABLE_PARTS = PARTS.filter(p=>p.group==='loops'&&p.id!=='countIntro');
+export function cleanPartLabels(raw){
+  return Object.fromEntries(RENAMEABLE_PARTS.flatMap(({id})=>typeof raw?.[id]==='string'&&raw[id].trim()?[[id,raw[id].trim().slice(0,52)]]:[]));
+}
+export function renamePart(song,id,name){
+  if(typeof name!=='string'||!name.trim()||name.trim().length>52)return false;
+  if(RENAMEABLE_PARTS.some(p=>p.id===id)){song.partLabels={...cleanPartLabels(song.partLabels),[id]:name.trim()};return true;}
+  const item=song.customSections?.find(p=>p.id===id&&/^section_[a-f0-9]{12}$/.test(id));
+  if(!item)return false;item.defaultLabel ||= item.label;item.label=name.trim();return true;
+}
+export function resetPartName(song,id){
+  if(RENAMEABLE_PARTS.some(p=>p.id===id)){song.partLabels=cleanPartLabels(song.partLabels);delete song.partLabels[id];return true;}
+  const item=song.customSections?.find(p=>p.id===id);if(!item?.defaultLabel)return false;item.label=item.defaultLabel;return true;
+}
+export function partLabel(song,id){
+  const built=PARTS.find(p=>p.id===id), overrides=cleanPartLabels(song?.partLabels);
+  const custom=extraSections(song).find(p=>p.id===id);
+  if(overrides[id])return overrides[id];
+  if(id.endsWith('Entry')){const target=id.slice(0,-5);if(overrides[target]||extraSections(song).some(p=>p.id===target))return 'Entrada '+partLabel(song,target)+' · com crash';}
+  const dest=Object.keys(DEFAULT_FILLS).find(k=>DEFAULT_FILLS[k]===id);
+  if(dest&&overrides[dest])return 'Virada para '+overrides[dest];
+  return built?.label||custom?.label||song?.customFills?.find(p=>p.id===id)?.label||extraBreaks(song).find(p=>p.id===id)?.label||id;
+}
+export const namedPart = (song,part)=>({...part,label:partLabel(song,part.id)});
+export const playableParts = song => [...PARTS.filter(p=>p.group==='loops' && !['intro','countIntro'].includes(p.id)),...extraSections(song)].map(p=>namedPart(song,p));
 export const entryOf = (song,key) => key?.startsWith('section_') ? key+'Entry' : ENTRY_OF[key];
 export const PLAY_PARTS = PARTS.filter(part => part.group === 'loops' && !['intro','countIntro'].includes(part.id));
 // O repertório inclui todos os cadastros, mesmo os que ainda estão recebendo WAVs.
@@ -46,11 +75,52 @@ export function liveCatalog(rows) {
 }
 export const MANUAL_PARTS = PARTS.filter(part => part.group === 'manuais');
 export const FINALES = PARTS.filter(part => part.group === 'finais');
+export const AUTO_CRASHES = PARTS.filter(p=>p.group==='autocrashes');
+export const ATTACK_IDS = ['crashStop','crashStop2','crashStop3',...AUTO_CRASHES.map(p=>p.id)];
+export const extraBreaks = song => (Array.isArray(song?.customBreaks)?song.customBreaks:[]).filter(s=>/^(counter|passage)_[1-9][0-9]{0,5}$/.test(s?.id||'')&&typeof s.label==='string').map(s=>({...s,group:s.id.startsWith('counter_')?'counter':'passage',type:'trecho',icon:'wave'}));
+export function cymbalSettings(song) {
+  const s=song?.cymbals||{};const volume=v=>Number.isFinite(v)?Math.max(0,Math.min(1,v)):1;
+  return {autoEnabled:s.autoEnabled!==false,autoVolume:volume(s.autoVolume),rideVolume:volume(s.rideVolume)};
+}
+export function containsCymbal(meta, kind) {
+  if(!meta)return false;
+  const override=kind==='crash'?meta.hasCrash:meta.hasConduction;
+  if(override==='yes'||override==='no')return override==='yes';
+  const text=String(meta.name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  const terms=kind==='crash'?'pratos?|crash(?:es)?':'conducao|ride';
+  const negative=new RegExp('(?:^| )(?:sem|no|without) (?:'+terms+')(?: |$)');
+  return !negative.test(text)&&new RegExp('(?:^| )(?:'+terms+')(?: |$)').test(text);
+}
+export function automaticCrashFor(song,dest,available) {
+  const ordered=['a','b','chorus','c','pre','low','high','d','e',...extraSections(song).map(p=>p.id)];
+  const slots=ordered.filter((k,i)=>i<3||k===dest||song?.parts?.[k]);
+  const pool=AUTO_CRASHES.map(p=>p.id).filter(available);
+  const index=slots.indexOf(dest);
+  return index<0||!pool.length?null:pool[index%pool.length];
+}
 export const CRASH_STOPS = PARTS.filter(part => part.group === 'crashstops');
 // Só habilita controles Live para um WAV realmente associado; áudios de demonstração são gerados em memória.
 export function hasAudioPart(song, id) {
   const audio = song?.parts?.[id];
-  return Boolean(audio?.path || (song?.demo && audio?.name));
+  const path = audio?.path;
+  return Boolean((typeof path === 'string' && path.trim() === path && /\.wav$/i.test(path)) ||
+    (song?.demo === true && typeof audio?.name === 'string' && /\.wav$/i.test(audio.name)));
+}
+// V23: a referência do cadastro não basta para exibir um ataque Live.
+// O buffer deve pertencer à mesma música e ao mesmo WAV atualmente selecionado.
+export function preparedCrashParts(song, player) {
+  if (!song || !player?.ready || player.song?.id !== song.id) return [];
+  return CRASH_STOPS.filter(part => hasAudioPart(song, part.id) &&
+    hasAudioPart(player.song, part.id) &&
+    song.parts[part.id].path === player.song.parts[part.id].path &&
+    player.buffers?.has(part.id));
+}
+export function crashSignature(song) {
+  return JSON.stringify([...CRASH_STOPS,...AUTO_CRASHES,...PARTS.filter(p=>p.id==='rideLoop'),...extraBreaks(song)].map(({id}) => hasAudioPart(song,id) ? (song.parts[id].path || song.parts[id].name) : null));
+}
+// Ignora somente registros vazios legados; não remove nem modifica arquivos reais.
+export function audioEntries(song) {
+  return Object.entries(song?.parts || {}).filter(([id]) => !(ATTACK_IDS.includes(id)||id==='rideLoop'||/^(counter|passage)_/.test(id)) || hasAudioPart(song,id));
 }
 
 export const FILL_IDS = new Set(PARTS.filter(part => part.type === 'virada').map(part => part.id));
@@ -59,7 +129,7 @@ export const BASE_OF_ENTRY = Object.fromEntries(Object.entries(ENTRY_OF).map(([b
 export const FILL_VARIANT = /^([\w-]+)__(\d{1,3})$/;
 export function fillVariantId(base, beats) { return base + '__' + beats; }
 export function fillBase(id) { return id.match(FILL_VARIANT)?.[1] || id; }
-export const DEFAULT_FILLS = { a: 'fillA', b: 'fillB', c: 'fillC', pre: 'fillPre', chorus: 'fillChorus', low: 'fillLow', high: 'fillHigh' };
+export const DEFAULT_FILLS = { a: 'fillA', b: 'fillB', c: 'fillC', pre: 'fillPre', chorus: 'fillChorus', low: 'fillLow', high: 'fillHigh', d:'fillD', e:'fillE' };
 export const MAX_FILE_BYTES = 32 * 1024 * 1024;
 import { emptyLibrary, cleanLibrary, validLibrary } from './library-model.js';
 import { login as identityLogin, logout as identityLogout, getUser as identityGetUser, getSettings as identityGetSettings, refreshSession as identityRefreshSession, handleAuthCallback, acceptInvite as identityAcceptInvite, updateUser as identityUpdateUser, requestPasswordRecovery as identityRequestRecovery } from './netlify-client.js';
@@ -67,7 +137,7 @@ const KEY = 'loops-marks-last-user-v3';
 const STORE = 'dados';
 
 export function newSong() {
-  return { kind:'music', folderId:'', id: crypto.randomUUID(), name: '', occasion: '', bpm: 84, beats: 4, meter: '4/4', parts: {}, transitions: {}, customFills: [], fillMode: 'smart', repeatMode: 'fill', introMode: 'once', countIntroEnabled: true, customSections: [], sequence: [], sequenceMode:'assisted', revision: 0 };
+  return { kind:'music', folderId:'', id: crypto.randomUUID(), name: '', occasion: '', bpm: 84, beats: 4, meter: '4/4', parts: {}, transitions: {}, customFills: [], customBreaks:[], cymbals:cymbalSettings(), fillMode: 'smart', repeatMode: 'fill', introMode: 'once', countIntroEnabled: true, customSections: [], partLabels:{}, sequence: [], sequenceMode:'assisted', revision: 0 };
 }
 
 function openDB() {
@@ -429,9 +499,9 @@ export class Cloud {
   }
   catalog() { return this.request('?op=catalog'); }
   async save(owner, song) {
-    const { id, revision, name, occasion, bpm, beats, meter, beatUnit, parts, transitions, customFills, customSections, sequence, sequenceMode, fillMode, repeatMode, introMode, countIntroEnabled, kind, folderId, deleted, edit } = song;
+    const { id, revision, name, occasion, bpm, beats, meter, beatUnit, parts, transitions, customFills, customSections, partLabels, sequence, sequenceMode, fillMode, repeatMode, introMode, countIntroEnabled, customBreaks, cymbals, mixer, kind, folderId, deleted, edit } = song;
     const content = deleted ? {deleted: true, edit} :
-      {name, occasion, bpm, beats, meter, beatUnit, kind:kind||'music', folderId:folderId||'', parts, transitions: transitions || {}, customFills: customFills || [], customSections:customSections||[], sequence:sequence||[], sequenceMode:sequenceMode||'assisted', fillMode: fillMode || 'smart', repeatMode: repeatMode || 'fill', introMode:introMode==='repeat'?'repeat':'once', countIntroEnabled:countIntroEnabled!==false, edit};
+      {name, occasion, bpm, beats, meter, beatUnit, kind:kind||'music', folderId:folderId||'', parts, transitions: transitions || {}, customFills: customFills || [], customSections:customSections||[], partLabels:cleanPartLabels(partLabels), sequence:sequence||[], sequenceMode:sequenceMode||'assisted', fillMode: fillMode || 'smart', repeatMode: repeatMode || 'fill', introMode:introMode==='repeat'?'repeat':'once', countIntroEnabled:countIntroEnabled!==false, customBreaks:extraBreaks({customBreaks}).map(({id,label})=>({id,label})), cymbals:cymbalSettings({cymbals}), ...(mixer?{mixer:normalizeMix(mixer,{cymbals})}:{}), edit};
     const data = await this.request('?op=save', { method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({id, revision, content}) });
@@ -484,7 +554,7 @@ export class Repository {
   key(kind, id = '') { return this.owner + '/' + kind + '/' + id; }
   async purgeMusicianCache(){if(this.cloud.musician)await this.disk.clearPrefix(this.owner+'/');}
   song(id) { return this.disk.get(this.key('song', id)); }
-  async libraryState() { return await this.disk.get(this.key('settings','library')) || emptyLibrary(); }
+  async libraryState() { const saved=await this.disk.get(this.key('settings','library'));return saved?{...saved,...cleanLibrary(saved)}:emptyLibrary(); }
   async saveLibrary(next) {
     const saved=await this.libraryState();
     const content={...cleanLibrary(next),revision:saved.revision||0,dirty:true};
@@ -512,6 +582,7 @@ export class Repository {
   catalog() { return this.disk.list(this.key('song')); }
   offline(id) { return this.disk.get(this.key('offline', id)); }
   async save(song, newFiles = []) {
+    if(song.repertoireKey)throw new Error('O item do repertório não pode substituir o cadastro original.');
     const next = { ...song, dirty: this.cloud.enabled, edit: crypto.randomUUID() };
     const entries = newFiles.map(([path, blob]) => [this.key('audio', path), { blob, uploaded: false }]);
     entries.push([this.key('song', song.id), next]);
@@ -520,13 +591,14 @@ export class Repository {
   }
   async audio(path) { return (await this.disk.get(this.key('audio', path)))?.blob; }
   async available(song) {
-    for (const part of Object.values(song.parts || {})) {
+    const entries = audioEntries(song);
+    for (const [, part] of entries) {
       if (!(await this.audio(part.path))) return false;
     }
-    return Boolean(Object.keys(song.parts || {}).length);
+    return Boolean(entries.length);
   }
   async download(song, notify) {
-    const parts = Object.values(song.parts || {});
+    const parts = audioEntries(song).map(([, part]) => part);
     if (!parts.length) throw new Error('Cadastre os áudios desta música antes de baixar.');
     const entries = [];
     for (const [i, part] of parts.entries()) {
@@ -604,7 +676,7 @@ export class Repository {
           await this.finishSave(local, revision);
           continue;
         }
-        if (remote && local.revision !== remote.revision) {
+        if (remote && (local.revision !== remote.revision || crashSignature(local) !== crashSignature(remote))) {
           await this.disk.batch([[this.key('song', local.id), remote]]);
         }
         continue;

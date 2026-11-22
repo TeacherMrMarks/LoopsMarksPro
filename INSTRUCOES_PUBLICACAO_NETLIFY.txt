@@ -1,15 +1,20 @@
-Loops Marks Pro V21 — correcao pontual sobre a V20
+Loops Marks Pro V27 — Modo Palco Pro e Mixer Marks Pro
 
-1. Na Central, faça BACKUP COMPLETO e mantenha o ZIP original da V20 guardado.
-2. Extraia o ZIP da V21 na raiz do MESMO repositorio GitHub que publica no MESMO site Netlify.
-3. Nao apague WAVs, musicas, ritmos, repertorios, pastas, dados ou chaves de acesso.
-4. Mantenha build `npm run build`, publish `dist`, functions `netlify/functions`, Node 22.
-5. O `dist/netlify-client.js` incluido no ZIP e apenas um placeholder; e OBRIGATORIO o build do Netlify antes de testar login. Nao publique o dist de forma isolada.
-6. Abra o Permalink de teste e confira que aparece V21.
-7. Em Central > cadastro de ritmo/musica > aba Crash: devem aparecer Crash 1, 2 e 3 para importar, reutilizar, ouvir, trocar ou remover WAVs.
-8. Com todos os crashes vazios, abra o Modo Live: nao pode aparecer secao de crashes vazia, nem botoes para crash sem WAV.
-9. Cadastre apenas Crash 2: Modo Live deve mostrar SOMENTE Crash 2; remova o WAV de Crash 2 e confirme que o botao desaparece apos atualizar o cadastro.
-10. Com a bateria tocando, confira que o crash registrado toca no proximo tempo 1 sem interromper os loops.
-11. Confira tambem os acessos do celular, crash de pedal, viradas, contagem, introducao, repertorios e backup.
+1. Faça backup completo na versão atual e guarde o ZIP V26 original.
+2. Extraia a V27 na raiz do MESMO repositório GitHub conectado ao MESMO site Netlify. Não apague dados, Blobs ou usuários.
+3. Mantenha build: npm run build; publish: dist; functions: netlify/functions; Node 22.
+4. Confira a compilação do Netlify e abra o Permalink HTTPS. Confirme V27 no cabeçalho. Não publique dist isolado.
+5. Abra o mixer na Central e no Palco. Teste os oito faders, MUTE e SOLO enquanto o loop toca. O fader Pratos controla todos os WAVs separados de pratos. Confira a tela cheia, a seleção das partes, a gravação das mixagens e o fader MIDI CC. Após parar, sincronize e confira o perfil no outro aparelho.
+6. Crie um ritmo de teste com A, B e Refrão, viradas sem prato, três pratos automáticos e WAV de condução. A → prato 1; B → prato 2; Refrão → prato 3. Teste as transições e se o crash ocorre apenas no tempo 1 após a virada.
+7. Use um WAV com “prato” ou “crash” no nome; confira se o ataque automático não duplica o prato. Teste também “sem prato” e a correção manual do metadado.
+8. Ligue a condução no Palco. Confira sua pausa na virada e retomada na cabeça do compasso seguinte. Valide loop com “condução” no nome, retorno a outro loop sem condução e desligamento pelo mesmo botão.
+9. Adicione um contratempo de dois compassos e uma passagem de um compasso; teste retorno e seleção de outra parte durante o trecho. Os botões só aparecem após o WAV ser preparado.
+10. Configure pedal e MIDI para condução, crash automático e seções numeradas; verifique no Chromebook e no celular. Safari/PWA iPhone não oferece Web MIDI nativo; use HID ou teste ponte compatível.
+11. Faça exportação de backup completo de teste, restaure em ambiente de teste e confira arquivos, configurações e mapeamentos. A restauração cria cópias das músicas/ritmos, não substitui automaticamente os cadastros originais.
+12. Sincronize, baixe os WAVs no celular, reabra e confira todos os controles. Só publique oficialmente após validar o build e a reprodução com seus próprios áudios.
 
-Validacao local: 109/109 testes aprovados. Build de producao e teste real dependem do Netlify.
+13. Na Central, aba Loops, renomeie a Parte A com dois toques ou com o lápis. Cadastre outro ritmo e confira os nomes padrão. Teste D/E com WAV e respectivos controles. Confira os nomes no celular após a sincronização e após restaurar um backup de teste. Limpe o SOLO antes da apresentação.
+
+Observação: 166 testes automatizados aprovados; os testes usam simulações do motor de áudio e do codec de backup. Build completo indisponível no ambiente local por falta de esbuild.
+
+Teste V27: use o mesmo ritmo em duas entradas de repertório, personalize por engrenagem os nomes e a mixagem de uma e confira a outra e o cadastro original. Teste a troca no Modo Palco, o mixer e o backup. Atualize todos os clientes antes de editar repertórios nesta versão.

@@ -1,4 +1,4 @@
-Loops Marks Pro — V21
-Base: V20 (mantida intacta)
-Mudancas: aba Crash passa a conter os tres campos de Crashes adicionais; no Modo Live, so aparecem ataques com WAV efetivamente vinculado. Nenhuma mudanca nos identificadores, na sincronizacao ou na execucao do audio.
-Status: 109/109 testes automatizados locais aprovados; a compilacao de producao deve ser validada no Netlify.
+Loops Marks Pro V27
+Base: V26 preservada.
+Repertórios: nomes e mixagem independentes por ocorrência, herança opcional, IDs estáveis, proteção do cadastro de origem e backup.
+Validação: 166/166 testes locais; sintaxe verificada. Build Netlify e teste com áudio real pendentes.

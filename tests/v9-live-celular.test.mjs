@@ -12,7 +12,7 @@ test('V9 mantém Parte A nos metadados atuais e não reverte para cache offline 
  assert.equal(firstPlayablePart(song),'a');
 });
 test('V9 busca os WAVs faltantes na nuvem antes de preparar áudio',()=>{
- assert.match(app,/await current\.download\(shown/);
+ assert.match(app,/await current\.download\(state\.songs\.find\(s=>s\.id===shown\.id\)\|\|shown/);
  assert.match(app,/Baixando WAVs/);
  assert.match(app,/await player\.prepare\(shown/);
 });

@@ -43,7 +43,7 @@ globalThis.__netlifyBlobs=(opts)=>{
 globalThis.__netlifyIdentity={ getUser:async()=>loggedIn?({id:owner,email:'teste@example.com'}):null,
   verifyRequestOrigin:()=>{} };
 const libSrc=await readFile(new URL('../dist/library-model.js',import.meta.url),'utf8');
-const libUrl='data:text/javascript;base64,'+Buffer.from(libSrc).toString('base64');
+const libUrl='data:text/javascript;base64,'+Buffer.from(libSrc.replace("from './mixer.js';","from '"+new URL('../dist/mixer.js',import.meta.url).href+"';")).toString('base64');
 const meterSrc=await readFile(new URL('../dist/meter.js',import.meta.url),'utf8');
 const meterUrl='data:text/javascript;base64,'+Buffer.from(meterSrc).toString('base64');
 const source=(await readFile(new URL('../netlify/functions/loops-api.mjs',import.meta.url),'utf8'))
@@ -121,7 +121,7 @@ test('V11: pastas e repertórios no Netlify Blobs com autenticação e controle 
   const saved=await invoke('?op=library-save','POST',JSON.stringify({revision:0,content}));
   assert.equal(saved.status,200);
   const after=await (await invoke('?op=library')).json();
-  assert.equal(after.revision,1);assert.deepEqual(after.content,content);
+  assert.equal(after.revision,1);assert.deepEqual(after.content,{...content,repertoires:content.repertoires.map(r=>({...r,items:r.items.map((i,n)=>({...i,itemId: 'legacy-'+n}))}))});
   const conflict=await invoke('?op=library-save','POST',JSON.stringify({revision:0,content}));
   assert.equal(conflict.status,409);
   const bad=await invoke('?op=library-save','POST',JSON.stringify({revision:1,content:{folders:[{...folder,name:''}],repertoires:[]}}));
@@ -183,4 +183,11 @@ test('V16: Netlify saves real 3/4 and 6/8 signatures and refuses inconsistent pu
       content:{...six,beats:3,meter:'3/4',name:'Balada três por quatro'}}));
     assert.equal(waltz.status,200);
   } finally {globalThis.fetch=original;}
+});
+
+test('V26: API saves named parts and SOLO without changing IDs; rejects malformed metadata',async()=>{
+ const id=crypto.randomUUID();const mix=Object.fromEntries(['master','loops','fills','cymbals','counter','passage','count','endings'].map(k=>[k,{level:1,muted:false,solo:k==='loops'}]));const payload={name:'Teste V26',occasion:'',bpm:84,beats:4,meter:'4/4',parts:{},partLabels:{a:'Estrofe',d:'Solo'},mixer:mix};
+ const ok=await invoke('?op=save','POST',JSON.stringify({id,revision:0,content:payload}));assert.equal(ok.status,200);
+ const res=await invoke('?op=catalog');const rows=await res.json();const saved=rows.find(s=>s.id===id);assert.deepEqual(saved.content.partLabels,payload.partLabels);assert.equal(saved.content.mixer.loops.solo,true);
+ for(const invalid of [{partLabels:{unknown:'x'}},{partLabels:{a:' '}},{mixer:{...mix,loops:{...mix.loops,solo:'true'}}}]){const bad=await invoke('?op=save','POST',JSON.stringify({id,revision:1,content:{...payload,...invalid}}));assert.equal(bad.status,400);}
 });

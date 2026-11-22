@@ -1048,3 +1048,71 @@ body.drawer-visible {overflow:hidden}
 .crash-pads .pad.queued {border-color:#efbb5a;box-shadow:0 0 0 1px #efbb5a inset;}
 .crash-pads .pad.active {border-color:#67e1bd;}
 @media(max-width:600px){.live-count-bars {flex-basis:auto;} .queue-tools .mode-toggle {font-size:12px;} }
+
+/* V22 — MIDI Learn panel; no changes to existing transport and pads. */
+.stage-tools [data-action="midi-setup"]{width:31px;height:31px;flex-shrink:0}
+[data-action="midi-setup"][aria-pressed="true"]{color:#a4ffdf;border-color:#79e7c8;background:#225d50}
+.midi-dialog .midi-connection,.midi-dialog .midi-any{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.midi-dialog .midi-connection{justify-content:space-between}
+.midi-dialog .midi-monitor{font-family:monospace;font-size:.76rem;background:#102535;border:1px solid #33546b;border-radius:8px;padding:9px;overflow-wrap:anywhere;color:#8be6c9}
+.midi-learn-panel{display:grid;grid-template-columns:1fr 1fr;gap:8px;border:1px solid #33546b;border-radius:10px;padding:10px}
+.midi-learn-panel .midi-any,.midi-learn-panel p{grid-column:1/-1;margin:0}
+.midi-mappings{display:grid;gap:6px;max-height:35dvh;overflow:auto}
+.midi-map-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 35px;align-items:center;gap:6px;padding:8px;border:1px solid #33546b;border-radius:8px;background:#152b3c}
+.midi-map-row strong,.midi-map-row small{display:block;overflow-wrap:anywhere;font-size:.75rem}.midi-map-row small{color:#9ab8c8;font-size:.67rem}
+.midi-map-row select{min-width:0;background:#102535;color:#e4f6fa;border:1px solid #45697b;border-radius:7px;padding:7px;font-size:.75rem}
+.midi-map-row .icon-btn{width:32px;height:32px}
+@media(max-width:600px){.stage-topbar .stage-brand{position:static;transform:none;justify-content:flex-start;min-width:0;margin-left:4px;gap:4px}.stage-topbar .stage-brand .mark{display:none}.stage-tools{gap:4px}.stage-connection{display:none}.stage-tools .icon-btn{width:31px;height:31px}.midi-learn-panel{grid-template-columns:1fr}.midi-map-row{grid-template-columns:minmax(0,1fr) 35px}.midi-map-row select{grid-row:2;grid-column:1/-1}.midi-map-row .icon-btn{grid-row:1;grid-column:2}}
+
+/* V24: metadados dos WAVs; controles recolhidos/compactos. */
+.cymbal-overrides{display:flex;flex-wrap:wrap;gap:6px 16px;margin:0 0 8px;padding:4px 12px;color:var(--muted,#a5b7c4);font-size:.75rem}.cymbal-overrides label{display:flex;align-items:center;gap:6px}.cymbal-overrides select{max-width:170px;font-size:inherit}.pad[data-action="ride-toggle"].queued{border-style:dashed}
+
+/* V25 — Modo Palco Pro. One responsive stage, no duplicate player. */
+.stage-topbar .stage-brand{position:static;transform:none;justify-content:flex-start;min-width:0;margin-right:auto;pointer-events:none}
+.stage-topbar .stage-tools{margin-left:8px;gap:6px}
+.stage-deck .stage-status-main strong{font-size:clamp(1.25rem,3vw,2.4rem);white-space:normal;overflow-wrap:anywhere}
+.stage-deck .stage-status-side small{font-size:.83rem;font-weight:750;white-space:normal;max-width:220px}
+.stage-deck .pads{grid-template-columns:repeat(auto-fit,minmax(128px,1fr))}
+.stage-deck .pad{min-height:76px;justify-content:center;touch-action:manipulation}
+.stage-deck .pad strong{font-size:.92rem;overflow-wrap:anywhere}
+.stage-deck .pad.active{border-color:#79e7c8;box-shadow:inset 0 0 0 1px #79e7c8;background:#225b50}
+.stage-deck .pad.queued{border-color:#edc674;box-shadow:inset 0 0 0 1px #edc674}
+.stage-deck #stop-btn{background:#753c47;border:1px solid #b96b75;color:#fff;min-width:48px;min-height:44px}
+.stage-deck .meter .pulse{font-variant-numeric:tabular-nums;font-weight:750}
+.palco-focus .stage-main{max-width:none;width:100%}
+.palco-focus .stage-connection,.palco-focus .stage-deck .wave-box,.palco-focus .stage-deck .deck-line{display:none}
+.stage-tools [data-action="mixer-open"],.stage-tools [data-action="stage-fullscreen"]{width:34px;height:34px;flex-shrink:0}
+/* Nonmodal mixer: preserves the stage, pedal and MIDI even while open. */
+.mixer-panel{position:fixed;z-index:45;top:68px;right:max(12px,env(safe-area-inset-right));width:min(650px,calc(100vw - 24px));max-height:calc(100dvh - 82px);overflow:auto;background:#102635;border:1px solid #3c626a;border-radius:14px;box-shadow:0 14px 48px #0009;padding:12px;color:#edf7f3;overscroll-behavior:contain}
+.mixer-heading,.mixer-footer{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.mixer-heading>div{display:grid;gap:2px;min-width:0}.mixer-heading strong{font-size:.97rem;color:#a4f0d8}.mixer-heading small,.mixer-footer small{font-size:.7rem;color:#a9bcc9;overflow-wrap:anywhere}
+.mixer-channels{display:flex;gap:6px;overflow-x:auto;align-items:stretch;padding:9px 0;scrollbar-width:thin;scrollbar-color:#46736f #0b1b28}
+.mixer-channel{flex:1 0 70px;min-width:70px;display:flex;flex-direction:column;align-items:center;gap:8px;padding:8px 4px;border-radius:9px;background:#1b3443;border:1px solid #314d5a}
+.mixer-channel:first-child{background:#24494a;border-color:#4f837b}
+.mixer-channel label{font-weight:700;font-size:.72rem;text-align:center;min-height:2.2em;display:flex;align-items:center;justify-content:center;overflow-wrap:anywhere}
+.mixer-channel output{color:#a1f1d5;font-size:.8rem;font-weight:750;font-variant-numeric:tabular-nums}
+.mixer-channel .mixer-fader{writing-mode:vertical-lr;direction:rtl;appearance:auto;-webkit-appearance:slider-vertical;width:32px;height:118px;accent-color:#7ce7c8;margin:0;touch-action:none;cursor:ns-resize;flex:none}
+.mixer-mute{font-size:.66rem;font-weight:750;min-height:30px;border:1px solid #56717e;border-radius:6px;background:#263e4d;color:#dbe9ee;padding:4px 6px;cursor:pointer}
+.mixer-mute[aria-pressed="true"]{background:#893d48;color:#fff;border-color:#e497a0}
+[data-action="mixer-open"][aria-expanded="true"]{border-color:#8ce9c8;color:#a1f1d5;background:#22584c}
+@media(max-width:600px){.stage-topbar .stage-brand{margin-left:4px}.stage-topbar .stage-tools{gap:3px;margin-left:4px}.stage-tools .icon-btn,.stage-tools [data-action="stage-fullscreen"],.stage-tools [data-action="mixer-open"]{width:29px;height:31px}.stage-tools .icon-btn svg{width:17px;height:17px}.stage-deck .pads{grid-template-columns:repeat(auto-fit,minmax(100px,1fr))}.stage-deck .pad{min-height:66px}.stage-deck .pad strong{font-size:.79rem}.mixer-panel{top:57px;max-height:calc(100dvh - 67px);padding:9px}.mixer-channel{min-width:65px;flex-basis:65px}.mixer-channel .mixer-fader{height:100px}.stage-deck .stage-status-side small{max-width:120px}}
+@media(max-width:360px){.stage-topbar .brand strong{font-size:.61rem}.stage-topbar .brand small{font-size:.58rem}.stage-topbar .brand-version{font-size:.55rem}.stage-tools .icon-btn{width:26px}}
+@media(max-height:440px){.mixer-channel .mixer-fader{height:78px}.mixer-channel{gap:4px}.mixer-heading,.mixer-footer{gap:4px}}
+
+/* V26: high-contrast names, SOLO and accessible inline rename affordance. */
+.mixer-channel{flex-basis:85px;min-width:85px}
+.mixer-channel label{color:#fff!important;opacity:1!important;font-size:.82rem;font-weight:800;line-height:1.2;min-height:2.4em}
+.mixer-channel .mixer-mute,.mixer-channel .mixer-solo{width:100%;min-height:30px;border:1px solid #6b8793;border-radius:6px;background:#314957;color:#fff;font-size:.72rem;font-weight:800;cursor:pointer}
+.mixer-channel .mixer-mute[aria-pressed="true"]{background:#aa3548;color:#fff;border-color:#f3a0ab}
+.mixer-channel .mixer-solo[aria-pressed="true"]{background:#f0cf6d;color:#211b0a;border-color:#ffe5a0}
+.mixer-channel.solo-excluded output{color:#bfccd2}.mixer-channel.solo-excluded{background:#172c38}
+.mixer-footer{flex-wrap:wrap}.mixer-footer #mixer-solo-status{color:#f0d78d;font-weight:750}
+.part-name-tools{display:flex;align-items:center;gap:4px;min-width:0}.part-name-edit,.part-rename-pencil{background:transparent;border:0;padding:0;color:inherit;cursor:pointer;touch-action:manipulation}
+.part-name-edit{text-align:left;font-weight:750;overflow-wrap:anywhere;min-width:0;user-select:none;-webkit-user-select:none}.part-rename-pencil{color:#a6efdb;flex:none;display:inline-flex;align-items:center;justify-content:center;min-width:24px;min-height:28px}.part-rename-pencil svg{width:14px;height:14px}
+@media(max-width:600px){.mixer-channel{min-width:78px;flex-basis:78px}.mixer-channel label{font-size:.78rem}.part-name-edit{font-size:.75rem}.part-rename-pencil{min-width:18px}}
+
+/* V27: independent setlist entries. */
+.rep-track{grid-template-columns:27px minmax(110px,1fr) 90px repeat(4,33px)}
+.rep-custom-dialog{width:min(680px,94vw);max-height:88vh;overflow:auto;color:#f3f7fa;background:#142b38;border:1px solid #456571;border-radius:14px;padding:16px}
+.rep-custom-dialog h3{margin:16px 0 8px;color:#fff;font-size:.95rem}.rep-custom-dialog p{color:#c4d7df}.rep-custom-fields,.rep-custom-mix{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.rep-custom-fields input{width:100%;min-width:0}.rep-custom-mix>div{padding:9px;background:#263f4b;border-radius:8px;color:#fff}.rep-custom-mix>div>label:first-child{display:block;font-weight:700}.rep-custom-mix input[type=range]{display:block;width:100%;accent-color:#79e7c8;margin:8px 0}.rep-custom-mix output{float:right;color:#9af0d1}.rep-custom-mix label+label{margin-right:8px;font-size:.8rem}.rep-use-mix{display:block;margin-bottom:8px}.rep-custom-dialog menu{display:flex;flex-wrap:wrap;gap:7px;padding:0;justify-content:flex-end}
+@media(max-width:650px){.rep-track{grid-template-columns:22px minmax(64px,1fr) 52px repeat(4,26px);gap:3px;padding:4px}.rep-track .icon-btn{width:25px;height:26px}.rep-custom-dialog{padding:12px}}

@@ -1,13 +1,15 @@
+import { normalizeMix, readLocalMix, writeLocalMix } from './mixer.js';
+import { loadMidiSettings, saveMidiSettings } from './midi.js';
 import { zipSync, unzipSync, strToU8, strFromU8 } from './netlify-client.js';
-import { MAX_FILE_BYTES } from './data.js';
-import { cleanLibrary } from './library-model.js';
+import { MAX_FILE_BYTES, extraBreaks, cymbalSettings, audioEntries, cleanPartLabels } from './data.js';
+import { cleanLibrary, cleanRepertoireItem, entryId, entryKey } from './library-model.js';
 import { validMeter, meterOf } from './meter.js';
 const LIMIT = 420 * 1024 * 1024;
 function slim(song) {
   return { originalId:song.id, kind:song.kind||'music', folderId:song.folderId||'', name: song.name || '', occasion: song.occasion || '', bpm: song.bpm,
     beats: song.beats, meter: meterOf(song), beatUnit:song.beatUnit, parts: structuredClone(song.parts||{}),
-    transitions: structuredClone(song.transitions||{}), customFills: structuredClone(song.customFills||[]),
-    fillMode: song.fillMode || 'smart', repeatMode: song.repeatMode || 'fill', introMode:song.introMode==='repeat'?'repeat':'once', countIntroEnabled:song.countIntroEnabled!==false, customSections:structuredClone(song.customSections||[]), sequence:structuredClone(song.sequence||[]), sequenceMode:song.sequenceMode||'assisted' };
+    transitions: structuredClone(song.transitions||{}), customBreaks:structuredClone(extraBreaks(song).map(({id,label})=>({id,label}))), cymbals:cymbalSettings(song), ...(song.mixer?{mixer:normalizeMix(song.mixer,song)}:{}), customFills: structuredClone(song.customFills||[]),
+    fillMode: song.fillMode || 'smart', repeatMode: song.repeatMode || 'fill', introMode:song.introMode==='repeat'?'repeat':'once', countIntroEnabled:song.countIntroEnabled!==false, customSections:structuredClone(song.customSections||[]), partLabels:cleanPartLabels(song.partLabels), sequence:structuredClone(song.sequence||[]), sequenceMode:song.sequenceMode||'assisted' };
 }
 export async function makeBackup(repo, mode = 'completo', progress = () => {}) {
   const songs = (await repo.catalog()).filter(song => !song.deleted);
@@ -15,13 +17,18 @@ export async function makeBackup(repo, mode = 'completo', progress = () => {}) {
   const data = {type:'LOOPS_MARKS_PRO_BACKUP', schema:4, mode, createdAt:new Date().toISOString(),
     library:lib,songs:songs.map(slim),preferences:(()=>{
       try{return {pedalMap:JSON.parse(localStorage.getItem('loops-v12-pedal-map')||'{}'),
+        midiSettings:loadMidiSettings(localStorage),
+        liveCounts:Object.fromEntries(songs.flatMap(song=>{try{const value=JSON.parse(localStorage.getItem('loops-v20-count-'+song.id)||'null');return value&&typeof value.enabled==='boolean'?[[song.id,{enabled:value.enabled,bars:value.bars===2?2:1}]]:[];}catch{return [];}})),
+        repertoireMixes:Object.fromEntries(lib.repertoires.flatMap(r=>r.items.flatMap((i,n)=>{const key=entryKey(r.id,entryId(i,n));const mix=readLocalMix(localStorage,{repertoireKey:key});return mix?[[key,mix]]:[];}))),
+        repertoireCounts:Object.fromEntries(lib.repertoires.flatMap(r=>r.items.flatMap((i,n)=>{const key=entryKey(r.id,entryId(i,n));try{const count=JSON.parse(localStorage.getItem('loops-v20-count-'+key)||'null');return count&&typeof count.enabled==='boolean'?[[key,{enabled:count.enabled,bars:count.bars===2?2:1}]]:[];}catch{return [];}}))),
+        liveMixes:Object.fromEntries(songs.flatMap(song=>{const mix=readLocalMix(localStorage,song);return mix?[[song.id,mix]]:[];})),
         introOpen:localStorage.getItem('loops-v12-editor-intro'),
         managementOpen:localStorage.getItem('loops-v12-management')};}
       catch{return {};}})()};
   let bytes = 0;
   const items = {'manifest.json':strToU8(JSON.stringify(data,null,2))};
   if(mode !== 'configuracoes') {
-    const all = songs.flatMap((song, i) => Object.entries(song.parts||{}).map(([part,audio]) => ({song,i,part,audio})));
+    const all = songs.flatMap((song, i) => audioEntries(song).map(([part,audio]) => ({song,i,part,audio})));
     for (const [i,entry] of all.entries()) {
       const file = await repo.audio(entry.audio.path) || await repo.cloud.audio(entry.audio.path);
       if (!file || file.size>MAX_FILE_BYTES) throw new Error('WAV ausente ou inválido: '+entry.song.name+' / '+entry.part);
@@ -46,7 +53,7 @@ export async function restoreBackup(repo, file, progress = () => {}) {
   if(manifest.type!=='LOOPS_MARKS_PRO_BACKUP'||![3,4].includes(manifest.schema) || !Array.isArray(manifest.songs) || manifest.songs.length>500)
     throw new Error('Versão ou estrutura do backup incompatível.');
   let imported=0;
-  const idMap=new Map();
+  const idMap=new Map(), entryMap=new Map();
   const library=await repo.libraryState();
   const folderMap=new Map();
   if(manifest.schema===4){
@@ -63,8 +70,8 @@ export async function restoreBackup(repo, file, progress = () => {}) {
        !song.parts || typeof song.parts!=='object') throw new Error('Dados inválidos no backup.');
     const id=crypto.randomUUID();if(song.originalId)idMap.set(song.originalId,id);
     const restored={id,kind:song.kind==='rhythm'?'rhythm':'music',folderId:folderMap.get(song.folderId)||'',name:song.name,occasion:String(song.occasion||'').slice(0,55),bpm:song.bpm,
-      beats:song.beats,meter:meterOf(song),beatUnit:song.beatUnit,parts:{},transitions:song.transitions||{},customFills:song.customFills||[],
-      fillMode: song.fillMode || 'smart', repeatMode: song.repeatMode || 'fill',introMode:song.introMode==='repeat'?'repeat':'once',countIntroEnabled:song.countIntroEnabled!==false,customSections:song.customSections||[],sequence:song.sequence||[],sequenceMode:song.sequenceMode||'assisted',revision:0};
+      beats:song.beats,meter:meterOf(song),beatUnit:song.beatUnit,parts:{},transitions:song.transitions||{},customFills:song.customFills||[],customBreaks:extraBreaks(song).map(({id,label})=>({id,label})),cymbals:cymbalSettings(song), ...(song.mixer?{mixer:normalizeMix(song.mixer,song)}:{}),
+      fillMode: song.fillMode || 'smart', repeatMode: song.repeatMode || 'fill',introMode:song.introMode==='repeat'?'repeat':'once',countIntroEnabled:song.countIntroEnabled!==false,customSections:song.customSections||[],partLabels:cleanPartLabels(song.partLabels),sequence:song.sequence||[],sequenceMode:song.sequenceMode||'assisted',revision:0};
     const files=[];
     for(const [part,meta] of Object.entries(song.parts)) {
       if(!/^[A-Za-z0-9_-]{1,80}$/.test(part)) continue;
@@ -84,16 +91,20 @@ export async function restoreBackup(repo, file, progress = () => {}) {
   if(manifest.schema===4){
     for(const r of manifest.library?.repertoires||[]){
       if(typeof r.name!=='string'||!r.name.trim())continue;
-      const items=(r.items||[]).map(item=>({songId:idMap.get(item.songId),bpm:item.bpm||null,title:String(item.title||'').slice(0,90)}))
-        .filter(item=>item.songId);
-      library.repertoires.push({id:crypto.randomUUID(),name:r.name.slice(0,90),date:String(r.date||'').slice(0,35),items});
+      const repId=crypto.randomUUID();
+      const items=(r.items||[]).flatMap((item,n)=>{const songId=idMap.get(item.songId);if(!songId)return [];const itemId=crypto.randomUUID();entryMap.set(entryKey(r.id,entryId(item,n)),entryKey(repId,itemId));return [{...cleanRepertoireItem(item,n),songId,itemId}];});
+      library.repertoires.push({id:repId,name:r.name.slice(0,90),date:String(r.date||'').slice(0,35),items});
     }
     await repo.saveLibrary(library);
   }
   if(manifest.preferences && typeof localStorage!=='undefined'){
     const p=manifest.preferences;try{
-      if(p.pedalMap && typeof p.pedalMap==='object'&&!Array.isArray(p.pedalMap) && Object.keys(p.pedalMap).length<=32)
+      if(p.pedalMap && typeof p.pedalMap==='object'&&!Array.isArray(p.pedalMap) && Object.keys(p.pedalMap).length<=512)
         localStorage.setItem('loops-v12-pedal-map',JSON.stringify(p.pedalMap));
+      if(p.midiSettings && typeof p.midiSettings==='object')saveMidiSettings(localStorage,p.midiSettings);
+      for(const [oldId,newId] of idMap){const count=p.liveCounts?.[oldId];if(count&&typeof count.enabled==='boolean')localStorage.setItem('loops-v20-count-'+newId,JSON.stringify({enabled:count.enabled,bars:count.bars===2?2:1}));}
+      for(const [oldId,newId] of idMap){const mix=p.liveMixes?.[oldId];if(mix&&typeof mix==='object')writeLocalMix(localStorage,{id:newId},mix);}
+      for(const [oldKey,newKey] of entryMap){const mix=p.repertoireMixes?.[oldKey];if(mix&&typeof mix==='object')writeLocalMix(localStorage,{repertoireKey:newKey},mix);const count=p.repertoireCounts?.[oldKey];if(count&&typeof count.enabled==='boolean')localStorage.setItem('loops-v20-count-'+newKey,JSON.stringify({enabled:count.enabled,bars:count.bars===2?2:1}));}
       if(['open','closed'].includes(p.introOpen))localStorage.setItem('loops-v12-editor-intro',p.introOpen);
       if(['open','closed'].includes(p.managementOpen))localStorage.setItem('loops-v12-management',p.managementOpen);
     }catch{/* Navegador pode bloquear preferências locais; dados restaurados permanecem intactos. */}}
