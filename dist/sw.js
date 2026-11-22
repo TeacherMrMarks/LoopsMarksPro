@@ -1,7 +1,7 @@
-const VERSION = 'loops-marks-v32-finish-crash-20261122';
+const VERSION = 'loops-marks-v33-access-audio-midi-20261122';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './netlify-client.js', './backup.js', './data.js', './library-model.js',
-  './preferences.js', './midi.js', './mixer.js', './audio.js', './meter.js', './stretch.js', './demo.js', './importer.js', './manifest.webmanifest',
+  './access-mode.js', './audio-output.js', './preferences.js', './midi.js', './mixer.js', './audio.js', './meter.js', './stretch.js', './demo.js', './importer.js', './manifest.webmanifest',
   './icon.svg', './icon-192.png', './icon-512.png',
 ];
 const scope = new URL(self.registration.scope);

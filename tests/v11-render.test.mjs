@@ -1,3 +1,5 @@
+import * as access from '../dist/access-mode.js';
+import * as audioOutput from '../dist/audio-output.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
@@ -9,14 +11,14 @@ import * as midi from '../dist/midi.js';
 import {Player,bpmRange} from '../dist/audio.js';
 const source=readFileSync(new URL('../dist/app.js',import.meta.url),'utf8')
   .replace(/^import .*;\n/gm,'').split("document.addEventListener('keydown',")[0];
-function context(mode='central'){
+function context(mode='central',nav={},extra=''){
   const root={querySelector:()=>null,addEventListener:()=>{}};
   const sandbox={
-    ...data,...lib,...meter,...midi,Player,bpmRange,
+    ...access,...audioOutput,...data,...lib,...meter,...midi,Player,bpmRange,
     Cloud:class {enabled=true;session(){return {id:'u1',email:'editor@example.com'}}},
-    location:{href:'https://loops.test/?modo='+mode},
+    location:{href:'https://loops.test/?modo='+mode+extra},
     URL,crypto,structuredClone,
-    document:{querySelector:()=>root},window:{LOOPS_CONFIG:{}},navigator:{onLine:true},
+    document:{querySelector:()=>root},window:{LOOPS_CONFIG:{}},navigator:{onLine:true,...nav},
     console,setTimeout,clearTimeout,
     localStorage:{getItem:()=>null,setItem:()=>{},removeItem:()=>{}},
   };
@@ -77,3 +79,6 @@ test('V16 renderiza 3/4 e 6/8 com opções e unidade de BPM apropriada',()=>{
  balada.beatUnit='quarter';balada.beats=3;html=vm.runInContext('state.admin=testSong;editor()',ctx);
  assert.match(html,/value="6\/8@quarter" selected/);
 });
+
+test('V33 mobile admin login cannot render admin button or editor even on central URL',()=>{const ctx=context('central',{userAgent:'iPhone'});assert.equal(vm.runInContext('state.view',ctx),'live');const html=vm.runInContext('shell()',ctx);assert.match(html,/stage-shell/);assert.doesNotMatch(html,/data-action="admin"|v11-editor/);});
+test('V33 musician key retained if mode is changed to central; no admin UI',()=>{const ctx=context('central',{},'&chave=bad');assert.equal(vm.runInContext('state.view',ctx),'live');assert.doesNotMatch(vm.runInContext('shell()',ctx),/data-action="admin"|v11-editor/);});

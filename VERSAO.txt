@@ -1,4 +1,4 @@
-Loops Marks Pro V32
-Base: V31 preservada.
-Acabamento: crash automático no tempo 1 seguinte, cauda integral e camadas até a queda. Final personalizado sem ataque adicional.
-Validação: 208/208 testes locais. Build Netlify e testes reais pendentes.
+Loops Marks Pro V33
+Base: V32 preservada.
+Acesso mobile e músico somente Palco; saída/diagnóstico de áudio; recuperação MIDI.
+Validação: 220/220 testes locais. Build Netlify e hardware real pendentes.

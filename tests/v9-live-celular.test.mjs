@@ -23,9 +23,9 @@ test('V9 Ouvir é separado de Trocar e não altera a música',()=>{
  assert.match(app,/source\.start\(\)/);
 });
 test('V9 link de músico não inclui central administrativa nem cadastro',()=>{
- assert.equal(manifest.start_url,'./?modo=musico');
+ assert.equal(manifest.start_url,'./?modo=ao-vivo');
  assert.match(app,/url\.searchParams\.set\('modo','musico'\)/);
- assert.match(app,/if \(musicianLink && view !== 'live'\) return/);
- assert.match(app,/musicianLink\?'<span class="stage-top-left"/);
- assert.match(app,/musicianLink \? '' : button\('admin', 'Completar cadastro'/);
+ assert.match(app,/if \(restrictedStage\(\) && view !== 'live'\) return/);
+ assert.match(app,/restrictedStage\(\)\?'<span class="stage-top-left"/);
+ assert.match(app,/restrictedStage\(\) \? '' : button\('admin', 'Completar cadastro'/);
 });

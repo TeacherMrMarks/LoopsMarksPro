@@ -3,7 +3,7 @@
   "name": "Loops Marks Pro",
   "short_name": "Loops Marks Pro",
   "lang": "pt-BR",
-  "start_url": "./?modo=musico",
+  "start_url": "./?modo=ao-vivo",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",

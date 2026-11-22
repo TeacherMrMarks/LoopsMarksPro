@@ -1,6 +1,14 @@
-# Loops Marks Pro — V32
+# Loops Marks Pro — V33
 
-Base: V31. Preservação dos identificadores WAV, dados, mapeamentos MIDI/pedal e chaves anteriores de armazenamento.
+Base: V32. Preservação dos identificadores WAV, dados, mapeamentos MIDI/pedal e chaves anteriores de armazenamento.
+
+## Novidades V33 — acesso, saída de áudio e MIDI
+
+- Celulares e tablets detectados abrem exclusivamente o Modo Palco, inclusive quando o administrador entra pelo endereço da Central. A interface administrativa continua disponível no desktop/Chromebook. A detecção de dispositivo é uma restrição de interface, não uma substituição da autorização do servidor.
+- Links com `modo=musico` ou `chave` não promovem a sessão para administração. Uma chave inválida explícita não usa uma chave antiga silenciosamente. O endpoint de músico permanece somente de leitura. O manifesto geral abre o palco com login normal; o manifesto individual mantém o token e acesso limitado.
+- Ícone de fones na Central e no Palco: escolha de saída quando suportada (padrão do sistema como fallback), pesquisa, autorização quando disponível, teste de tom independente do mixer, diagnóstico de estado e alertas de Master/Loops silenciados por volume, mute ou solo. Reconectar áudio retoma a sessão e reaplica a rota; Reiniciar motor recria o contexto somente quando parado. Preferência de saída local ao aparelho, não modifica mixagem nem backups existentes.
+- MIDI: busca com nova solicitação quando não há entradas, conexão compatível sem opções extras, listas de entradas de pontes antigas, recuperação de handlers e proteção contra reconexões automáticas concorrentes. Atribuições e sync da V29 mantidos. Se o sistema/navegador não expõe o dispositivo MIDI, o aplicativo não consegue inventar a entrada.
+- Validação: 220 testes locais aprovados (208 anteriores, 12 novos); testes de acesso com HTML simulado, MIDI/áudio com dispositivos simulados. Build Netlify pendente: `esbuild` não instalado neste ambiente. Teste com controlador real e alto-falantes ainda necessário.
 
 ## Novidades V32 — Acabamento com crash automático final
 

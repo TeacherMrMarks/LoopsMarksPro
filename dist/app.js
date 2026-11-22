@@ -1,3 +1,5 @@
+import { musicianRoute, phoneDevice, stageOnly, allowedStageAction } from './access-mode.js';
+import { savedOutput, rememberOutput, resumeAudio, routeOutput, audioOutputs, mixerWarnings, testOutput } from './audio-output.js';
 import { MIX_CHANNELS, MIX_IDS, normalizeMix, effectiveGain, mixChannel, readLocalMix, writeLocalMix, hasSolo, soloExcluded } from './mixer.js';
 import { Cloud, Repository, PARTS, PLAY_PARTS, MANUAL_PARTS, FINALES, newSong, MAX_FILE_BYTES, fillBase, fillVariantId, firstPlayablePart, liveCatalog, playableParts, extraSections, CRASH_STOPS, hasAudioPart, preparedCrashParts, crashSignature, AUTO_CRASHES, ATTACK_IDS, extraBreaks, cymbalSettings, RENAMEABLE_PARTS, partLabel, namedPart, renamePart, resetPartName, LAYER_IDS, LAYER_ACTIONS, layerVolume, stageFill, passageTail, breakReturnBars, validReturnBars } from './data.js';
 import { suggestSlot } from './importer.js';
@@ -10,9 +12,11 @@ import { emptyLibrary, cleanLibrary, songKind, inFolder, repertoireEntries, repe
 import { PreferenceSync, PEDAL_KEY } from './preferences.js';
 import { MIDI_KEY, MidiController, loadMidiSettings, saveMidiSettings } from './midi.js';
 
-const APP_VERSION = 'V32';
+const APP_VERSION = 'V33';
 // O link do músico carrega exclusivamente o Modo Palco Pro.
-const musicianLink = new URL(location.href).searchParams.get('modo') === 'musico';
+const musicianLink = musicianRoute(new URL(location.href).search);
+const phoneOnly = phoneDevice(navigator);
+const restrictedStage = () => stageOnly({musician:musicianLink,phone:phoneOnly,readonly:cloud.session()?.readonly===true});
 const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
 const app = document.querySelector('#app');
 const dialog = document.querySelector('#dialog');
@@ -36,6 +40,7 @@ const icons = {
   search: '<circle cx="10" cy="10" r="5.5"/><path d="m14.5 14.5 5 5"/>',
   download: '<path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4"/>',
   check: '<path d="m5 12 4 4L19 6"/>',
+  usb: '<path d="M12 3v12m-3-9 3-3 3 3M12 15l-5-4V8m5 7 5-4V8m-5 7v5"/><circle cx="12" cy="20" r="1.5"/>',
   headphones: '<path d="M3 15v-3a9 9 0 0 1 18 0v3M3 15a2 2 0 0 1 2-2h2v6H5a2 2 0 0 1-2-2zm18 0a2 2 0 0 0-2-2h-2v6h2a2 2 0 0 0 2-2z"/>',
   volume: '<path d="M4 9v6h4l5 4V5L8 9Zm12 0a4 4 0 0 1 0 6m2-8a7 7 0 0 1 0 10"/>',
   spark: '<path d="M12 2.5 14.4 10l7.1 2-7.1 2.1L12 21.5 9.6 14 2.5 12l7.1-2Z"/>',
@@ -65,7 +70,7 @@ const safeStored = key => { try{return localStorage.getItem(key);}catch{return n
 const label = key => partLabel(state.admin,fillBase(key));
 const idle = { running: false, beat: -1 };
 const state = {
-  view: !musicianLink && new URL(location.href).searchParams.get('modo') === 'central' ? 'admin' : 'live',
+  view: !restrictedStage() && new URL(location.href).searchParams.get('modo') === 'central' ? 'admin' : 'live',
   songs: [], offline: new Map(), selected: null, admin: null, bpm: 0, volume: 0.82,
   preparation: '', syncLabel: '', errors: '', searchLive: '', searchAdmin: '',
   selectedSignature: '', info: idle, download: '', capture: null, libraryOpen: false,
@@ -86,7 +91,7 @@ let animation;
 let syncTask;
 let preferences=null;
 function savePreference(key,value){if(preferences){try{preferences.change(key,value);state.syncLabel='Sincronização pendente';updateTop();requestSync();}catch(e){notice(e.message);}}}
-function refreshControls(){state.pedalMap=loadPedalMap();midi.settings=loadMidiSettings(localStorage);updateMidiStatus();if(state.selected&&!player.running){const c=loadLiveCount(state.selected);state.liveCountEnabled=c.enabled&&Boolean(state.selected.parts?.countIntro?.path);state.liveCountBars=c.bars;player.setCountControl(state.liveCountEnabled,c.bars);const select=get("#live-count-bars");if(select)select.value=String(c.bars);}if(dialog.open&&dialog.querySelector(".midi-dialog")){paintMidiMappings();const el=dialog.querySelector("#midi-enabled");if(el)el.checked=midi.settings.enabled;}if(state.selected&&!player.running)updatePlayback(true);reconnectMidi();}
+function refreshControls(){state.pedalMap=loadPedalMap();const restoredMidi=loadMidiSettings(localStorage);if(JSON.stringify(midi.settings)!==JSON.stringify(restoredMidi))midi.settings=restoredMidi;updateMidiStatus();if(state.selected&&!player.running){const c=loadLiveCount(state.selected);state.liveCountEnabled=c.enabled&&Boolean(state.selected.parts?.countIntro?.path);state.liveCountBars=c.bars;player.setCountControl(state.liveCountEnabled,c.bars);const select=get("#live-count-bars");if(select)select.value=String(c.bars);}if(dialog.open&&dialog.querySelector(".midi-dialog")){paintMidiMappings();const el=dialog.querySelector("#midi-enabled");if(el)el.checked=midi.settings.enabled;}if(state.selected&&!player.running)updatePlayback(true);reconnectMidi();}
 
 let syncTimer;
 let draftTimer;
@@ -199,10 +204,10 @@ function adminSidebar() {
 function shell() {
   const live=state.view==='live';
   const [status,statusIcon]=statusText();
-  if(live) return '<div class="stage-shell'+(musicianLink?' musician-shell':'')+'"><header class="stage-topbar">'+
-    (musicianLink?'<span class="stage-top-left"></span>':iconButton('admin','Central Administrativa','grid','data-stage-back'))+
+  if(live) return '<div class="stage-shell'+(restrictedStage()?' musician-shell':'')+'"><header class="stage-topbar">'+
+    (restrictedStage()?'<span class="stage-top-left"></span>':iconButton('admin','Central Administrativa','grid','data-stage-back'))+
     brand('stage-brand')+'<div class="stage-tools"><span class="stage-connection" title="'+escape(status)+'" id="sync-label">'+icon(statusIcon)+'<span>'+escape(status)+'</span></span>'+
-    iconButton('pedal-setup','Configurar pedal Bluetooth','wave')+midiIcon()+iconButton('mixer-open','Mixer Marks Pro','mixer','aria-expanded="false"')+
+    iconButton('pedal-setup','Configurar pedal Bluetooth','wave')+midiIcon()+iconButton('audio-setup','Configurar saída de áudio','headphones')+iconButton('mixer-open','Mixer Marks Pro','mixer','aria-expanded="false"')+
     iconButton('stage-fullscreen','Tela cheia','fullscreen')+iconButton('open-library','Selecionar repertório','list','id="repertoire-toggle" aria-expanded="false" aria-controls="live-drawer"')+
     '</div></header><main class="stage-main">'+liveView()+'</main></div>';
   return '<div class="shell admin-shell v11-shell v12-shell '+(state.sidebarCollapsed?'v12-collapsed':'')+'">'+adminSidebar()+
@@ -214,7 +219,7 @@ function loginView() {
     '<h1>Acesso do músico</h1><p>'+escape(cloud.authError||'Abra o link individual que você recebeu do administrador.')+'</p>'+
     '<p>O link de acesso pode ter sido revogado ou expirado.</p><div class="login-footer">Loops Marks Pro '+APP_VERSION+'</div></section></main>';
   return '<main class="login"><section class="frame login-card">' + brand() +
-    '<h1>' + (musicianLink ? 'Entrar no Modo Palco Pro' : 'Entrar na central') + '</h1><p>Acesse com o e-mail convidado no Netlify Identity. No primeiro acesso, abra o convite para criar sua senha.</p>' +
+    '<h1>' + (restrictedStage() ? 'Entrar no Modo Palco Pro' : 'Entrar na central') + '</h1><p>Acesse com o e-mail convidado no Netlify Identity. No primeiro acesso, abra o convite para criar sua senha.</p>' +
     '<form id="login-form"><label class="field"><span>E-mail</span><input type="email" name="email" required autocomplete="username"></label>' +
     '<label class="field"><span>Senha</span><input type="password" name="password" required autocomplete="current-password"></label>' +
     '<button class="button primary" type="submit">' + icon('user') + 'Entrar</button>' +
@@ -287,12 +292,12 @@ function toggleLibrary(open) {
 function deck() {
   const song = state.selected;
   if (!song) return '<div class="frame blank"><h2>Seu repertório começa aqui</h2><p>' +
-    (musicianLink ? 'Nenhuma música sincronizada nesta conta. Cadastre e sincronize o repertório pelo computador.' : 'Cadastre uma música na Central Administrativa.') + '</p>' +
-    (musicianLink ? '' : button('admin', 'Abrir central', 'grid', 'primary')) + '</div>';
+    (restrictedStage() ? 'Nenhuma música sincronizada nesta conta. Cadastre e sincronize o repertório pelo computador.' : 'Cadastre uma música na Central Administrativa.') + '</p>' +
+    (restrictedStage() ? '' : button('admin', 'Abrir central', 'grid', 'primary')) + '</div>';
   const openingPart = firstPlayablePart(song);
   if (!openingPart) return '<div class="frame blank"><h2>' + escape(song.name || 'Música sem título') +
     '</h2><p>Cadastro encontrado. Para reproduzir, importe pelo menos um WAV no campo <strong>Loop contínuo</strong> (Parte A, Refrão ou outra parte). Entradas com prato e viradas não substituem o loop contínuo.</p>' +
-    (musicianLink ? '' : button('admin', 'Completar cadastro', 'grid', 'primary')) + '</div>';
+    (restrictedStage() ? '' : button('admin', 'Completar cadastro', 'grid', 'primary')) + '</div>';
   const parts = playableParts(song).filter(part => hasAudioPart(song,part.id));
   const countPresent = Boolean(song.parts?.countIntro?.path);
   const countReady = countPresent && state.liveCountEnabled;
@@ -361,7 +366,7 @@ function adminView() {
     ['editor','catalog'].includes(state.adminPanel)?button('new',state.adminKind==='rhythm'?'Novo ritmo':'Nova música','plus','primary'):'';
   const [syncStatus,syncIcon]=statusText();
   return '<div class="v11-heading"><div><h1>'+title+'</h1><p>'+desc+'</p></div><div class="admin-quick-actions">'+action+
-    iconButton('pedal-setup','Configurar pedal Bluetooth','wave')+midiIcon()+iconButton('mixer-open','Mixer Marks Pro','mixer','aria-expanded="false"')+
+    iconButton('pedal-setup','Configurar pedal Bluetooth','wave')+midiIcon()+iconButton('audio-setup','Configurar saída de áudio','headphones')+iconButton('mixer-open','Mixer Marks Pro','mixer','aria-expanded="false"')+
     '<span class="v15-sync-status" id="sync-label" title="'+escape(syncStatus)+'" role="status">'+icon(syncIcon)+'<span>'+escape(syncStatus)+'</span></span></div></div>'+ 
     (state.errors?'<div class="warning" role="status">'+escape(state.errors)+' '+button('sync','Tentar sincronizar','refresh','ghost')+'</div>':'')+
     '<section class="frame admin-editor v11-editor">'+(state.adminPanel==='folders'?foldersPanel():state.adminPanel==='catalog'?catalogPanel():
@@ -693,7 +698,7 @@ function setupEditorTabs(){
 }
 
 function render() {
-  if (musicianLink) state.view = 'live';
+  if (restrictedStage()) state.view = 'live';
   if (cloud.enabled && cloud.authFlow?.type === 'invalid') { app.innerHTML = authLinkErrorView(); return; }
   if (cloud.enabled && cloud.authFlow) { app.innerHTML = passwordView(); return; }
   if (cloud.enabled && !cloud.session()) { app.innerHTML = loginView(); return; }
@@ -816,6 +821,7 @@ function confirmChoice(title, description, ok) {
 }
 
 async function copyMobile(){
+  if(restrictedStage())return;
   if(!navigator.onLine){notice('Conecte-se para gerar ou revogar um link com segurança.');return;}
   let link=await cloud.linkStatus();
   function makeUrl(token,official=false){
@@ -862,6 +868,7 @@ async function copyMobile(){
 }
 
 async function openSettingsModal(){
+  if(restrictedStage())return;
   const user=cloud.session()?.email||'Conta desconectada';
   dialog.innerHTML='<section class="v12-settings-dialog"><div class="v12-settings-heading"><div><p class="eyebrow">STUDIO MARKS</p><h2>Configurações</h2></div>'+iconButton('close-settings','Fechar','x')+'</div>'+
     '<div class="v12-setting-user">'+icon('user')+'<span>'+escape(user)+'</span></div>'+
@@ -991,7 +998,7 @@ function updateMidiStatus(){
   const active=midi.settings.enabled&&midi.devices.length>0;
   app.querySelectorAll('[data-action="midi-setup"]').forEach(el=>el.setAttribute('aria-pressed',String(active)));
   const d=midi.diagnostics,el=dialog.querySelector('#midi-devices');
-  if(el)el.textContent=!d.supported?'Web MIDI indisponível neste navegador. No iPhone, experimente uma ponte Web MIDI; o pedal HID continua disponível.':d.connecting?'Solicitando autorização MIDI…':d.error?'Falha na conexão: '+d.error:!d.connected?'Clique em Conectar MIDI para autorizar.':d.ports.length?d.ports.map(p=>(p.name||p.manufacturer||p.id||'Entrada MIDI')+' ('+(p.error?'falha: '+p.error:p.connection==='open'?'aberta':p.connection==='pending'?'abrindo':'detectada')+')').join(' · '):'Autorizado, mas nenhuma entrada MIDI detectada. Confira USB/Bluetooth e tente Buscar dispositivos ou Reconectar.';
+  if(el)el.textContent=!d.supported?'Web MIDI indisponível neste navegador. No iPhone, experimente uma ponte Web MIDI; o pedal HID continua disponível.':d.connecting?'Solicitando autorização MIDI…':d.error?'Falha na conexão: '+d.error:!d.connected?'Clique em Conectar MIDI para autorizar.':d.ports.length?d.ports.map(p=>(p.name||p.manufacturer||p.id||'Entrada MIDI')+' ('+(p.error?'falha: '+p.error:p.connection==='open'?'aberta':p.connection==='pending'?'abrindo':'detectada')+')').join(' · '):'Acesso autorizado, mas o navegador não apresentou entradas MIDI. Confira o cabo USB de dados, o reconhecimento MIDI no sistema e tente Buscar dispositivos ou Reconectar.';
   const diag=dialog.querySelector('#midi-diagnostic');if(diag){let policy='não informada';try{const p=document.permissionsPolicy||document.featurePolicy;if(p?.allowsFeature&&(!p.features||p.features().includes('midi')))policy=p.allowsFeature('midi')?'permitida':'bloqueada';}catch{}diag.textContent='HTTPS/contexto seguro: '+(window.isSecureContext?'sim':'não')+' · Web MIDI: '+(d.supported?'disponível':'indisponível')+' · Permissão: '+({granted:'autorizada',denied:'negada',prompt:'a solicitar',unknown:'não informada'}[d.permission])+' · Política do site: '+policy+' · Entradas: '+d.ports.length;}
 
 }
@@ -1005,16 +1012,16 @@ function openMidiModal(){
   state.pedalLearn=null;midi.cancelLearn();
   dialog.innerHTML='<section class="v12-settings-dialog midi-dialog"><div class="v12-settings-heading"><div><p class="eyebrow">USB · BLUETOOTH MIDI · CORE MIDI VIA PONTE</p><h2>MIDI Learn Pro</h2></div>'+iconButton('midi-close','Fechar','x')+'</div>'+
     '<p class="subtle">Conecte o controlador e autorize o navegador. Teclas, pads, botões e controles CC podem acionar as funções. O pedal HID continua independente.</p>'+
-    '<div class="midi-connection"><label><input type="checkbox" id="midi-enabled" '+(midi.settings.enabled?'checked':'')+'> Ativar controle MIDI</label>'+button('midi-connect','Conectar MIDI','midi','primary')+'</div><div class="midi-recovery">'+button('midi-reconnect','Reconectar MIDI','refresh','')+button('midi-rescan','Buscar dispositivos','search','')+button('midi-diagnose','Diagnóstico','settings','')+'</div><p id="midi-diagnostic" class="midi-diagnostic" role="status"></p><p id="midi-devices" class="subtle" role="status"></p><p id="midi-monitor" class="midi-monitor" role="status">Monitor: aguardando sinal MIDI…</p><p id="midi-raw" class="subtle">Sinais recebidos: 0</p>'+
+    '<div class="midi-connection"><label><input type="checkbox" id="midi-enabled" '+(midi.settings.enabled?'checked':'')+'> Ativar controle MIDI</label>'+button('midi-connect','Conectar MIDI','midi','primary')+'</div><div class="midi-recovery">'+button('midi-reconnect','Reconectar MIDI','refresh','')+button('midi-rescan','Buscar dispositivos','search','')+button('midi-compatible','Conexão compatível','usb','')+button('midi-diagnose','Diagnóstico','settings','')+'</div><p id="midi-diagnostic" class="midi-diagnostic" role="status"></p><p id="midi-devices" class="subtle" role="status"></p><p id="midi-monitor" class="midi-monitor" role="status">Monitor: aguardando sinal MIDI…</p><p id="midi-raw" class="subtle">Sinais recebidos: 0</p>'+
     '<div class="midi-learn-panel"><label class="field"><span>Função a atribuir</span><select id="midi-command">'+midiOptions('start')+'</select></label><label class="field"><span>Comportamento CC</span><select id="midi-cc-mode"><option value="press">Botão / pad (valor ≥ 64)</option><option value="change">Knob / fader (a cada alteração)</option><option value="relative">Encoder relativo (cada mensagem)</option></select></label><label class="midi-any"><input type="checkbox" id="midi-any"> Aceitar esta mensagem de qualquer dispositivo</label>'+button('midi-learn','Aprender MIDI','midi','primary')+button('midi-cancel','Cancelar aprendizado','x','ghost')+'<p id="midi-learn-status" class="subtle" role="status"></p></div>'+
     '<h3>Atribuições salvas</h3><div id="midi-mappings" class="midi-mappings"></div><div class="v12-modal-actions">'+button('midi-clear','Limpar atribuições','trash','ghost')+button('midi-close','Concluir','check','primary')+'</div><p class="subtle">Salvamento local e, na conta administrativa, sincronização automática na nuvem. Incluído no backup. Para iniciar áudio, o navegador pode exigir primeiro um toque na tela. BPM continua ajustável somente com a reprodução parada.</p></section>';
   const status=dialog.querySelector('#midi-learn-status');
   dialog.querySelectorAll('[data-action="midi-close"]').forEach(el=>el.onclick=()=>{midi.cancelLearn();dialog.close();});
   dialog.querySelector('#midi-enabled').onchange=e=>{midi.settings.enabled=e.target.checked;persistMidi();if(!midi.settings.enabled)midi.cancelLearn();};
   let connectionAttempt=0;
-  const connect=async(e,force=false)=>{
+  const connect=async(e,force=false,compatible=false)=>{
     const el=e.currentTarget,attempt=++connectionAttempt;el.disabled=true;status.textContent='Solicitando acesso MIDI…';
-    try{if(midi.supported){try{player.context().resume().catch(()=>{});}catch{}}await (force?midi.reconnect():midi.connect());if(attempt!==connectionAttempt||!midi.access)return;
+    try{if(midi.supported){try{player.context().resume().catch(()=>{});}catch{}}await (compatible?midi.connectCompatible():force?midi.reconnect():midi.connect());if(attempt!==connectionAttempt||!midi.access)return;
       if(!midi.settings.enabled){midi.settings.enabled=true;persistMidi();}const checkbox=dialog.querySelector('#midi-enabled');if(checkbox)checkbox.checked=true;
       status.textContent=midi.devices.length?'Conexão MIDI autorizada. Pressione um controle para conferir o monitor.':'Acesso autorizado, mas sem entradas MIDI. Confira o cabo e tente Buscar dispositivos.';
       const raw=dialog.querySelector('#midi-raw');if(raw)raw.textContent='Sinais recebidos: '+midi.signalCount;
@@ -1022,7 +1029,8 @@ function openMidiModal(){
   };
   dialog.querySelector('[data-action="midi-connect"]').onclick=e=>connect(e);
   dialog.querySelector('[data-action="midi-reconnect"]').onclick=e=>connect(e,true);
-  dialog.querySelector('[data-action="midi-rescan"]').onclick=e=>{if(!midi.access){connect(e,true);return;}midi.rescan();status.textContent=midi.devices.length?'Busca concluída. Confira o monitor.':'Nenhuma entrada encontrada. Tente Reconectar MIDI.';};
+  dialog.querySelector('[data-action="midi-compatible"]').onclick=e=>connect(e,true,true);
+  dialog.querySelector('[data-action="midi-rescan"]').onclick=e=>{if(!midi.access||!midi.devices.length){connect(e,true);return;}midi.rescan();status.textContent=midi.devices.length?'Busca concluída. Confira o monitor.':'Nenhuma entrada encontrada. Tente Reconectar MIDI.';};
   dialog.querySelector('[data-action="midi-diagnose"]').onclick=()=>{midi.checkPermission();updateMidiStatus();};
   dialog.querySelector('[data-action="midi-learn"]').onclick=()=>{if(!midi.access||!midi.devices.length){status.textContent='Conecte e autorize uma entrada MIDI primeiro.';return;}const command=dialog.querySelector('#midi-command').value;const mode=dialog.querySelector('#midi-cc-mode').value;midi.learn(command,{mode,anyDevice:dialog.querySelector('#midi-any').checked});status.textContent='Pressione uma tecla, pad ou botão, ou mova um controle CC agora…';};
   dialog.querySelector('[data-action="midi-cancel"]').onclick=()=>{midi.cancelLearn();status.textContent='Aprendizado cancelado.';};
@@ -1054,14 +1062,15 @@ function setLiveBpm(value){
   state.bpm=next;player.cancelPreparation();currentGeneration++;state.preparation='Preparando áudio…';clearTimeout(prepTimer);updatePlayback(true);prepTimer=setTimeout(()=>prepareLive(),190);
 }
 async function reconnectMidi(){
-  if(!midi.settings.enabled||!midi.supported)return;
-  try{const permission=await navigator.permissions?.query({name:'midi',sysex:false});if(permission?.state==='granted')await midi.connect();}catch{/* manual connect is available for bridges and browsers without MIDI permissions API */}
+  if(!midi.settings.enabled||!midi.supported||midi.access||midi.pending||dialog.open)return;
+  try{const permission=await navigator.permissions?.query({name:'midi',sysex:false});if(permission?.state==='granted'&&!midi.access&&!midi.pending&&!dialog.open)await midi.connect();}catch{/* manual connect is available for bridges and browsers without MIDI permissions API */}
 }
 dialog.addEventListener('close',()=>{if(!dialog.open)midi.cancelLearn();});
 dialog.addEventListener('cancel',()=>midi.cancelLearn());
 
 // Central de Backup V3. O backup completo é independente da nuvem: inclui todos os WAVs.
 async function openBackupCenter() {
+  if(restrictedStage())return;
   await saveBeforeLeaving();
   stopPreview();
   if (!repo) return;
@@ -1559,7 +1568,7 @@ function replaceLocalSong(song) {
 function persistDraft(files = []) {
   clearTimeout(draftTimer);
   draftTimer = null;
-  if (!state.admin) return Promise.resolve();
+  if (restrictedStage() || !state.admin) return Promise.resolve();
   const current = repo;
   const snapshot = structuredClone(state.admin);
   writesPending++;
@@ -1606,7 +1615,7 @@ async function saveBeforeLeaving() {
 }
 
 async function changeView(view) {
-  if (musicianLink && view !== 'live') return; // Link do músico nunca mostra a Central de edição.
+  if (restrictedStage() && view !== 'live') return; // Link do músico nunca mostra a Central de edição.
   if (state.view === view) return;
   mixerOpen=false;hideMixer();
   stopPreview();
@@ -1635,11 +1644,39 @@ async function changeView(view) {
   requestSync();
 }
 
+const audioRoutes=new WeakMap();
+let outputPreference=savedOutput(localStorage);
+async function ensureAudioRoute(ctx,force=false){
+  if(!force&&audioRoutes.get(ctx)===outputPreference)return;
+  try{await routeOutput(ctx,outputPreference);audioRoutes.set(ctx,outputPreference);}
+  catch(error){if(!outputPreference)throw error;await routeOutput(ctx,'');audioRoutes.set(ctx,'');notice('Saída escolhida indisponível. Usando a saída padrão do sistema.');}
+}
+function openAudioModal(){
+  dialog.innerHTML='<section class="v12-settings-dialog"><div class="v12-settings-heading"><div><p class="eyebrow">ÁUDIO · SAÍDA LOCAL</p><h2>Configurações de áudio</h2></div>'+iconButton('audio-close','Fechar','x')+'</div><p class="subtle">Escolha a saída do computador, quando o navegador permitir. O teste usa um sinal baixo e independente do mixer.</p><label class="field"><span>Dispositivo de saída</span><select id="audio-output"><option value="">Padrão do sistema</option></select></label><div class="midi-recovery">'+button('audio-find','Buscar saídas','search','')+button('audio-authorize','Autorizar saída','headphones','')+button('audio-reconnect','Reconectar áudio','refresh','')+button('audio-restart','Reiniciar motor','refresh','')+button('audio-test','Testar áudio','volume','primary')+'</div><p id="audio-status" class="subtle" role="status"></p><p id="audio-mix-status" class="subtle"></p><p class="subtle">Se o teste não soar, confira o volume da aba, o mixer de volume do sistema e a saída física. O teste não confirma sozinho se o alto-falante está audível.</p></section>';
+  const root=dialog.querySelector('section'),select=root.querySelector('#audio-output'),status=root.querySelector('#audio-status');
+  let ctx=player.context();
+  const paint=(msg='')=>{status.textContent=(msg?msg+' · ':'')+'Motor: '+ctx.state+' · '+ctx.sampleRate+' Hz · WAVs preparados: '+player.buffers.size+' · '+(typeof ctx.setSinkId==='function'?'Seleção de saída disponível':'Saída controlada pelo sistema');const song=mixerSong();const warnings=mixerWarnings(song?profileFor(song):null,effectiveGain,MIX_IDS);root.querySelector('#audio-mix-status').textContent=warnings.length?'Mixer: '+warnings.join(' · '):'Mixer: nenhum bloqueio de Master/Loops identificado.';};
+  async function scan(){try{const rows=await audioOutputs(navigator.mediaDevices);select.replaceChildren(new Option('Padrão do sistema',''));rows.forEach((d,i)=>select.add(new Option(d.label||'Saída '+(i+1),d.deviceId)));if(outputPreference&&!rows.some(d=>d.deviceId===outputPreference))select.add(new Option('Saída salva (não listada)',outputPreference));select.value=outputPreference;select.disabled=typeof ctx.setSinkId!=='function';paint(rows.length?'Saídas encontradas: '+rows.length:'Nenhuma saída adicional listada.');}catch(e){paint(e.message);}}
+  async function run(fn){try{await fn();}catch(e){paint(e.message||'Falha de áudio');}}
+  select.onchange=()=>run(async()=>{const id=select.value;await routeOutput(ctx,id);outputPreference=id;audioRoutes.set(ctx,id);rememberOutput(localStorage,id);if(previewContext&&previewContext.state!=='closed')await ensureAudioRoute(previewContext,true);paint('Saída aplicada');});
+  root.querySelector('[data-action="audio-find"]').onclick=()=>scan();
+  const authorize=root.querySelector('[data-action="audio-authorize"]');authorize.hidden=typeof navigator.mediaDevices?.selectAudioOutput!=='function'||typeof ctx.setSinkId!=='function';authorize.onclick=()=>run(async()=>{const d=await navigator.mediaDevices.selectAudioOutput();await routeOutput(ctx,d.deviceId);outputPreference=d.deviceId;audioRoutes.set(ctx,outputPreference);rememberOutput(localStorage,outputPreference);await scan();paint('Saída autorizada');});
+  root.querySelector('[data-action="audio-reconnect"]').onclick=()=>run(async()=>{await resumeAudio(ctx);await ensureAudioRoute(ctx,true);if(player.mixProfile)player.updateMix(player.mixProfile);paint('Motor retomado; saída reavaliada');});
+  root.querySelector('[data-action="audio-restart"]').onclick=()=>run(async()=>{if(player.running||startPending||state.download){paint('Pare a reprodução e aguarde o preparo antes de reiniciar');return;}stopPreview();player.cancelPreparation();currentGeneration++;const old=ctx;player.ctx=null;ctx=player.context();const unlocking=resumeAudio(ctx);old.close?.().catch(()=>{});await unlocking;await ensureAudioRoute(ctx,true);if(state.view==='live'&&state.selected)await prepareLive();paint('Motor recriado; confira o teste de áudio');});
+  root.querySelector('[data-action="audio-test"]').onclick=()=>run(async()=>{await resumeAudio(ctx);await ensureAudioRoute(ctx);await testOutput(ctx);paint('Sinal de teste enviado');});
+  root.querySelector('[data-action="audio-close"]').onclick=()=>dialog.close();
+  dialog.showModal();paint();scan();
+}
+
 async function startPlayer() {
   if (startPending) return;
-  if (state.info.interrupted) { await player.context().resume(); return; }
+  if (state.info.interrupted) { await resumeAudio(player.context()); return; }
   startPending = true;
   try {
+    await resumeAudio(player.context());
+    await ensureAudioRoute(player.context());
+    player.updateMix(profileFor(state.selected));
+    const warnings=mixerWarnings(player.mixProfile,effectiveGain,MIX_IDS);if(warnings.length)notice(warnings.join(' · ')+' — confira o Mixer.');
     const starting = player.start();
     updatePlayback(true);
     await starting;
@@ -1821,6 +1858,7 @@ async function previewWav(part) {
   const ticket = ++previewToken;
   notice('Preparando prévia do WAV…');
   await resume;
+  await ensureAudioRoute(previewContext);
   let blob = await repo.audio(meta.path);
   if (!blob && navigator.onLine && cloud.session()) blob = await cloud.audio(meta.path);
   if (ticket !== previewToken) return;
@@ -1901,6 +1939,8 @@ async function mutateRepertoire(task){
 }
 async function handleAction(element) {
   const { action, id, part } = element.dataset;
+  if(restrictedStage()&&!allowedStageAction(action))return;
+  if(action==='audio-setup'){openAudioModal();return;}
   if(action==='mixer-open'){mixerOpen=!mixerOpen;if(mixerOpen)showMixer();else hideMixer();return;}
   if(action==='mixer-close'){mixerOpen=false;hideMixer();return;}
   if(action==='mixer-mute'){const id=element.dataset.channel;const song=mixerSong();if(song&&MIX_IDS.includes(id))setMixerValue(id,'muted',!profileFor(song)[id].muted);return;}
@@ -2292,7 +2332,7 @@ app.addEventListener('input', event => {
     updatePlayback(true);
     return;
   }
-  if (!state.admin || !input.validity.valid) return;
+  if (restrictedStage() || state.view!=='admin' || !state.admin || !input.validity.valid) return;
   if(input.dataset.sectionName){const entry=state.admin.customSections?.find(s=>s.id===input.dataset.sectionName);if(entry){entry.label=input.value.slice(0,52);delayedSave();}return;}
   if(input.dataset.passageReturn){const b=state.admin.customBreaks?.find(p=>p.id===input.dataset.passageReturn);const value=Number(input.value);if(b&&Number.isInteger(value)&&value>=1&&value<=64){b.returnBars=value;delayedSave();}return;}
   if(input.dataset.breakName){const b=state.admin.customBreaks?.find(p=>p.id===input.dataset.breakName);if(b&&input.value.trim()){b.label=input.value.trim().slice(0,52);delayedSave();}return;}
@@ -2345,6 +2385,7 @@ app.addEventListener('change', event => {
     if(player.running){el.value=String(state.liveCountBars);return;}
     updateLiveCount(state.liveCountEnabled,Number(el.value));updatePlayback(true);return;
   }
+  if(restrictedStage()||state.view!=='admin')return;
   if(el.dataset.passageReturn){const b=state.admin?.customBreaks?.find(p=>p.id===el.dataset.passageReturn);const n=Number(el.value);if(b&&Number.isInteger(n)&&n>=1&&n<=64){b.returnBars=n;persistDraft().catch(e=>notice(e.message));}else if(b)el.value=String(validReturnBars(b.returnBars));return;}
   if(el.dataset.passageTail){
     const b=state.admin?.customBreaks?.find(p=>p.id===el.dataset.passageTail);if(!b)return;
@@ -2389,7 +2430,7 @@ app.addEventListener('change', event => {
 
 app.addEventListener('submit', async event => {
   if(event.target.id==='create-folder-form'){
-    event.preventDefault();
+    event.preventDefault();if(restrictedStage()||state.view!=='admin')return;
     const form=new FormData(event.target);const name=String(form.get('name')||'').trim().slice(0,70);
     const kind=form.get('kind');if(!name||!['music','rhythm'].includes(kind))return;
     if(state.libraryData.folders.some(f=>f.kind===kind&&normalized(f.name)===normalized(name))) {notice('Esta pasta já existe.');return;}
@@ -2501,6 +2542,7 @@ setInterval(() => {
 
 async function boot() {
   await cloud.initialize();
+  if(restrictedStage())state.view='live';
   if (cloud.enabled && !cloud.session()) { render(); return; }
   repo = new Repository(cloud);
   preferences=cloud.enabled&&!cloud.musician?new PreferenceSync(localStorage,repo.owner):null;

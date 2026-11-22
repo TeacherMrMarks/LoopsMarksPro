@@ -1,3 +1,4 @@
+import { musicianRoute } from './access-mode.js';
 import { normalizeMix } from './mixer.js';
 export const PARTS = [
   { id: 'countIntro', label: 'Introdução 1 · Contagem de baquetas', icon: 'wave', type: 'uma vez', group: 'loops' },
@@ -239,13 +240,13 @@ export function describeIdentityError(error, action = 'login') {
 export class Cloud {
   enabled = true;
   constructor(){
-    this.musician = typeof location !== 'undefined' && new URLSearchParams(location.search).get('modo') === 'musico';
+    this.musician = typeof location !== 'undefined' && musicianRoute(location.search);
     const requested = this.musician ? new URLSearchParams(location.search).get('chave') : null;
     // Acesso de músico limitado a leitura; nenhum segredo do administrador é enviado ao player.
     this.musicianToken = requested && /^[a-f0-9-]{36}\.[a-f0-9]{64}$/i.test(requested) ? requested : null;
     if(this.musicianToken){
       try {localStorage.setItem('loops-v12-musician-token',this.musicianToken);} catch {}
-    } else if(this.musician){
+    } else if(this.musician&&requested===null){
       try {this.musicianToken=localStorage.getItem('loops-v12-musician-token')||null;}catch{}
     }
   }

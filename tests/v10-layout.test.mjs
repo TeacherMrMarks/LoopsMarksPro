@@ -9,7 +9,7 @@ test('V11 mantém palco independente, marca central e gaveta do repertório',()=
   assert.match(app,/brand\('stage-brand'\)/);
   assert.match(app,/id="live-drawer" role="dialog"/);
   assert.match(app,/function toggleLibrary\(open\)/);
-  assert.match(app,/if \(musicianLink && view !== 'live'\) return/);
+  assert.match(app,/if \(restrictedStage\(\) && view !== 'live'\) return/);
   assert.match(css,/\.stage-topbar \.stage-brand/);
 });
 test('V11 indicador mostra seção, crash, modo e fila de transição',()=>{
@@ -30,9 +30,9 @@ test('V12 central integra biblioteca ampla e configuração modal',()=>{
  assert.match(app,/Gerenciar link do músico/);
 });
 test('V11 preserva instalação PWA, Modo Live offline e nome da versão',()=>{
- assert.equal(manifest.start_url,'./?modo=musico');
+ assert.equal(manifest.start_url,'./?modo=ao-vivo');
  assert.equal(manifest.display,'standalone');
- assert.match(read('index.html'),/V32/);
+ assert.match(read('index.html'),/V33/);
  assert.match(read('sw.js'),/cache\.match/);
  assert.match(app,/await current\.download\(state\.songs\.find\(s=>s\.id===shown\.id\)\|\|shown/);
  assert.match(app,/await player\.prepare\(shown/);
