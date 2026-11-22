@@ -1,6 +1,15 @@
-# Loops Marks Pro — V31
+# Loops Marks Pro — V32
 
-Base: V30. Preservação dos identificadores WAV, dados e chaves anteriores de armazenamento.
+Base: V31. Preservação dos identificadores WAV, dados, mapeamentos MIDI/pedal e chaves anteriores de armazenamento.
+
+## Novidades V32 — Acabamento com crash automático final
+
+- Central > Finais > Acabamento: use um WAV de virada de um compasso, podendo incluir o bumbo no primeiro tempo seguinte. O arquivo toca integralmente. O crash automático é agendado nesse primeiro tempo seguinte, utilizando o prato da parte de origem e o volume de crash automático, pelo canal Pratos.
+- O ataque só é acrescentado se o crash automático estiver ligado, houver WAV preparado e o acabamento não indicar prato de ataque próprio. O seletor de identificação permite corrigir manualmente a inferência pelo nome do WAV. Não é necessário reimportar o áudio.
+- Condução e chimbais elegíveis permanecem até a queda final, respeitando a identificação do WAV. O player não inicia outro loop e mantém a reprodução até a cauda do prato final terminar; STOP encerra todas as fontes imediatamente. Cancelar um acabamento ainda não iniciado cancela o prato agendado.
+- O Final personalizado continua sendo um WAV único, sem crash automático adicional. Os atalhos existentes de Acabamento e Final permanecem iguais.
+- 208 testes locais aprovados: 200 anteriores e 8 novos, por simulação do motor de áudio e verificações de código. Build de produção e testes reais no Netlify/navegador ainda pendentes.
+
 
 ## Novidades V31 — Recuperação MIDI
 

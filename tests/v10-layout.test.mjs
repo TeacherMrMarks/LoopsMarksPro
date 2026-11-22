@@ -32,7 +32,7 @@ test('V12 central integra biblioteca ampla e configuração modal',()=>{
 test('V11 preserva instalação PWA, Modo Live offline e nome da versão',()=>{
  assert.equal(manifest.start_url,'./?modo=musico');
  assert.equal(manifest.display,'standalone');
- assert.match(read('index.html'),/V31/);
+ assert.match(read('index.html'),/V32/);
  assert.match(read('sw.js'),/cache\.match/);
  assert.match(app,/await current\.download\(state\.songs\.find\(s=>s\.id===shown\.id\)\|\|shown/);
  assert.match(app,/await player\.prepare\(shown/);

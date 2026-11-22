@@ -243,6 +243,22 @@ export class Player {
       if(key)this.attack(key,at,config.autoVolume,true);
     }
   }
+  // V32: Acabamento é uma virada de um compasso, com ataque na cabeça seguinte.
+  // O Final personalizado não recebe este ataque. O WAV de acabamento toca inteiro.
+  scheduleFinishCrash(segment) {
+    if(!this.autoCrashEnabled() || containsCymbal(this.song.parts?.finish,'crash'))return;
+    if(segment.finishLanding<=this.ctx.currentTime+EPS)return;
+    const key=automaticCrashFor(this.song,segment.finishOrigin,k=>this.buffers.has(k));
+    if(!key)return;
+    this.attack(key,segment.finishLanding,cymbalSettings(this.song).autoVolume,true);
+    this.refreshFinishEnd(segment);
+  }
+  refreshFinishEnd(segment) {
+    // O relógio do player permanece ativo até a última cauda, inclusive quando
+    // o WAV da virada acaba antes do ataque. STOP ainda cancela todas as fontes.
+    const ends=this.overlays.filter(e=>e.automatic&&Math.abs(e.at-segment.finishLanding)<EPS).map(e=>e.end);
+    segment.end=segment.naturalEnd=Math.max(segment.finishAudioEnd,...ends);
+  }
   toggleAutoCrash() {
     if(!this.ready||!ATTACK_IDS.slice(3).some(k=>this.buffers.has(k)))return false;
     this.autoCrashOverride=!this.autoCrashEnabled();
@@ -250,10 +266,21 @@ export class Player {
       const now=this.ctx.currentTime;
       if(!this.autoCrashOverride){for(const e of this.overlays.filter(e=>e.automatic&&e.at>now+EPS))this.discard(e);this.overlays=this.overlays.filter(e=>!e.automatic||e.at<=now+EPS);}
       else if(this.pending?.entry>now+LEAD)this.scheduleAutoCrash(this.pending.dest,this.pending.entry,this.pending.fill);
+      const ending=this.segments.find(s=>s.key==='finish'&&s.finishLanding>now+EPS);
+      if(ending){if(this.autoCrashOverride)this.scheduleFinishCrash(ending);else this.refreshFinishEnd(ending);this.syncRide();}
     }
     this.onState?.();return true;
   }
-  scheduleDestination(dest,at,fillKey=null,attackOnEntry=Boolean(fillKey)) {
+  scheduleDestination(dest,at,fillKey=null,attackOnEntry=Boolean(fillKey),from=null) {
+    if(dest==='finish'){
+      const origin=from||this.fromKey();
+      const ending=this.segment(dest,at);
+      ending.finishOrigin=origin;
+      ending.finishAudioEnd=ending.naturalEnd;
+      ending.finishLanding=at+this.bar;
+      if(attackOnEntry)this.scheduleFinishCrash(ending);
+      return ending;
+    }
     if(attackOnEntry)this.scheduleAutoCrash(dest,at,fillKey);
     if (ENDINGS.has(dest)) return this.segment(dest, at);
     const attack = this.entryFor(dest);
@@ -444,7 +471,7 @@ export class Player {
     if (fill) this.segment(fill, changeAt, {
       offsetBeats: plan.offsetBeats, lengthBeats: plan.fillBeats,
     });
-    this.scheduleDestination(dest, entry,fill,true);
+    this.scheduleDestination(dest, entry,fill,true,from);
     this.syncRide();
     this.pending = { from, dest, fill, family, manual: Boolean(chosenManual), changeAt, entry,
       fillBeats: plan?.fillBeats || 0, offsetBeats: plan?.offsetBeats || 0 };
@@ -521,11 +548,12 @@ export class Player {
     const eligible=(key,s)=>{
       const kind=key==='rideLoop'?'conduction':key==='hatOpenLoop'?'hatOpen':'hatClosed';
       // Fills retain the source section's orchestration until the landing.
-      const fill=this.isFill(s.key);
-      const base=fill?s.originPart:this.baseFor(s.key);
+      const fill=this.isFill(s.key), finishing=s.key==='finish'&&s.finishLanding!==undefined;
+      const base=finishing?s.finishOrigin:fill?s.originPart:this.baseFor(s.key);
       if(!layerPartEligible(key,base))return false;
-      return !containsCymbal(this.song.parts?.[s.key],kind) && (!fill||!containsCymbal(this.song.parts?.[s.originKey],kind));
+      return !containsCymbal(this.song.parts?.[s.key],kind) && (!(fill||finishing)||!containsCymbal(this.song.parts?.[s.originKey],kind));
     };
+    const layerEnd=s=>s.finishLanding===undefined?s.end:Math.min(s.end,s.finishLanding);
     const update=(l,end)=>{
       l.end=end;l.gate.gain.cancelScheduledValues(now);
       l.gate.gain.setValueAtTime(layerVolume(this.song,l.key),Math.max(now,l.at));
@@ -536,7 +564,7 @@ export class Player {
       if(!this.segments.includes(l.segment)||(!enabled&&l.at>=from)||!eligible(l.key,l.segment)){
         this.discard(l);this.rideLayers=this.rideLayers.filter(x=>x!==l);continue;
       }
-      const end=enabled?l.segment.end:Math.min(l.segment.end,from);
+      const end=enabled?layerEnd(l.segment):Math.min(layerEnd(l.segment),from);
       if(end<=l.at||end<=now){this.discard(l);this.rideLayers=this.rideLayers.filter(x=>x!==l);}else update(l,end);
     }
     for(const key of LAYER_IDS){
@@ -544,10 +572,11 @@ export class Player {
       for(const s of this.segments){
         if(!eligible(key,s)||this.rideLayers.some(l=>l.key===key&&l.segment===s))continue;
         const at=Math.max(s.at,this.layerFrom(key),s.at<now+EPS?nextBoundary(this.epoch,this.bar,now):s.at);
-        if(at>=s.end-EPS)continue;
+        const end=layerEnd(s);
+        if(at>=end-EPS)continue;
         const data=this.buffers.get(key), source=this.ctx.createBufferSource(),gate=this.ctx.createGain();
         source.buffer=data.buffer;source.loop=true;source.loopEnd=data.seconds;source.connect(gate).connect(this.bus('cymbals'));
-        const l={key,segment:s,source,gate,at,end:s.end};update(l,s.end);
+        const l={key,segment:s,source,gate,at,end};update(l,end);
         // Keep the same metric phase through a fill, including a fractional start.
         const prior=this.rideLayers.findLast(p=>p.key===key&&Math.abs(p.end-at)<EPS);
         const phase=prior?((prior.phase+at-prior.at)%data.seconds+data.seconds)%data.seconds:((at-this.epoch)%this.bar+this.bar)%this.bar;

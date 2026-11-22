@@ -10,7 +10,7 @@ import { emptyLibrary, cleanLibrary, songKind, inFolder, repertoireEntries, repe
 import { PreferenceSync, PEDAL_KEY } from './preferences.js';
 import { MIDI_KEY, MidiController, loadMidiSettings, saveMidiSettings } from './midi.js';
 
-const APP_VERSION = 'V31';
+const APP_VERSION = 'V32';
 // O link do músico carrega exclusivamente o Modo Palco Pro.
 const musicianLink = new URL(location.href).searchParams.get('modo') === 'musico';
 const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
@@ -572,7 +572,7 @@ function editor() {
     '</div>' + button('add-custom', 'Adicionar virada específica', 'plus', 'ghost') + '</details>' +
     editorSection(song, 'crashstops', 'Crashes adicionais', 'Crash 1, 2 e 3: WAVs de ataque que tocam JUNTOS do loop no próximo tempo 1, sem interromper a bateria. Para encerrar, use Acabamento ou Final. Se quiser prato em outro pulso, prepare o deslocamento dentro do WAV, começando o arquivo no tempo 1.') +
     cymbalEditor(song) + breakEditor(song,'counter') + breakEditor(song,'passage') +
-    editorSection(song, 'finais', 'Acabamento e final', 'Arquivos de encerramento de execução única, inclusive cauda do prato.') +
+    editorSection(song, 'finais', 'Acabamento e final', 'Acabamento: WAV de uma virada (1 compasso), com crash automático no tempo 1 seguinte e cauda natural. Final: WAV personalizado, sem acrescentar crash automático.') +
     customSectionsEditor(song) +
     customEntryEditor(song) +
     transitionEditor(song) +
@@ -590,8 +590,9 @@ function breakEditor(song,group){
   return '<details class="editor-group" open><summary><span>'+icon('wave')+'<strong>'+(group==='counter'?'Contratempos':'Passagens')+'</strong></span><small>'+items.length+' cadastrados</small></summary><p class="group-hint">Importe WAV de 1, 2 ou mais compassos. A duração é reconhecida na importação. O trecho toca uma vez no tempo 1, com retorno à parte musical.</p><div class="custom-list">'+items.map(p=>'<div class="custom-fill-item"><label class="field"><span>Nome</span><input maxlength="52" data-break-name="'+escape(p.id)+'" value="'+escape(p.label)+'"></label>'+fileRow(p,song.parts?.[p.id],song)+(group==='passage'?passageTailEditor(p,song):'')+button('remove-break','Excluir '+title.toLowerCase(),'trash','ghost danger','data-part="'+escape(p.id)+'"')+'</div>').join('')+'</div>'+button('add-break','Adicionar '+title.toLowerCase(),'plus','ghost','data-part="'+group+'"')+'</details>';
 }
 function cymbalOverrides(part,audio){
-  if(!audio||ATTACK_IDS.includes(part.id)||[...LAYER_IDS,'finish','outro','countIntro'].includes(part.id))return '';
+  if(!audio||ATTACK_IDS.includes(part.id)||[...LAYER_IDS,'outro','countIntro'].includes(part.id))return '';
   const options=(key)=>[['auto','Pelo nome do WAV'],['yes','Já contém'],['no','Não contém']].map(([value,label])=>'<option value="'+value+'" '+((audio[key]||'auto')===value?'selected':'')+'>'+label+'</option>').join('');
+  if(part.id==='finish')return '<div class="cymbal-overrides"><label>Acabamento já contém prato de ataque <select data-wav-cymbal="hasCrash" data-part="finish">'+options('hasCrash')+'</select></label></div>';
   return '<div class="cymbal-overrides"><label>Prato de ataque <select data-wav-cymbal="hasCrash" data-part="'+escape(part.id)+'">'+options('hasCrash')+'</select></label><label>Condução <select data-wav-cymbal="hasConduction" data-part="'+escape(part.id)+'">'+options('hasConduction')+'</select></label><label>Chimbal aberto <select data-wav-cymbal="hasHatOpen" data-part="'+escape(part.id)+'">'+options('hasHatOpen')+'</select></label><label>Chimbal fechado <select data-wav-cymbal="hasHatClosed" data-part="'+escape(part.id)+'">'+options('hasHatClosed')+'</select></label></div>';
 }
 function passageTailEditor(p,song){
@@ -1425,7 +1426,7 @@ function updatePlayback(force = false) {
       (player.ready ? player.label(playing.armed || player.initialPart || 'a') : 'Aguardando');
     const mode = !playing.running ? (player.ready ? (playing.armed?'Parte selecionada · Pronto para iniciar':'Pronto para iniciar') : 'Preparando áudio') :
       extraBreaks(state.selected).some(p=>p.id===playing.active)?'Trecho em execução · retorno automático':isFill ? 'Virada em execução' : playing.entryAttack ? 'Entrada com crash' :
-      playing.active === 'countIntro' ? 'Contagem de baquetas' : playing.active === 'intro' ? 'Introdução musical' : 'Loop contínuo';
+      playing.active === 'finish' ? 'Acabamento · crash final e cauda' : playing.active === 'outro' ? 'Final personalizado' : playing.active === 'countIntro' ? 'Contagem de baquetas' : playing.active === 'intro' ? 'Introdução musical' : 'Loop contínuo';
     const next = playing.next ? 'PRÓXIMO · ' + player.label(playing.next) : (playing.sequenceTotal ? 'MAPA · '+(playing.sequenceIndex+1)+'/'+playing.sequenceTotal : '');
     const mapStatus=get('#live-map-status');if(mapStatus&&playing.sequenceTotal)mapStatus.textContent='Mapa '+(playing.sequenceAuto?'automático':'assistido')+' · '+(playing.sequenceIndex+1)+'/'+playing.sequenceTotal;
     if (get('#stage-active').textContent !== name) get('#stage-active').textContent = name;
