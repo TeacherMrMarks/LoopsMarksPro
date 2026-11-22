@@ -1,4 +1,4 @@
-Loops Marks Pro V30
+Loops Marks Pro V31
 Base: V29 preservada.
 Passagens: cauda sonora independente do retorno musical; WAV inteiro sem cortar no retorno, configuração de 1 a 64 compassos, armazenamento e backup.
 Validação: 192/192 testes locais. Build Netlify e testes reais pendentes.

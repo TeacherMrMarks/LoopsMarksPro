@@ -10,7 +10,7 @@ import { emptyLibrary, cleanLibrary, songKind, inFolder, repertoireEntries, repe
 import { PreferenceSync, PEDAL_KEY } from './preferences.js';
 import { MIDI_KEY, MidiController, loadMidiSettings, saveMidiSettings } from './midi.js';
 
-const APP_VERSION = 'V30';
+const APP_VERSION = 'V31';
 // O link do músico carrega exclusivamente o Modo Palco Pro.
 const musicianLink = new URL(location.href).searchParams.get('modo') === 'musico';
 const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
@@ -967,11 +967,11 @@ function receivePedal(code){
   const live=get('#pedal-status-live');if(live)live.textContent='Pedal: '+label;
 }
 
-// MIDI Learn Pro V22 — local to the browser, with no dependency on the cloud.
+// MIDI Learn Pro V31 — connection diagnostics independent of synced mappings.
 const midi = new MidiController({navigator,settings:loadMidiSettings(localStorage),
-  onChange:updateMidiStatus,onSignal:(message,device)=>{
+  onChange:updateMidiStatus,onRawSignal:(bytes,device,count)=>{const el=dialog.querySelector('#midi-raw');if(el&&count%8===1)el.textContent='Sinais recebidos: '+count+' · '+(device.name||'MIDI')+' · '+Array.from(bytes||[]).slice(0,8).map(v=>v.toString(16).padStart(2,'0').toUpperCase()).join(' ');},onSignal:(message,device)=>{
     if(midi.learning&&(!dialog.open||!dialog.querySelector('.midi-dialog')))midi.cancelLearn();
-    const el=dialog.querySelector('#midi-monitor');if(el)el.textContent=(device.name||'MIDI')+' · '+midiSignalLabel(message)+' · valor '+message.value;
+    const raw=dialog.querySelector('#midi-raw');if(raw)raw.textContent='Sinais recebidos: '+midi.signalCount;const el=dialog.querySelector('#midi-monitor');if(el)el.textContent=(device.name||'MIDI')+' · '+midiSignalLabel(message)+' · valor '+message.value;
   },onLearn:()=>{persistMidi();paintMidiMappings();const el=dialog.querySelector('#midi-learn-status');if(el)el.textContent='Comando aprendido. Você pode ensinar outro.';},
   onCommand:receiveMidiCommand});
 function midiIcon(){return iconButton('midi-setup','Configurar MIDI Learn Pro','midi','aria-pressed="'+(midi.settings.enabled&&midi.devices.length>0)+'"');}
@@ -989,7 +989,10 @@ function persistMidi(){try{saveMidiSettings(localStorage,midi.settings);savePref
 function updateMidiStatus(){
   const active=midi.settings.enabled&&midi.devices.length>0;
   app.querySelectorAll('[data-action="midi-setup"]').forEach(el=>el.setAttribute('aria-pressed',String(active)));
-  const el=dialog.querySelector('#midi-devices');if(el)el.textContent=!midi.supported?'Web MIDI indisponível neste navegador. No iPhone, experimente uma ponte Web MIDI; o pedal HID continua disponível.':!midi.access?'Aguardando autorização. Clique em Conectar MIDI.':midi.devices.length?midi.devices.map(p=>p.name||p.manufacturer||p.id||'Entrada MIDI').join(' · '):'Nenhuma entrada MIDI detectada. Verifique a conexão USB/Bluetooth.';
+  const d=midi.diagnostics,el=dialog.querySelector('#midi-devices');
+  if(el)el.textContent=!d.supported?'Web MIDI indisponível neste navegador. No iPhone, experimente uma ponte Web MIDI; o pedal HID continua disponível.':d.connecting?'Solicitando autorização MIDI…':d.error?'Falha na conexão: '+d.error:!d.connected?'Clique em Conectar MIDI para autorizar.':d.ports.length?d.ports.map(p=>(p.name||p.manufacturer||p.id||'Entrada MIDI')+' ('+(p.error?'falha: '+p.error:p.connection==='open'?'aberta':p.connection==='pending'?'abrindo':'detectada')+')').join(' · '):'Autorizado, mas nenhuma entrada MIDI detectada. Confira USB/Bluetooth e tente Buscar dispositivos ou Reconectar.';
+  const diag=dialog.querySelector('#midi-diagnostic');if(diag){let policy='não informada';try{const p=document.permissionsPolicy||document.featurePolicy;if(p?.allowsFeature&&(!p.features||p.features().includes('midi')))policy=p.allowsFeature('midi')?'permitida':'bloqueada';}catch{}diag.textContent='HTTPS/contexto seguro: '+(window.isSecureContext?'sim':'não')+' · Web MIDI: '+(d.supported?'disponível':'indisponível')+' · Permissão: '+({granted:'autorizada',denied:'negada',prompt:'a solicitar',unknown:'não informada'}[d.permission])+' · Política do site: '+policy+' · Entradas: '+d.ports.length;}
+
 }
 function paintMidiMappings(){
   const list=dialog.querySelector('#midi-mappings');if(!list)return;
@@ -1001,23 +1004,31 @@ function openMidiModal(){
   state.pedalLearn=null;midi.cancelLearn();
   dialog.innerHTML='<section class="v12-settings-dialog midi-dialog"><div class="v12-settings-heading"><div><p class="eyebrow">USB · BLUETOOTH MIDI · CORE MIDI VIA PONTE</p><h2>MIDI Learn Pro</h2></div>'+iconButton('midi-close','Fechar','x')+'</div>'+
     '<p class="subtle">Conecte o controlador e autorize o navegador. Teclas, pads, botões e controles CC podem acionar as funções. O pedal HID continua independente.</p>'+
-    '<div class="midi-connection"><label><input type="checkbox" id="midi-enabled" '+(midi.settings.enabled?'checked':'')+'> Ativar controle MIDI</label>'+button('midi-connect','Conectar MIDI','midi','primary')+'</div><p id="midi-devices" class="subtle" role="status"></p><p id="midi-monitor" class="midi-monitor" role="status">Monitor: aguardando sinal MIDI…</p>'+
+    '<div class="midi-connection"><label><input type="checkbox" id="midi-enabled" '+(midi.settings.enabled?'checked':'')+'> Ativar controle MIDI</label>'+button('midi-connect','Conectar MIDI','midi','primary')+'</div><div class="midi-recovery">'+button('midi-reconnect','Reconectar MIDI','refresh','')+button('midi-rescan','Buscar dispositivos','search','')+button('midi-diagnose','Diagnóstico','settings','')+'</div><p id="midi-diagnostic" class="midi-diagnostic" role="status"></p><p id="midi-devices" class="subtle" role="status"></p><p id="midi-monitor" class="midi-monitor" role="status">Monitor: aguardando sinal MIDI…</p><p id="midi-raw" class="subtle">Sinais recebidos: 0</p>'+
     '<div class="midi-learn-panel"><label class="field"><span>Função a atribuir</span><select id="midi-command">'+midiOptions('start')+'</select></label><label class="field"><span>Comportamento CC</span><select id="midi-cc-mode"><option value="press">Botão / pad (valor ≥ 64)</option><option value="change">Knob / fader (a cada alteração)</option><option value="relative">Encoder relativo (cada mensagem)</option></select></label><label class="midi-any"><input type="checkbox" id="midi-any"> Aceitar esta mensagem de qualquer dispositivo</label>'+button('midi-learn','Aprender MIDI','midi','primary')+button('midi-cancel','Cancelar aprendizado','x','ghost')+'<p id="midi-learn-status" class="subtle" role="status"></p></div>'+
     '<h3>Atribuições salvas</h3><div id="midi-mappings" class="midi-mappings"></div><div class="v12-modal-actions">'+button('midi-clear','Limpar atribuições','trash','ghost')+button('midi-close','Concluir','check','primary')+'</div><p class="subtle">Salvamento local e, na conta administrativa, sincronização automática na nuvem. Incluído no backup. Para iniciar áudio, o navegador pode exigir primeiro um toque na tela. BPM continua ajustável somente com a reprodução parada.</p></section>';
   const status=dialog.querySelector('#midi-learn-status');
   dialog.querySelectorAll('[data-action="midi-close"]').forEach(el=>el.onclick=()=>{midi.cancelLearn();dialog.close();});
   dialog.querySelector('#midi-enabled').onchange=e=>{midi.settings.enabled=e.target.checked;persistMidi();if(!midi.settings.enabled)midi.cancelLearn();};
-  dialog.querySelector('[data-action="midi-connect"]').onclick=async e=>{
-    const el=e.currentTarget;el.disabled=true;status.textContent='Solicitando acesso MIDI…';
-    try{if(midi.supported){try{player.context().resume().catch(()=>{});}catch{}}await midi.connect();midi.settings.enabled=true;const checkbox=dialog.querySelector('#midi-enabled');if(checkbox)checkbox.checked=true;persistMidi();status.textContent='Conexão MIDI autorizada. Pressione um controle para conferir o monitor.';}
-    catch(error){status.textContent=error.message||'Acesso MIDI negado ou indisponível.';}finally{el.disabled=false;}
+  let connectionAttempt=0;
+  const connect=async(e,force=false)=>{
+    const el=e.currentTarget,attempt=++connectionAttempt;el.disabled=true;status.textContent='Solicitando acesso MIDI…';
+    try{if(midi.supported){try{player.context().resume().catch(()=>{});}catch{}}await (force?midi.reconnect():midi.connect());if(attempt!==connectionAttempt||!midi.access)return;
+      if(!midi.settings.enabled){midi.settings.enabled=true;persistMidi();}const checkbox=dialog.querySelector('#midi-enabled');if(checkbox)checkbox.checked=true;
+      status.textContent=midi.devices.length?'Conexão MIDI autorizada. Pressione um controle para conferir o monitor.':'Acesso autorizado, mas sem entradas MIDI. Confira o cabo e tente Buscar dispositivos.';
+      const raw=dialog.querySelector('#midi-raw');if(raw)raw.textContent='Sinais recebidos: '+midi.signalCount;
+    }catch(error){if(attempt===connectionAttempt)status.textContent=error.message||'Acesso MIDI negado ou indisponível.';}finally{el.disabled=false;updateMidiStatus();}
   };
+  dialog.querySelector('[data-action="midi-connect"]').onclick=e=>connect(e);
+  dialog.querySelector('[data-action="midi-reconnect"]').onclick=e=>connect(e,true);
+  dialog.querySelector('[data-action="midi-rescan"]').onclick=e=>{if(!midi.access){connect(e,true);return;}midi.rescan();status.textContent=midi.devices.length?'Busca concluída. Confira o monitor.':'Nenhuma entrada encontrada. Tente Reconectar MIDI.';};
+  dialog.querySelector('[data-action="midi-diagnose"]').onclick=()=>{midi.checkPermission();updateMidiStatus();};
   dialog.querySelector('[data-action="midi-learn"]').onclick=()=>{if(!midi.access||!midi.devices.length){status.textContent='Conecte e autorize uma entrada MIDI primeiro.';return;}const command=dialog.querySelector('#midi-command').value;const mode=dialog.querySelector('#midi-cc-mode').value;midi.learn(command,{mode,anyDevice:dialog.querySelector('#midi-any').checked});status.textContent='Pressione uma tecla, pad ou botão, ou mova um controle CC agora…';};
   dialog.querySelector('[data-action="midi-cancel"]').onclick=()=>{midi.cancelLearn();status.textContent='Aprendizado cancelado.';};
   dialog.querySelector('[data-action="midi-clear"]').onclick=()=>{if(!window.confirm('Apagar todas as atribuições MIDI deste navegador? O pedal não será alterado.'))return;midi.cancelLearn();midi.settings.mappings=[];persistMidi();paintMidiMappings();};
   // Unlock Web Audio on this real click, not on a MIDI event (which some browsers do not count as a gesture).
   if(midi.supported){try{player.context().resume().catch(()=>{});}catch{}}
-  paintMidiMappings();updateMidiStatus();dialog.showModal();
+  paintMidiMappings();updateMidiStatus();dialog.showModal();midi.checkPermission();
 }
 function receiveMidiCommand(command,value){
   if(!repo||dialog.open||document.querySelector('#part-rename-dialog[open]')||(cloud.enabled&&!cloud.session())||document.visibilityState==='hidden')return;

@@ -1,4 +1,4 @@
-const VERSION = 'loops-marks-v30-audio-tail-20261122';
+const VERSION = 'loops-marks-v31-midi-recovery-20261122';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './netlify-client.js', './backup.js', './data.js', './library-model.js',
   './preferences.js', './midi.js', './mixer.js', './audio.js', './meter.js', './stretch.js', './demo.js', './importer.js', './manifest.webmanifest',

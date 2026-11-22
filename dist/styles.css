@@ -1122,3 +1122,6 @@ body.drawer-visible {overflow:hidden}
 
 /* V30: independent passage return and free audio tail */
 .passage-tail-settings{display:grid;gap:.55rem;padding:.65rem;margin:.55rem 0;border:1px solid rgba(127,190,180,.28);border-radius:8px}.passage-tail-settings .field{min-width:0}.passage-tail-settings select{max-width:100%;width:100%}.passage-tail-settings p{margin:0}
+
+/* V31 MIDI recovery */
+.midi-recovery{display:flex;gap:6px;flex-wrap:wrap}.midi-recovery button{flex:1 1 130px;font-size:.78rem}.midi-diagnostic{font-size:.75rem;line-height:1.5;overflow-wrap:anywhere;color:#d6eaf3;background:#102535;border:1px solid #33546b;padding:8px;border-radius:8px}

@@ -1,6 +1,16 @@
-# Loops Marks Pro — V30
+# Loops Marks Pro — V31
 
-Base: V29. Preservação dos identificadores WAV, dados e chaves anteriores de armazenamento.
+Base: V30. Preservação dos identificadores WAV, dados e chaves anteriores de armazenamento.
+
+## Novidades V31 — Recuperação MIDI
+
+- Central e Palco: Conectar, Reconectar (nova solicitação de acesso), Buscar dispositivos, diagnóstico de permissão/HTTPS/política do navegador, estado das portas e monitor de sinais. A conexão explicita a abertura das entradas e recupera dispositivos reconectados. Sem exigir SysEx.
+- A reconexão não apaga atribuições nem altera os WAVs, pedal, motor de áudio, backup ou sincronização da V30. Permissões do navegador continuam dependentes do endereço e hardware. Diagnóstico não pode listar interfaces que o sistema não expõe como MIDI.
+- Teste no Chrome com o controlador real, aguarde a permissão, confira as entradas e pressione um pad. Se não houver entrada, confira cabo de dados e reconhecimento pelo sistema. iPhone depende de ponte compatível.
+
+## Validação V31
+
+- 200 testes locais aprovados (192 anteriores e oito novos). Verificação de sintaxe concluída. Build de produção bloqueado por dependência esbuild ausente; teste com controlador físico e deploy Netlify ainda pendentes.
 
 ## Novidades V30 — Cauda sonora inteligente nas passagens
 

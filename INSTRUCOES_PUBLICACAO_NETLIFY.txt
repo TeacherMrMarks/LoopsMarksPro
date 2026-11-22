@@ -1,9 +1,9 @@
-Loops Marks Pro V30 — Cauda sonora inteligente
+Loops Marks Pro V31 — Recuperação MIDI
 
 1. Faça backup completo na versão atual e guarde o ZIP V29 original.
-2. Extraia a V30 na raiz do MESMO repositório GitHub conectado ao MESMO site Netlify. Não apague dados, Blobs ou usuários.
+2. Extraia a V31 na raiz do MESMO repositório GitHub conectado ao MESMO site Netlify. Não apague dados, Blobs ou usuários.
 3. Mantenha build: npm run build; publish: dist; functions: netlify/functions; Node 22.
-4. Confira a compilação do Netlify e abra o Permalink HTTPS. Confirme V30 no cabeçalho. Não publique dist isolado.
+4. Confira a compilação do Netlify e abra o Permalink HTTPS. Confirme V31 no cabeçalho. Não publique dist isolado.
 5. Abra o mixer na Central e no Palco. Teste os oito faders, MUTE e SOLO enquanto o loop toca. O fader Pratos controla todos os WAVs separados de pratos. Confira a tela cheia, a seleção das partes, a gravação das mixagens e o fader MIDI CC. Após parar, sincronize e confira o perfil no outro aparelho.
 6. Crie um ritmo de teste com A, B e Refrão, viradas sem prato, três pratos automáticos e WAV de condução. A → prato 1; B → prato 2; Refrão → prato 3. Teste as transições e se o crash ocorre apenas no tempo 1 após a virada.
 7. Use um WAV com “prato” ou “crash” no nome; confira se o ataque automático não duplica o prato. Teste também “sem prato” e a correção manual do metadado.
@@ -24,3 +24,5 @@ Teste V28: importe WAVs de condução, chimbal aberto e fechado na aba Crash; aj
 V29: antes de atualizar, exporte backup completo da V28 e, se o mapeamento estiver no Permalink V27, exporte Configurações pelo V27. Na V29 importe somente MIDI e pedal em Backup e restauração, aguarde Sincronizado e confirme em outro Permalink da V29 do mesmo site/conta. Não apague ou reconfigure o storage existente. Links de músico continuam somente leitura.
 
 V30: Central > Passagens > Preservar cauda sonora > Ligado > Retorno da bateria após 1 compasso. Use um WAV de carrilhão + bumbo de 3 compassos (ou duração livre). Confira no Palco o retorno em 1 compasso, cauda contínua e STOP; teste outra parte/virada durante a cauda, backup e sincronização. Para um WAV de duração livre, ligue a opção antes da importação. Os cadastros antigos mantêm a opção desligada. Testes locais: 192/192; build e testes reais pendentes.
+
+V31: no Palco ou Central, abra MIDI Learn, clique Conectar MIDI, autorize e confira o monitor. Use Reconectar ou Buscar dispositivos se necessário, sem apagar mapeamentos. Diagnóstico mostra a permissão e as entradas que o navegador expõe.
