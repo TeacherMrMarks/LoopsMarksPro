@@ -1,14 +1,15 @@
 import { normalizeMix, readLocalMix, writeLocalMix } from './mixer.js';
-import { loadMidiSettings, saveMidiSettings } from './midi.js';
+import {cleanPreference,PEDAL_KEY} from './preferences.js';
+import { MIDI_KEY, loadMidiSettings, saveMidiSettings } from './midi.js';
 import { zipSync, unzipSync, strToU8, strFromU8 } from './netlify-client.js';
-import { MAX_FILE_BYTES, extraBreaks, cymbalSettings, audioEntries, cleanPartLabels } from './data.js';
+import { MAX_FILE_BYTES, cleanBreaks, cymbalSettings, audioEntries, cleanPartLabels } from './data.js';
 import { cleanLibrary, cleanRepertoireItem, entryId, entryKey } from './library-model.js';
 import { validMeter, meterOf } from './meter.js';
 const LIMIT = 420 * 1024 * 1024;
 function slim(song) {
   return { originalId:song.id, kind:song.kind||'music', folderId:song.folderId||'', name: song.name || '', occasion: song.occasion || '', bpm: song.bpm,
     beats: song.beats, meter: meterOf(song), beatUnit:song.beatUnit, parts: structuredClone(song.parts||{}),
-    transitions: structuredClone(song.transitions||{}), customBreaks:structuredClone(extraBreaks(song).map(({id,label})=>({id,label}))), cymbals:cymbalSettings(song), ...(song.mixer?{mixer:normalizeMix(song.mixer,song)}:{}), customFills: structuredClone(song.customFills||[]),
+    transitions: structuredClone(song.transitions||{}), customBreaks:structuredClone(cleanBreaks(song)), cymbals:cymbalSettings(song), ...(song.mixer?{mixer:normalizeMix(song.mixer,song)}:{}), customFills: structuredClone(song.customFills||[]),
     fillMode: song.fillMode || 'smart', repeatMode: song.repeatMode || 'fill', introMode:song.introMode==='repeat'?'repeat':'once', countIntroEnabled:song.countIntroEnabled!==false, customSections:structuredClone(song.customSections||[]), partLabels:cleanPartLabels(song.partLabels), sequence:structuredClone(song.sequence||[]), sequenceMode:song.sequenceMode||'assisted' };
 }
 export async function makeBackup(repo, mode = 'completo', progress = () => {}) {
@@ -42,7 +43,7 @@ export async function makeBackup(repo, mode = 'completo', progress = () => {}) {
   const zipped=zipSync(items,{level:0});
   return new Blob([zipped],{type:'application/zip'});
 }
-export async function restoreBackup(repo, file, progress = () => {}) {
+export async function restoreBackup(repo, file, progress = () => {}, onPreference=()=>{}) {
   if (!file || file.size > LIMIT) throw new Error('O arquivo ZIP supera o limite de segurança de 420 MB.');
   const input=new Uint8Array(await file.arrayBuffer());
   const entries=unzipSync(input);
@@ -70,7 +71,7 @@ export async function restoreBackup(repo, file, progress = () => {}) {
        !song.parts || typeof song.parts!=='object') throw new Error('Dados inválidos no backup.');
     const id=crypto.randomUUID();if(song.originalId)idMap.set(song.originalId,id);
     const restored={id,kind:song.kind==='rhythm'?'rhythm':'music',folderId:folderMap.get(song.folderId)||'',name:song.name,occasion:String(song.occasion||'').slice(0,55),bpm:song.bpm,
-      beats:song.beats,meter:meterOf(song),beatUnit:song.beatUnit,parts:{},transitions:song.transitions||{},customFills:song.customFills||[],customBreaks:extraBreaks(song).map(({id,label})=>({id,label})),cymbals:cymbalSettings(song), ...(song.mixer?{mixer:normalizeMix(song.mixer,song)}:{}),
+      beats:song.beats,meter:meterOf(song),beatUnit:song.beatUnit,parts:{},transitions:song.transitions||{},customFills:song.customFills||[],customBreaks:cleanBreaks(song),cymbals:cymbalSettings(song), ...(song.mixer?{mixer:normalizeMix(song.mixer,song)}:{}),
       fillMode: song.fillMode || 'smart', repeatMode: song.repeatMode || 'fill',introMode:song.introMode==='repeat'?'repeat':'once',countIntroEnabled:song.countIntroEnabled!==false,customSections:song.customSections||[],partLabels:cleanPartLabels(song.partLabels),sequence:song.sequence||[],sequenceMode:song.sequenceMode||'assisted',revision:0};
     const files=[];
     for(const [part,meta] of Object.entries(song.parts)) {
@@ -100,11 +101,11 @@ export async function restoreBackup(repo, file, progress = () => {}) {
   if(manifest.preferences && typeof localStorage!=='undefined'){
     const p=manifest.preferences;try{
       if(p.pedalMap && typeof p.pedalMap==='object'&&!Array.isArray(p.pedalMap) && Object.keys(p.pedalMap).length<=512)
-        localStorage.setItem('loops-v12-pedal-map',JSON.stringify(p.pedalMap));
-      if(p.midiSettings && typeof p.midiSettings==='object')saveMidiSettings(localStorage,p.midiSettings);
-      for(const [oldId,newId] of idMap){const count=p.liveCounts?.[oldId];if(count&&typeof count.enabled==='boolean')localStorage.setItem('loops-v20-count-'+newId,JSON.stringify({enabled:count.enabled,bars:count.bars===2?2:1}));}
+        {localStorage.setItem('loops-v12-pedal-map',JSON.stringify(p.pedalMap));onPreference(PEDAL_KEY,p.pedalMap);}
+      if(p.midiSettings && typeof p.midiSettings==='object'){saveMidiSettings(localStorage,p.midiSettings);onPreference(MIDI_KEY,p.midiSettings);}
+      for(const [oldId,newId] of idMap){const count=p.liveCounts?.[oldId];if(count&&typeof count.enabled==='boolean'){const v={enabled:count.enabled,bars:count.bars===2?2:1};localStorage.setItem('loops-v20-count-'+newId,JSON.stringify(v));onPreference('loops-v20-count-'+newId,v);}}
       for(const [oldId,newId] of idMap){const mix=p.liveMixes?.[oldId];if(mix&&typeof mix==='object')writeLocalMix(localStorage,{id:newId},mix);}
-      for(const [oldKey,newKey] of entryMap){const mix=p.repertoireMixes?.[oldKey];if(mix&&typeof mix==='object')writeLocalMix(localStorage,{repertoireKey:newKey},mix);const count=p.repertoireCounts?.[oldKey];if(count&&typeof count.enabled==='boolean')localStorage.setItem('loops-v20-count-'+newKey,JSON.stringify({enabled:count.enabled,bars:count.bars===2?2:1}));}
+      for(const [oldKey,newKey] of entryMap){const mix=p.repertoireMixes?.[oldKey];if(mix&&typeof mix==='object')writeLocalMix(localStorage,{repertoireKey:newKey},mix);const count=p.repertoireCounts?.[oldKey];if(count&&typeof count.enabled==='boolean'){const v={enabled:count.enabled,bars:count.bars===2?2:1};localStorage.setItem('loops-v20-count-'+newKey,JSON.stringify(v));onPreference('loops-v20-count-'+newKey,v);}}
       if(['open','closed'].includes(p.introOpen))localStorage.setItem('loops-v12-editor-intro',p.introOpen);
       if(['open','closed'].includes(p.managementOpen))localStorage.setItem('loops-v12-management',p.managementOpen);
     }catch{/* Navegador pode bloquear preferências locais; dados restaurados permanecem intactos. */}}
@@ -115,4 +116,16 @@ export function triggerDownload(blob, filename) {
   const url=URL.createObjectURL(blob); link.href=url; link.download=filename;
   document.body.appendChild(link); link.click(); link.remove();
   setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
+
+// Read only manifest.json (skip audio extraction). No catalog writes, no new IDs.
+export async function readControlBackup(file){
+  if(!file||file.size>LIMIT)throw new Error('Backup superior ao limite de 420 MB.');
+  const entries=unzipSync(new Uint8Array(await file.arrayBuffer()),{filter:entry=>entry.name==='manifest.json'&&entry.originalSize<=8*1024*1024});
+  if(!entries['manifest.json'])throw new Error('Manifesto de backup ausente ou muito grande.');
+  const m=JSON.parse(strFromU8(entries['manifest.json']));
+  if(m.type!=='LOOPS_MARKS_PRO_BACKUP'||![3,4].includes(m.schema))throw new Error('Backup incompatível.');
+  const result={};if(m.preferences?.pedalMap&&typeof m.preferences.pedalMap==='object')result[PEDAL_KEY]=cleanPreference(PEDAL_KEY,m.preferences.pedalMap);
+  if(m.preferences?.midiSettings&&typeof m.preferences.midiSettings==='object')result[MIDI_KEY]=cleanPreference(MIDI_KEY,m.preferences.midiSettings);
+  if(!Object.keys(result).length)throw new Error('O backup não contém mapeamentos MIDI ou pedal.');return result;
 }

@@ -2,6 +2,8 @@ import { getUser, verifyRequestOrigin } from '@netlify/identity';
 import { getStore } from '@netlify/blobs';
 import {randomBytes,createHash} from 'node:crypto';
 
+import {preferenceKey,cleanPreference,applyPreferenceChanges} from '../../dist/preferences.js';
+const preferencesStore=()=>getStore({name:'loops-v29-preferences',consistency:'strong'});
 const accessStore = () => getStore({name:'loops-v12-access',consistency:'strong'});
 const libraryStore = () => getStore({name:'loops-v11-library',consistency:'strong'});
 const songStore = () => getStore({name: 'loops-v3-songs', consistency: 'strong'});
@@ -40,7 +42,7 @@ function validateContent(content, owner) {
       (content.countIntroEnabled!==undefined && typeof content.countIntroEnabled!=='boolean') ||
       (content.sequenceMode && !['automatic','assisted'].includes(content.sequenceMode))) return false;
   const breaks=content.customBreaks||[];
-  if(!Array.isArray(breaks)||breaks.length>250||new Set(breaks.map(s=>s?.id)).size!==breaks.length||breaks.some(s=>!(/^(counter|passage)_[1-9][0-9]{0,5}$/.test(s?.id||''))||typeof s.label!=='string'||!s.label.trim()||s.label.length>52))return false;
+  if(!Array.isArray(breaks)||breaks.length>250||new Set(breaks.map(s=>s?.id)).size!==breaks.length||breaks.some(s=>!(/^(counter|passage)_[1-9][0-9]{0,5}$/.test(s?.id||''))||typeof s.label!=='string'||!s.label.trim()||s.label.length>52||(s.preserveTail!==undefined&&(typeof s.preserveTail!=='boolean'||!s.id.startsWith('passage_')))||(s.returnBars!==undefined&&(!s.id.startsWith('passage_')||!Number.isInteger(s.returnBars)||s.returnBars<1||s.returnBars>64))))return false;
   const cymbals=content.cymbals;
   if(cymbals!==undefined&&(!cymbals||typeof cymbals.autoEnabled!=='boolean'||!['autoVolume','rideVolume'].every(k=>Number.isFinite(cymbals[k])&&cymbals[k]>=0&&cymbals[k]<=1)||!['hatOpenVolume','hatClosedVolume'].every(k=>cymbals[k]===undefined||Number.isFinite(cymbals[k])&&cymbals[k]>=0&&cymbals[k]<=1)))return false;
   if(content.mixer!==undefined){
@@ -80,6 +82,18 @@ export default async function handler(req) {
       const row=await accessStore().get(owner+'/current',{type:'json',consistency:'strong'});
       if(row){await accessStore().setJSON(owner+'/current',{...row,active:false,revokedAt:new Date().toISOString()});}
       return json({active:false});
+    }
+    if(req.method==='GET'&&op==='preferences')return json(await preferencesStore().get(owner,{type:'json',consistency:'strong'})||{fields:{}});
+    if(req.method==='POST'&&op==='preferences-save'){
+      const body=await req.text();if(body.length>1800000)return fail('Configurações muito grandes.',413);
+      const {changes}=JSON.parse(body);
+      if(!Array.isArray(changes)||changes.length>2000||new Set(changes.map(c=>c?.key)).size!==changes.length||changes.some(c=>!c||!preferenceKey(c.key)||!Number.isSafeInteger(c.revision)||c.revision<0||cleanPreference(c.key,c.value)===null))return fail('Configurações inválidas.',400);
+      const store=preferencesStore();const current=await store.getWithMetadata(owner,{type:'json',consistency:'strong'});
+      const result=applyPreferenceChanges(current?.data?.fields||{},changes);
+      if(Object.keys(result.fields).length>3000||JSON.stringify(result.fields).length>1800000)return fail('Limite de configurações atingido.',413);
+      const done=await store.setJSON(owner,{fields:result.fields},current?{onlyIfMatch:current.etag}:{onlyIfNew:true});
+      if(!done.modified)return fail('Configurações alteradas em outro aparelho. Tente sincronizar novamente.',409);
+      return json(result);
     }
     if (req.method==='GET' && op==='library') {
       const doc=await libraryStore().get(owner+'/index',{type:'json',consistency:'strong'});

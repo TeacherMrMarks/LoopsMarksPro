@@ -1,7 +1,7 @@
-const VERSION = 'loops-marks-v28-cymbal-arranger-20261121';
+const VERSION = 'loops-marks-v30-audio-tail-20261122';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './netlify-client.js', './backup.js', './data.js', './library-model.js',
-  './midi.js', './mixer.js', './audio.js', './meter.js', './stretch.js', './demo.js', './importer.js', './manifest.webmanifest',
+  './preferences.js', './midi.js', './mixer.js', './audio.js', './meter.js', './stretch.js', './demo.js', './importer.js', './manifest.webmanifest',
   './icon.svg', './icon-192.png', './icon-512.png',
 ];
 const scope = new URL(self.registration.scope);

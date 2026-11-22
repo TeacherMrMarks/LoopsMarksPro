@@ -86,6 +86,10 @@ export function layerPartEligible(key,base) {
   return base==='chorus';
 }
 export const ATTACK_IDS = ['crashStop','crashStop2','crashStop3',...AUTO_CRASHES.map(p=>p.id)];
+export const cleanBreaks = song => extraBreaks(song).map(({id,label,preserveTail,returnBars})=>({id,label,...(id.startsWith('passage_')&&preserveTail===true?{preserveTail:true,returnBars:validReturnBars(returnBars)}:{})}));
+export const validReturnBars = value => Number.isInteger(value)&&value>=1&&value<=64?value:1;
+export const passageTail = (song,key) => key?.startsWith('passage_')&&extraBreaks(song).find(p=>p.id===key)?.preserveTail===true;
+export const breakReturnBars = (song,key) => passageTail(song,key)?validReturnBars(extraBreaks(song).find(p=>p.id===key)?.returnBars):(song?.parts?.[key]?.bars||1);
 export const extraBreaks = song => (Array.isArray(song?.customBreaks)?song.customBreaks:[]).filter(s=>/^(counter|passage)_[1-9][0-9]{0,5}$/.test(s?.id||'')&&typeof s.label==='string').map(s=>({...s,group:s.id.startsWith('counter_')?'counter':'passage',type:'trecho',icon:'wave'}));
 export function cymbalSettings(song) {
   const s=song?.cymbals||{};const volume=v=>Number.isFinite(v)?Math.max(0,Math.min(1,v)):1;
@@ -513,7 +517,7 @@ export class Cloud {
   async save(owner, song) {
     const { id, revision, name, occasion, bpm, beats, meter, beatUnit, parts, transitions, customFills, customSections, partLabels, sequence, sequenceMode, fillMode, repeatMode, introMode, countIntroEnabled, customBreaks, cymbals, mixer, kind, folderId, deleted, edit } = song;
     const content = deleted ? {deleted: true, edit} :
-      {name, occasion, bpm, beats, meter, beatUnit, kind:kind||'music', folderId:folderId||'', parts, transitions: transitions || {}, customFills: customFills || [], customSections:customSections||[], partLabels:cleanPartLabels(partLabels), sequence:sequence||[], sequenceMode:sequenceMode||'assisted', fillMode: fillMode || 'smart', repeatMode: repeatMode || 'fill', introMode:introMode==='repeat'?'repeat':'once', countIntroEnabled:countIntroEnabled!==false, customBreaks:extraBreaks({customBreaks}).map(({id,label})=>({id,label})), cymbals:cymbalSettings({cymbals}), ...(mixer?{mixer:normalizeMix(mixer,{cymbals})}:{}), edit};
+      {name, occasion, bpm, beats, meter, beatUnit, kind:kind||'music', folderId:folderId||'', parts, transitions: transitions || {}, customFills: customFills || [], customSections:customSections||[], partLabels:cleanPartLabels(partLabels), sequence:sequence||[], sequenceMode:sequenceMode||'assisted', fillMode: fillMode || 'smart', repeatMode: repeatMode || 'fill', introMode:introMode==='repeat'?'repeat':'once', countIntroEnabled:countIntroEnabled!==false, customBreaks:cleanBreaks({customBreaks}), cymbals:cymbalSettings({cymbals}), ...(mixer?{mixer:normalizeMix(mixer,{cymbals})}:{}), edit};
     const data = await this.request('?op=save', { method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({id, revision, content}) });

@@ -52,7 +52,8 @@ const source=(await readFile(new URL('../netlify/functions/loops-api.mjs',import
   .replace("import { getStore } from '@netlify/blobs';",
     'const getStore=globalThis.__netlifyBlobs;')
   .replace("from '../../dist/library-model.js';","from '"+libUrl+"';")
-  .replace("from '../../dist/meter.js';","from '"+meterUrl+"';");
+  .replace("from '../../dist/meter.js';","from '"+meterUrl+"';")
+  .replace("from '../../dist/preferences.js';","from '"+new URL('../dist/preferences.js',import.meta.url).href+"';");
 const {default:handler}=await import('data:text/javascript;charset=utf-8,'+encodeURIComponent(source));
 function invoke(op,method='GET',body=null,type='application/json'){
   const request=new Request('https://loops-marks-pro.netlify.app/.netlify/functions/loops-api'+op,{method,
@@ -190,4 +191,13 @@ test('V26: API saves named parts and SOLO without changing IDs; rejects malforme
  const ok=await invoke('?op=save','POST',JSON.stringify({id,revision:0,content:payload}));assert.equal(ok.status,200);
  const res=await invoke('?op=catalog');const rows=await res.json();const saved=rows.find(s=>s.id===id);assert.deepEqual(saved.content.partLabels,payload.partLabels);assert.equal(saved.content.mixer.loops.solo,true);
  for(const invalid of [{partLabels:{unknown:'x'}},{partLabels:{a:' '}},{mixer:{...mix,loops:{...mix.loops,solo:'true'}}}]){const bad=await invoke('?op=save','POST',JSON.stringify({id,revision:1,content:{...payload,...invalid}}));assert.equal(bad.status,400);}
+});
+
+test('V29 preferences endpoint requires identity and preserves cloud data on stale revision',async()=>{loggedIn=false;assert.equal((await invoke('?op=preferences')).status,401);loggedIn=true;const key='loops-v22-midi-settings',value={enabled:true,mappings:[{command:'part:a',type:'note',channel:0,number:60,anyDevice:true}]};const initial=await invoke('?op=preferences-save','POST',JSON.stringify({changes:[{key,revision:0,value}]}));assert.equal(initial.status,200);const stale=await invoke('?op=preferences-save','POST',JSON.stringify({changes:[{key,revision:0,value:{enabled:false,mappings:[]}}]}));const result=await stale.json();assert.deepEqual(result.conflicts,[key]);assert.equal(result.fields[key].value.mappings.length,1);const persisted=await (await invoke('?op=preferences')).json();assert.equal(persisted.fields[key].value.mappings[0].number,60);assert.equal((await invoke('?op=preferences-save','POST',JSON.stringify({changes:[{key:'constructor',revision:0,value:{}}]}))).status,400);});
+
+test('V30 passage tail settings survive API round-trip and invalid return bars rejected',async()=>{
+ const id=crypto.randomUUID();const passage={id:'passage_1',label:'Carrilhão',preserveTail:true,returnBars:1};const payload={name:'V30',occasion:'',bpm:84,beats:4,meter:'4/4',parts:{},customBreaks:[passage]};
+ assert.equal((await invoke('?op=save','POST',JSON.stringify({id,revision:0,content:payload}))).status,200);
+ const rows=await(await invoke('?op=catalog')).json();assert.deepEqual(rows.find(s=>s.id===id).content.customBreaks,[passage]);
+ for(const patch of [{returnBars:0},{returnBars:65},{returnBars:1.5},{preserveTail:'true'},{id:'counter_1'}])assert.equal((await invoke('?op=save','POST',JSON.stringify({id,revision:1,content:{...payload,customBreaks:[{...passage,...patch}]}}))).status,400);
 });

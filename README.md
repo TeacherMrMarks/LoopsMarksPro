@@ -1,6 +1,27 @@
-# Loops Marks Pro — V28
+# Loops Marks Pro — V30
 
-Base: V27. Preservação dos identificadores WAV, dados e chaves anteriores de armazenamento.
+Base: V29. Preservação dos identificadores WAV, dados e chaves anteriores de armazenamento.
+
+## Novidades V30 — Cauda sonora inteligente nas passagens
+
+- Central > Passagens: cada passagem tem a opção **Preservar cauda sonora** e, quando ligada, **Retorno da bateria após (compassos)**, de 1 a 64. Pode ligar para WAVs já existentes sem reimportação. Para WAVs de duração livre, ligue antes de importar. O arquivo original e sua duração não são modificados pelo campo de retorno.
+- Exemplo: carrilhão + bumbo de 3 compassos (ou duração livre), retorno após 1. A passagem toca uma única vez desde o tempo 1, a parte selecionada volta na cabeça do compasso seguinte e o carrilhão continua até o final do WAV, sem reinício ou corte pelo retorno. Se o arquivo tiver ataques extras na cauda, eles também continuam soando. A passagem não substitui o loop depois do retorno e o crash automático segue as regras anteriores.
+- Caudas continuam durante novas viradas e trocas de parte; STOP encerra todas as fontes. Cancelar uma passagem agendada antes de começar também cancela seu áudio. O volume permanece no canal Passagens; crashes conservam suas próprias caudas no canal Pratos. O retorno respeita o BPM, fórmula de compasso e comandos existentes de tela, pedal e MIDI.
+- A opção começa desligada nos cadastros antigos, mantendo o comportamento V29 com WAVs de compassos completos. Para desligá-la depois de importar um WAV de duração livre, substitua por um WAV compatível de compassos completos ou remova o arquivo primeiro. O limite de tamanho de WAV permanece 32 MB.
+- Configurações por passagem salvas no mesmo catálogo local, na nuvem e no backup completo, com validação no servidor. Atualize todos os dispositivos antes de editar. Não mude os stores ou as chaves de preferências da V29.
+
+## Validação V30
+
+- 192 testes automatizados locais aprovados (183 anteriores e 9 novos), com relógio Web Audio, fontes, ajuste de BPM, API e backup simulados. Testes de sintaxe e integridade do ZIP concluídos. Os testes não certificam reprodução acústica, dispositivos reais, rede real nem o codec ZIP de produção.
+- Build local bloqueado por ausência de esbuild. O Netlify deve executar npm run build; valide no Permalink antes de publicar. Não publique dist isoladamente.
+
+## Novidades V29 — Persistência de controles e Palco compacto
+
+- Conta administrativa: MIDI, pedal e contagens individuais por música/ritmo/item de repertório têm armazenamento local e sincronização em um novo store privado Netlify Blobs, sem modificar os stores de músicas, WAVs, repertórios ou usuários. A autorização de hardware MIDI continua por navegador; links de músico continuam somente leitura e suas preferências de execução são locais.
+- A migração lê preferências existentes no endereço atual. Um novo endereço vazio não envia padrões vazios para a nuvem. Alterações intencionais são registradas em uma fila local por conta; revisões por campo e escrita condicional por ETag evitam substituir dados remotos divergentes. Em conflito, Configurações > Resolver sincronização permite escolher a cópia local ou remota. Aguarde Sincronizado, que considera também cadastros/repertórios sujos ou conflitantes. Sincronização quando o player está parado.
+- Configurações > Backup e restauração > Restaurar somente MIDI e pedal: lê o manifesto de um backup V3/V4 sem duplicar cadastros, áudios ou repertórios. Caso o mapeamento esteja no antigo Permalink V27, exporte Configurações por aquele endereço e importe somente os controles pela V29. Um backup da V28 que já não contenha os mapeamentos não os recupera.
+- Palco: grade compacta de até quatro colunas para condução, chimbais, contratempos e passagens, com estados e filtros de WAV preservados. Crash automático na entrada solicitada da parte, com ou sem virada, inclusive após passagem/contratempo, sem repetir a cada compasso nem duplicar prato embutido. Abertura automática sem introdução mantém a regra anterior; início por parte explicitamente escolhida recebe ataque quando habilitado.
+- Para a validação real, teste em dois Permalinks do mesmo site/conta, após sincronização, e confira WAVs e mapeamentos. Não edite simultaneamente por versões antigas; elas não sincronizam os controles.
 
 ## Novidades V28 — Orquestração de pratos e resposta imediata
 
@@ -49,7 +70,7 @@ Base: V27. Preservação dos identificadores WAV, dados e chaves anteriores de a
 - Para CC: pressão (cruza valor 64), variação (valor mudou) ou pulso relativo (cada mensagem). Para knobs/faders absolutos, volume utiliza 0–127 e BPM mapeia a faixa original permitida. BPM continua ajustável apenas quando parado, conforme V21.
 - Atribuições incluem Iniciar/Retomar, Iniciar/Parar, Parar, introdução musical (ao iniciar), partes, viradas manuais, crashes, acabamento, final, modo de virada, cancelamento, contagem, repertório, mapa, volume e BPM. Partes personalizadas cadastradas também são selecionáveis conforme a música/ritmo aberto.
 - Selecionar, editar ou excluir atribuições sem modificar os pedais. Aprender novamente o mesmo sinal específico substitui sua associação. Pode vincular a um dispositivo ou permitir qualquer dispositivo. Dispositivo específico tem prioridade.
-- A configuração é local ao navegador/origem. Incluída nas exportações de backup e na restauração. Em outro dispositivo ou navegador, restaure o backup ou configure novamente. Permalinks de origens diferentes não compartilham localStorage.
+- Na V29, as atribuições administrativas são sincronizadas na nuvem e preservadas localmente; links de músico mantêm configurações locais. Permalinks de origens diferentes não compartilham localStorage, por isso migre com o backup quando necessário.
 - Dispositivos conectados/desconectados atualizam a lista. Reconexão automática quando o navegador concede acesso já autorizado; se necessário, clique em Conectar MIDI novamente. Durante o aprendizado, não são executados comandos musicais. Feche o painel para usar o Modo Palco Pro.
 - Controle MIDI e pedal HID podem funcionar na mesma sessão sem modificar os mapeamentos existentes. As ações MIDI reutilizam os controles do Modo Palco Pro e seus bloqueios. Crashes continuam dependentes de WAV e tocando sobre o loop no tempo 1.
 
@@ -63,3 +84,8 @@ Chrome de Chromebook/Windows/macOS e navegador Android compatível: conectar dis
 - `node --check`: módulos JS, scripts e funções Netlify sem erros de sintaxe.
 - `npm run build`: bloqueado porque o pacote `esbuild` não está instalado no ambiente. O Netlify precisa realizar o build, que substitui `dist/netlify-client.js` pelo cliente real de Identity/fflate. Não publique `dist` isoladamente.
 - Testes com navegador real, WAVs reais, hardware e Netlify/Identity/Blobs ainda pendentes. Validar no Permalink antes da publicação oficial.
+
+## Validação V29
+
+- Testes locais: 183/183 aprovados, incluindo funções simuladas do Netlify, migração, recuperação, conflitos, restauração exclusiva dos controles (codec ZIP simulado) e ataques na entrada. Sintaxe verificada.
+- Build de produção não executado: esbuild indisponível. Validação no Netlify e com hardware/WAVs reais pendente.

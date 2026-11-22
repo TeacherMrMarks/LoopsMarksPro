@@ -1,15 +1,16 @@
 import { MIX_CHANNELS, MIX_IDS, normalizeMix, effectiveGain, mixChannel, readLocalMix, writeLocalMix, hasSolo, soloExcluded } from './mixer.js';
-import { Cloud, Repository, PARTS, PLAY_PARTS, MANUAL_PARTS, FINALES, newSong, MAX_FILE_BYTES, fillBase, fillVariantId, firstPlayablePart, liveCatalog, playableParts, extraSections, CRASH_STOPS, hasAudioPart, preparedCrashParts, crashSignature, AUTO_CRASHES, ATTACK_IDS, extraBreaks, cymbalSettings, RENAMEABLE_PARTS, partLabel, namedPart, renamePart, resetPartName, LAYER_IDS, LAYER_ACTIONS, layerVolume, stageFill } from './data.js';
+import { Cloud, Repository, PARTS, PLAY_PARTS, MANUAL_PARTS, FINALES, newSong, MAX_FILE_BYTES, fillBase, fillVariantId, firstPlayablePart, liveCatalog, playableParts, extraSections, CRASH_STOPS, hasAudioPart, preparedCrashParts, crashSignature, AUTO_CRASHES, ATTACK_IDS, extraBreaks, cymbalSettings, RENAMEABLE_PARTS, partLabel, namedPart, renamePart, resetPartName, LAYER_IDS, LAYER_ACTIONS, layerVolume, stageFill, passageTail, breakReturnBars, validReturnBars } from './data.js';
 import { suggestSlot } from './importer.js';
 import { Player, bpmRange } from './audio.js';
 import { METERS, meterOf, meterHint, meterChoice, beatUnitForChoice, countForMeter, classifyDuration, wavMeasure } from './meter.js';
 import { exampleSongs } from './demo.js';
-import { makeBackup, restoreBackup, triggerDownload } from './backup.js';
+import { makeBackup, restoreBackup, readControlBackup, triggerDownload } from './backup.js';
 import { emptyLibrary, cleanLibrary, songKind, inFolder, repertoireEntries, repertoireSong, entryId, cleanEntryLabels } from './library-model.js';
 
-import { MidiController, loadMidiSettings, saveMidiSettings } from './midi.js';
+import { PreferenceSync, PEDAL_KEY } from './preferences.js';
+import { MIDI_KEY, MidiController, loadMidiSettings, saveMidiSettings } from './midi.js';
 
-const APP_VERSION = 'V28';
+const APP_VERSION = 'V30';
 // O link do músico carrega exclusivamente o Modo Palco Pro.
 const musicianLink = new URL(location.href).searchParams.get('modo') === 'musico';
 const versionTag = () => '<span class="version-tag" aria-label="Versão do aplicativo: ' + APP_VERSION + '" title="Versão ' + APP_VERSION + '">' + APP_VERSION + '</span>';
@@ -83,6 +84,10 @@ const player = new Player(() => { if (player.running) updatePlayback(); });
 let repo;
 let animation;
 let syncTask;
+let preferences=null;
+function savePreference(key,value){if(preferences){try{preferences.change(key,value);state.syncLabel='Sincronização pendente';updateTop();requestSync();}catch(e){notice(e.message);}}}
+function refreshControls(){state.pedalMap=loadPedalMap();midi.settings=loadMidiSettings(localStorage);updateMidiStatus();if(state.selected&&!player.running){const c=loadLiveCount(state.selected);state.liveCountEnabled=c.enabled&&Boolean(state.selected.parts?.countIntro?.path);state.liveCountBars=c.bars;player.setCountControl(state.liveCountEnabled,c.bars);const select=get("#live-count-bars");if(select)select.value=String(c.bars);}if(dialog.open&&dialog.querySelector(".midi-dialog")){paintMidiMappings();const el=dialog.querySelector("#midi-enabled");if(el)el.checked=midi.settings.enabled;}if(state.selected&&!player.running)updatePlayback(true);reconnectMidi();}
+
 let syncTimer;
 let draftTimer;
 let prepTimer;
@@ -300,7 +305,7 @@ function deck() {
   const ride=PARTS.filter(p=>LAYER_IDS.includes(p.id)&&hasAudioPart(song,p.id));
   const autoCrash= AUTO_CRASHES.some(p=>hasAudioPart(song,p.id));
   const liveBreaks=extraBreaks(song).filter(p=>hasAudioPart(song,p.id));
-  const breakPads=group=>{const items=liveBreaks.filter(p=>p.group===group);return items.length?'<div class="live-break-group" hidden><div class="section-head live-subsection"><h2>'+(group==='counter'?'Contratempos':'Passagens')+'</h2><span>Tempo 1 · retorno automático</span></div><div class="pads">'+items.map(p=>'<button type="button" class="pad fill-pad" data-action="break" data-part="'+escape(p.id)+'" hidden disabled>'+icon('wave')+'<strong>'+escape(p.label)+'</strong><small>'+escape(song.parts[p.id].bars)+' comp.</small></button>').join('')+'</div></div>':'';};
+  const breakPads=group=>{const items=liveBreaks.filter(p=>p.group===group);return items.length?'<div class="live-break-group" hidden><div class="section-head live-subsection"><h2>'+(group==='counter'?'Contratempos':'Passagens')+'</h2><span>Tempo 1 · retorno automático</span></div><div class="pads stage-compact-pads">'+items.map(p=>'<button type="button" class="pad fill-pad" data-action="break" data-part="'+escape(p.id)+'" hidden disabled>'+icon('wave')+'<strong>'+escape(p.label)+'</strong><small>'+escape(breakReturnBars(song,p.id))+' comp.</small></button>').join('')+'</div></div>':'';};
   const activeRep=(state.libraryData.repertoires||[]).find(r=>r.id===state.activeRepId);
   const repEntries=activeRep?repertoireEntries(activeRep,songsFor('live')):[];
   const repNav=repEntries.length?'<div class="live-rep-strip"><span>'+icon('list')+' '+escape(activeRep.name)+' · '+(state.activeRepPos+1)+'/'+repEntries.length+'</span><div>'+iconButton('rep-prev-live','Música anterior','arrowup',''+(state.activeRepPos===0?'disabled':''))+iconButton('rep-next-live','Próxima música','arrowdown',''+(state.activeRepPos===repEntries.length-1?'disabled':''))+'</div></div>':'';
@@ -337,8 +342,8 @@ function deck() {
     '</div>' : '') + (crashStops.length ? '<div id="live-crashes" hidden><div class="section-head live-subsection"><h2>Crash · Ataques adicionais</h2><span>Tocam no próximo tempo 1, sem parar a bateria</span></div>' +
     '<div class="pads crash-pads">' + crashStops.map(part => '<button type="button" class="pad crash-stop-pad" data-action="crash" data-part="' + part.id + '" hidden disabled>' +
     icon('spark') + '<strong>' + escape(part.label) + '</strong><small>Prato sobre o loop</small></button>').join('') + '</div></div>' : '') +
-    (autoCrash?'<div id="live-auto-crash" hidden><div class="section-head live-subsection"><h2>Crash automático</h2><span>Após viradas</span></div><button type="button" class="mode-toggle" data-action="auto-crash-toggle" id="auto-crash-toggle" disabled>'+icon('spark')+'<span>Crash automático</span></button></div>':'') +
-    (ride.length?'<div id="live-ride" hidden><div class="section-head live-subsection"><h2>Pratos de condução</h2><span>Condução e aberto: refrão · fechado: partes leves</span></div><div class="pads">'+ride.map(p=>'<button type="button" class="pad" data-action="'+LAYER_ACTIONS[p.id]+'" data-part="'+p.id+'" hidden disabled>'+icon('wave')+'<strong>'+escape(p.label)+'</strong><small>Desativado</small></button>').join('')+'</div></div>':'') + breakPads('counter')+breakPads('passage')+
+    (autoCrash?'<div id="live-auto-crash" hidden><div class="section-head live-subsection"><h2>Crash automático</h2><span>Na entrada da parte</span></div><button type="button" class="mode-toggle" data-action="auto-crash-toggle" id="auto-crash-toggle" disabled>'+icon('spark')+'<span>Crash automático</span></button></div>':'') +
+    (ride.length?'<div id="live-ride" hidden><div class="section-head live-subsection"><h2>Pratos de condução</h2><span>Condução e aberto: refrão · fechado: partes leves</span></div><div class="pads stage-compact-pads">'+ride.map(p=>'<button type="button" class="pad" data-action="'+LAYER_ACTIONS[p.id]+'" data-part="'+p.id+'" hidden disabled>'+icon('wave')+'<strong>'+escape(p.label)+'</strong><small>Desativado</small></button>').join('')+'</div></div>':'') + breakPads('counter')+breakPads('passage')+
     (endings.length ? '<div class="section-head live-subsection"><h2>Encerramentos</h2><span>Toque uma vez</span></div>' +
     '<div class="pads end-pads">' + endings.map(part => '<button type="button" class="pad final ' + (part.id === 'finish' ? 'finish' : '') +
     '" data-action="part" data-part="' + part.id + '" disabled>' + icon(part.icon) + '<strong>' + escape(part.label) +
@@ -582,12 +587,16 @@ function cymbalEditor(song){
 }
 function breakEditor(song,group){
   const title=group==='counter'?'Contratempo':'Passagem', items=extraBreaks(song).filter(p=>p.group===group);
-  return '<details class="editor-group" open><summary><span>'+icon('wave')+'<strong>'+(group==='counter'?'Contratempos':'Passagens')+'</strong></span><small>'+items.length+' cadastrados</small></summary><p class="group-hint">Importe WAV de 1, 2 ou mais compassos. A duração é reconhecida na importação. O trecho toca uma vez no tempo 1, com retorno à parte musical.</p><div class="custom-list">'+items.map(p=>'<div class="custom-fill-item"><label class="field"><span>Nome</span><input maxlength="52" data-break-name="'+escape(p.id)+'" value="'+escape(p.label)+'"></label>'+fileRow(p,song.parts?.[p.id],song)+button('remove-break','Excluir '+title.toLowerCase(),'trash','ghost danger','data-part="'+escape(p.id)+'"')+'</div>').join('')+'</div>'+button('add-break','Adicionar '+title.toLowerCase(),'plus','ghost','data-part="'+group+'"')+'</details>';
+  return '<details class="editor-group" open><summary><span>'+icon('wave')+'<strong>'+(group==='counter'?'Contratempos':'Passagens')+'</strong></span><small>'+items.length+' cadastrados</small></summary><p class="group-hint">Importe WAV de 1, 2 ou mais compassos. A duração é reconhecida na importação. O trecho toca uma vez no tempo 1, com retorno à parte musical.</p><div class="custom-list">'+items.map(p=>'<div class="custom-fill-item"><label class="field"><span>Nome</span><input maxlength="52" data-break-name="'+escape(p.id)+'" value="'+escape(p.label)+'"></label>'+fileRow(p,song.parts?.[p.id],song)+(group==='passage'?passageTailEditor(p,song):'')+button('remove-break','Excluir '+title.toLowerCase(),'trash','ghost danger','data-part="'+escape(p.id)+'"')+'</div>').join('')+'</div>'+button('add-break','Adicionar '+title.toLowerCase(),'plus','ghost','data-part="'+group+'"')+'</details>';
 }
 function cymbalOverrides(part,audio){
   if(!audio||ATTACK_IDS.includes(part.id)||[...LAYER_IDS,'finish','outro','countIntro'].includes(part.id))return '';
   const options=(key)=>[['auto','Pelo nome do WAV'],['yes','Já contém'],['no','Não contém']].map(([value,label])=>'<option value="'+value+'" '+((audio[key]||'auto')===value?'selected':'')+'>'+label+'</option>').join('');
   return '<div class="cymbal-overrides"><label>Prato de ataque <select data-wav-cymbal="hasCrash" data-part="'+escape(part.id)+'">'+options('hasCrash')+'</select></label><label>Condução <select data-wav-cymbal="hasConduction" data-part="'+escape(part.id)+'">'+options('hasConduction')+'</select></label><label>Chimbal aberto <select data-wav-cymbal="hasHatOpen" data-part="'+escape(part.id)+'">'+options('hasHatOpen')+'</select></label><label>Chimbal fechado <select data-wav-cymbal="hasHatClosed" data-part="'+escape(part.id)+'">'+options('hasHatClosed')+'</select></label></div>';
+}
+function passageTailEditor(p,song){
+  const active=passageTail(song,p.id), audio=song.parts?.[p.id];
+  return '<div class="passage-tail-settings"><label class="field"><span>Preservar cauda sonora</span><select data-passage-tail="'+escape(p.id)+'"><option value="false" '+(!active?'selected':'')+'>Desligado (WAV inteiro antes do retorno)</option><option value="true" '+(active?'selected':'')+'>Ligado (som continua após retorno)</option></select></label>'+(active?'<label class="field"><span>Retorno da bateria após (compassos)</span><input type="number" min="1" max="64" step="1" data-passage-return="'+escape(p.id)+'" value="'+validReturnBars(p.returnBars)+'"></label><p class="subtle">O WAV toca inteiro, uma única vez, mesmo após a bateria voltar. Pode ter cauda de qualquer duração. Se houver outros ataques no final do WAV, eles também soarão.</p>':'<p class="subtle">Para carrilhões, pratos ou efeitos prolongados, ligue a cauda antes de importar o WAV e escolha o retorno da bateria.</p>')+(audio?.durationSeconds>0?'<small class="subtle">Duração do WAV original: '+Number(audio.durationSeconds).toFixed(2)+' s</small>':'')+'</div>';
 }
 function fileRow(part, audio, song = state.admin) {
   const finishing = ['finais','crashstops','autocrashes'].includes(part.group) || ['finish','outro',...ATTACK_IDS].includes(part.id);
@@ -599,7 +608,7 @@ function fileRow(part, audio, song = state.admin) {
   const renameable=part.group==='loops'&&part.id!=='countIntro';
   const title=renameable?'<span class="part-name-tools"><button type="button" class="part-name-edit" data-rename-part="'+escape(part.id)+'" title="Dois cliques ou toques para renomear">'+escape(part.label)+'</button><button type="button" class="part-rename-pencil" data-action="rename-part" data-part="'+escape(part.id)+'" aria-label="Renomear '+escape(part.label)+'">'+icon('pencil')+'</button></span>':'<strong>'+escape(part.label)+'</strong>';
   return '<div class="file-row" data-row="' + escape(part.id) + '">' + icon(part.icon || 'wave') + '<div>'+title+'<small title="' + escape(audio?.name) + '">' + escape(audio?.name || 'Sem arquivo') + '</small></div>' +
-    (finishing ? '<span class="subtle"><small>Uma vez</small></span>' :
+    (passageTail(song,part.id) ? '<span class="subtle"><small>WAV inteiro</small></span>' : finishing ? '<span class="subtle"><small>Uma vez</small></span>' :
       '<label class="field length-field"><input type="number" min="1" max="' + (filling ? 128 : 64) + '" data-length="' + escape(part.id) + '" ' +
       'data-unit="' + (filling ? 'beats' : 'bars') + '" aria-label="' + unit + ' de ' + escape(part.label) + '" value="' + escape(count) + '" ' +
       (audio && !variant ? '' : 'disabled') + '><span>' + unit + '</span></label>') +
@@ -862,10 +871,12 @@ async function openSettingsModal(){
       button('settings-midi','MIDI Learn Pro','midi','v12-setting-tile')+
       (!cloud.musician ? button('settings-password','Redefinir minha senha','settings','v12-setting-tile') : '')+
       button('settings-sync','Sincronizar agora','cloud','v12-setting-tile')+
+      (preferences?button('settings-resolve','Resolver sincronização','cloud','v12-setting-tile'):'')+
       button('settings-logout','Sair da conta','exit','v12-setting-tile danger')+'</div><p class="subtle">Versão '+APP_VERSION+' · Todas as alterações são salvas automaticamente.</p></section>';
   dialog.querySelector('[data-action="close-settings"]').onclick=()=>dialog.close();
   for(const [action,run] of [['settings-backup',()=>openBackupCenter()],['settings-link',()=>copyMobile()],
     ['settings-pedal',()=>openPedalModal()],['settings-midi',()=>openMidiModal()],['settings-password',()=>openPasswordSettingsModal()],['settings-sync',()=>syncCatalog()],
+    ...(preferences?[['settings-resolve',async()=>{if(!Object.values(preferences.doc.fields).some(x=>x.conflict)){notice('Nenhum conflito de configurações.');return;}const local=await confirmChoice('Resolver configurações','Use sua cópia local ou cancele para manter o conflito. Para carregar a nuvem, use a próxima confirmação.','Usar cópia local');if(local)preferences.resolve(true);else if(await confirmChoice('Usar nuvem?','Substituir as configurações locais em conflito pela versão da nuvem?','Usar nuvem'))preferences.resolve(false);else return;refreshControls();requestSync();}]]:[]),
     ['settings-logout',()=>handleAction({dataset:{action:'logout'}})]]){
     dialog.querySelector('[data-action="'+action+'"]').onclick=async()=>{
       dialog.close();try{await run();}catch(e){notice(e.message);}
@@ -944,7 +955,7 @@ async function openPedalModal(){
   };
   dialog.showModal();
 }
-function persistPedals(){try{localStorage.setItem('loops-v12-pedal-map',JSON.stringify(state.pedalMap));}catch{notice('Seu navegador não permitiu salvar o mapeamento local.');}}
+function persistPedals(){try{localStorage.setItem('loops-v12-pedal-map',JSON.stringify(state.pedalMap));savePreference(PEDAL_KEY,state.pedalMap);}catch{notice('Seu navegador não permitiu salvar o mapeamento local.');}}
 function receivePedal(code){
   const entry=state.pedalMap[code];if(!entry||!entry.command||state.view!=='live'||!repo)return;
   const now=Date.now();if(now-state.pedalLastAt<170)return;
@@ -974,7 +985,7 @@ function midiActions(){
 }
 function midiOptions(value,nonCC=false){return midiActions().filter(([id])=>!nonCC||!['bpm-absolute','volume-absolute'].includes(id)&&!id.startsWith('mix:')).map(([id,txt])=>'<option value="'+escape(id)+'" '+(id===value?'selected':'')+'>'+escape(txt)+'</option>').join('');}
 function midiSignalLabel(m){return ({note:'Nota',cc:'CC',program:'Programa'}[m.type]||m.type)+' '+m.number+' · canal '+(m.channel+1);}
-function persistMidi(){try{saveMidiSettings(localStorage,midi.settings);}catch{notice('O navegador não permitiu salvar o MIDI localmente.');}updateMidiStatus();}
+function persistMidi(){try{saveMidiSettings(localStorage,midi.settings);savePreference(MIDI_KEY,midi.settings);}catch{notice('O navegador não permitiu salvar o MIDI localmente.');}updateMidiStatus();}
 function updateMidiStatus(){
   const active=midi.settings.enabled&&midi.devices.length>0;
   app.querySelectorAll('[data-action="midi-setup"]').forEach(el=>el.setAttribute('aria-pressed',String(active)));
@@ -992,7 +1003,7 @@ function openMidiModal(){
     '<p class="subtle">Conecte o controlador e autorize o navegador. Teclas, pads, botões e controles CC podem acionar as funções. O pedal HID continua independente.</p>'+
     '<div class="midi-connection"><label><input type="checkbox" id="midi-enabled" '+(midi.settings.enabled?'checked':'')+'> Ativar controle MIDI</label>'+button('midi-connect','Conectar MIDI','midi','primary')+'</div><p id="midi-devices" class="subtle" role="status"></p><p id="midi-monitor" class="midi-monitor" role="status">Monitor: aguardando sinal MIDI…</p>'+
     '<div class="midi-learn-panel"><label class="field"><span>Função a atribuir</span><select id="midi-command">'+midiOptions('start')+'</select></label><label class="field"><span>Comportamento CC</span><select id="midi-cc-mode"><option value="press">Botão / pad (valor ≥ 64)</option><option value="change">Knob / fader (a cada alteração)</option><option value="relative">Encoder relativo (cada mensagem)</option></select></label><label class="midi-any"><input type="checkbox" id="midi-any"> Aceitar esta mensagem de qualquer dispositivo</label>'+button('midi-learn','Aprender MIDI','midi','primary')+button('midi-cancel','Cancelar aprendizado','x','ghost')+'<p id="midi-learn-status" class="subtle" role="status"></p></div>'+
-    '<h3>Atribuições salvas</h3><div id="midi-mappings" class="midi-mappings"></div><div class="v12-modal-actions">'+button('midi-clear','Limpar atribuições','trash','ghost')+button('midi-close','Concluir','check','primary')+'</div><p class="subtle">Salvamento automático neste navegador. Incluído no backup. Para iniciar áudio, o navegador pode exigir primeiro um toque na tela. BPM continua ajustável somente com a reprodução parada.</p></section>';
+    '<h3>Atribuições salvas</h3><div id="midi-mappings" class="midi-mappings"></div><div class="v12-modal-actions">'+button('midi-clear','Limpar atribuições','trash','ghost')+button('midi-close','Concluir','check','primary')+'</div><p class="subtle">Salvamento local e, na conta administrativa, sincronização automática na nuvem. Incluído no backup. Para iniciar áudio, o navegador pode exigir primeiro um toque na tela. BPM continua ajustável somente com a reprodução parada.</p></section>';
   const status=dialog.querySelector('#midi-learn-status');
   dialog.querySelectorAll('[data-action="midi-close"]').forEach(el=>el.onclick=()=>{midi.cancelLearn();dialog.close();});
   dialog.querySelector('#midi-enabled').onchange=e=>{midi.settings.enabled=e.target.checked;persistMidi();if(!midi.settings.enabled)midi.cancelLearn();};
@@ -1052,7 +1063,7 @@ async function openBackupCenter() {
     '<button type="button" class="button ghost" data-backup="audios">' + icon('music') + 'WAVs + índice</button></div>'+
     '<div class="v13-import-panel"><label class="field"><span>Importar / Restaurar backup ZIP</span>'+
     '<input id="restore-file" type="file" accept=".zip,application/zip"></label>'+
-    '<p class="subtle">A importação cria novas cópias e não apaga os cadastros atuais.</p></div>'+
+    '<p class="subtle">A importação cria novas cópias e não apaga os cadastros atuais.</p><label class="field"><span>Restaurar somente MIDI e pedal (sem duplicar músicas)</span><input id="restore-controls-file" type="file" accept=".zip,application/zip"></label></div>'+
     '<details class="v13-backup-extra"><summary>Mais opções de recuperação '+icon('arrowdown')+'</summary><div class="backup-row"><button type="button" class="button ghost" id="list-history">' +
     icon('layers') + 'Versões automáticas</button><button type="button" class="button ghost" id="migrate-v2">Importar cadastros locais V2</button></div>'+
     '<div id="backup-history"></div></details><p class="backup-progress" id="backup-progress" role="status"></p>'+ 
@@ -1080,12 +1091,13 @@ async function openBackupCenter() {
     lock(async()=>{
       if(!await confirmBackupRestore(file))return;
       message.textContent='Restaurando…';
-      const result=await restoreBackup(repo,file,(n,total)=>{message.textContent='Restaurando '+n+'/'+total;});
+      const result=await restoreBackup(repo,file,(n,total)=>{message.textContent='Restaurando '+n+'/'+total;},savePreference);
       state.pedalMap=loadPedalMap();midi.settings=loadMidiSettings(localStorage);midi.cancelLearn();if(!midi.settings.enabled)midi.disconnect();updateMidiStatus();
       await refreshLocal();requestSync();
       message.textContent=result.imported+' músicas restauradas. A sincronização será feita com o Netlify.';
     });
   });
+  dialog.querySelector('#restore-controls-file').addEventListener('change',e=>{const file=e.target.files?.[0];if(!file)return;lock(async()=>{const values=await readControlBackup(file);if(!await confirmChoice('Restaurar controles?','Serão substituídos apenas os mapeamentos presentes no backup. Nenhuma música, ritmo ou WAV será duplicado.','Restaurar controles'))return;for(const [key,value] of Object.entries(values)){localStorage.setItem(key,JSON.stringify(value));savePreference(key,value);}refreshControls();requestSync();message.textContent='Mapeamentos restaurados neste aparelho. Aguarde a sincronização.';});});
   dialog.querySelector('#migrate-v2').addEventListener('click',()=>lock(async()=>{
     message.textContent='Importando rascunhos locais da versão anterior…';
     const n=await repo.importV2Demo(); await refreshLocal();requestSync();
@@ -1175,10 +1187,18 @@ async function syncCatalog() {
   syncTask = (async () => {
     try {
       const run = () => current.sync();
+      const prefs=preferences;
+      let prefError;
+      if(prefs){try{await prefs.sync(cloud);}catch(e){prefError=e;}finally{if(current===repo)refreshControls();}}
+      if(current!==repo)return;
       await (navigator.locks?.request('loops-marks-sync-' + current.owner, run) || run());
+      if(current!==repo)return;
+      await refreshLocal();
+      if(prefError)throw prefError;
+      if(prefs&&Object.values(prefs.doc.fields).some(p=>p.dirty))throw new Error('Configurações aguardando sincronização.');
+      if(!cloud.musician&&((await current.catalog()).some(s=>s.dirty||s.conflict)||(await current.libraryState()).dirty))throw new Error('Existem cadastros ou repertórios pendentes.');
       if (current !== repo) return;
       state.syncLabel = 'Sincronizado';
-      await refreshLocal();
     } catch (error) {
       if (current !== repo) return;
       if(cloud.musician && error.code===401){
@@ -1188,7 +1208,7 @@ async function syncCatalog() {
       }
       if (!cloud.session()) { stopPlayback(); repo = null; render(); return; }
       state.errors = error.code === 409 ? 'Mudança em outro aparelho. A central verificará a edição.' :
-        (error.code === 0 ? error.message : 'Dados salvos neste aparelho. A central ainda não confirmou a sincronização.');
+        (error.message || 'Dados salvos neste aparelho. A central ainda não confirmou a sincronização.');
       state.syncLabel = 'Sincronização pendente';
     } finally {
       syncTask = null;
@@ -1219,7 +1239,7 @@ function updateLiveCount(enabled,bars) {
   state.liveCountBars=bars===2?2:1;
   player.setCountControl(state.liveCountEnabled,state.liveCountBars);
   if(state.selected?.id) {
-    try {localStorage.setItem('loops-v20-count-'+(state.selected.repertoireKey||state.selected.id),JSON.stringify({enabled:state.liveCountEnabled,bars:state.liveCountBars}));} catch {}
+    try {localStorage.setItem('loops-v20-count-'+(state.selected.repertoireKey||state.selected.id),JSON.stringify({enabled:state.liveCountEnabled,bars:state.liveCountBars}));savePreference('loops-v20-count-'+(state.selected.repertoireKey||state.selected.id),{enabled:state.liveCountEnabled,bars:state.liveCountBars});} catch {}
   }
 }
 function selectLive(song,bpmOverride=null) {
@@ -1452,11 +1472,12 @@ function updatePlayback(force = false) {
       pad.classList.toggle('active', current);
       pad.classList.toggle('queued', inQueue);
       pad.classList.toggle('armed', armed);
+      if(isLayer)pad.setAttribute('aria-pressed',String(layerState!=='off')); 
       if(pad.dataset.action==='break')pad.hidden=!(player.ready&&player.song?.id===state.selected.id&&hasAudioPart(state.selected,key)&&player.song.parts?.[key]?.path===state.selected.parts?.[key]?.path&&player.buffers.has(key));
       const selectableStopped = (pad.dataset.action==='part' && player.loopKeys.has(key) && player.ready)||isLayer&&layerAvailable(key);
       pad.disabled = pad.hidden || (!playing.running && !selectableStopped) || (pad.dataset.action === 'fill' ? !player.fillExists(key) : !player.buffers.has(key)) || closing;
       const info = pad.querySelector('small');
-      if (info) info.textContent = isLayer?(layerState==='playing'?'ATIVADO · tocando':layerState==='suspended'?'ATIVADO · aguardando parte':'DESATIVADO'):pad.dataset.action==='break'?(current?'Em execução':inQueue?'Na fila':(state.selected.parts?.[key]?.bars||1)+' comp. · retorno automático'):armed ? 'Selecionada para iniciar' : current ? (playing.entryAttack ? 'Com crash' : 'Tocando') : inQueue ? 'Na fila' :
+      if (info) info.textContent = isLayer?(layerState==='playing'?'ATIVADO · tocando':layerState==='suspended'?'ATIVADO · aguardando parte':'DESATIVADO'):pad.dataset.action==='break'?(current?'Em execução':inQueue?'Na fila':breakReturnBars(state.selected,key)+' comp. · retorno automático'):armed ? 'Selecionada para iniciar' : current ? (playing.entryAttack ? 'Com crash' : 'Tocando') : inQueue ? 'Na fila' :
         pad.dataset.action === 'fill' ? 'Virada avulsa' : isCrash ? (inQueue ? 'Ataque no próximo tempo 1' : current ? 'Crash soando sobre a bateria' : 'Adicionar crash no tempo 1') : ['finish','outro'].includes(key) ? 'Finalizar' :
         (state.selected.parts?.[key + 'Entry'] ? 'Entrada + contínuo' : 'Loop contínuo');
     }
@@ -1662,6 +1683,10 @@ async function inspectWav(file, part, song) {
   const variant = part.match(/__(\d+)$/);
   const fill = slotInfo(song,fillBase(part))?.type === 'virada';
   if (variant && (!fill || Number(variant[1]) > song.beats)) throw new Error('Variação inválida para o compasso atual.');
+  if (passageTail(song,part)) {
+    const bars=Math.max(1,Math.min(64,Math.round(duration/wavMeasure(song))));
+    return {part,file,meta:{path:repo.owner+'/'+song.id+'/'+crypto.randomUUID()+'.wav',name:file.name.slice(0,150),bars,lengthBeats:bars*song.beats,durationSeconds:duration}};
+  }
   if (!ending) {
     const timing=classifyDuration(duration,song,fill);
     const beats=Math.max(1,timing.beats);
@@ -1679,7 +1704,7 @@ async function inspectWav(file, part, song) {
     }
     if (beats > (fill ? 128 : 64 * song.beats)) throw new Error(file.name + ': o trecho está longo demais.');
     return { part, file, meta: { path: repo.owner + '/' + song.id + '/' + crypto.randomUUID() + '.wav',
-      name: file.name.slice(0, 150), bars: beats/song.beats, lengthBeats: beats } };
+      name: file.name.slice(0, 150), bars: beats/song.beats, lengthBeats: beats, ...(part.startsWith('passage_')?{durationSeconds:duration}:{}) } };
   }
   return { part, file, meta: { path: repo.owner + '/' + song.id + '/' + crypto.randomUUID() + '.wav',
     name: file.name.slice(0, 150), bars: 1 } };
@@ -1822,8 +1847,10 @@ async function reuseWavInPart(target) {
     const dstEnding=['finish','outro',...ATTACK_IDS].includes(target);
     const beats=Number(source.lengthBeats||source.bars*song.beats);
     const variant=target.match(/__(\d+)$/);
-    if(srcEnding!==dstEnding){notice('Para manter a duração correta, reutilize encerramentos apenas em outros encerramentos.');return;}
-    if(srcFill!==dstFill && !dstEnding && (!Number.isInteger(beats)||(!dstFill&&beats%song.beats!==0))) {
+    const dstTail=passageTail(song,target);
+    if(!dstTail&&passageTail(song,key)&&!dstEnding&&(!Number.isFinite(source.durationSeconds)||Math.abs(source.durationSeconds-beats*60/song.bpm)>.085)){notice('Este WAV de cauda livre precisa de uma passagem com cauda ligada ou de duração compatível.');return;}
+    if(!dstTail&&srcEnding!==dstEnding){notice('Para manter a duração correta, reutilize encerramentos apenas em outros encerramentos.');return;}
+    if(!dstTail&&srcFill!==dstFill && !dstEnding && (!Number.isInteger(beats)||(!dstFill&&beats%song.beats!==0))) {
       notice('Este WAV não tem duração compatível com a parte de destino.');return;
     }
     if(variant && beats!==Number(variant[1])){notice('A variação deve conter '+variant[1]+' tempos.');return;}
@@ -2083,10 +2110,11 @@ async function handleAction(element) {
     if (!await confirmChoice('Sair da conta?', 'Para entrar novamente neste aparelho, use seu e-mail e senha.', 'Sair')) return;
     await saveBeforeLeaving();
     stopPlayback();
+    if(navigator.onLine)await syncCatalog();
     currentGeneration++;
     player.cancelPreparation();
     await cloud.signOut();
-    repo = null;
+    repo = null;preferences=null;
     state.songs = [];
     ownEdits.clear();
     state.offline.clear();
@@ -2254,6 +2282,7 @@ app.addEventListener('input', event => {
   }
   if (!state.admin || !input.validity.valid) return;
   if(input.dataset.sectionName){const entry=state.admin.customSections?.find(s=>s.id===input.dataset.sectionName);if(entry){entry.label=input.value.slice(0,52);delayedSave();}return;}
+  if(input.dataset.passageReturn){const b=state.admin.customBreaks?.find(p=>p.id===input.dataset.passageReturn);const value=Number(input.value);if(b&&Number.isInteger(value)&&value>=1&&value<=64){b.returnBars=value;delayedSave();}return;}
   if(input.dataset.breakName){const b=state.admin.customBreaks?.find(p=>p.id===input.dataset.breakName);if(b&&input.value.trim()){b.label=input.value.trim().slice(0,52);delayedSave();}return;}
   if(input.dataset.cymbal){const key=input.dataset.cymbal;state.admin.cymbals=cymbalSettings(state.admin);state.admin.cymbals[key]=key==='autoEnabled'?input.value==='true':Math.max(0,Math.min(100,Number(input.value)||0))/100;if(previewSound?.songId===state.admin.id&&previewContext)previewSound.gain.gain.setTargetAtTime(previewGain(previewSound.part,state.admin),previewContext.currentTime,.012);delayedSave();return;}
   if(input.dataset.wavCymbal){const meta=state.admin.parts?.[input.dataset.part];if(meta){meta[input.dataset.wavCymbal]=input.value;delayedSave();}return;}
@@ -2303,6 +2332,16 @@ app.addEventListener('change', event => {
   if(el.id==='live-count-bars'){
     if(player.running){el.value=String(state.liveCountBars);return;}
     updateLiveCount(state.liveCountEnabled,Number(el.value));updatePlayback(true);return;
+  }
+  if(el.dataset.passageReturn){const b=state.admin?.customBreaks?.find(p=>p.id===el.dataset.passageReturn);const n=Number(el.value);if(b&&Number.isInteger(n)&&n>=1&&n<=64){b.returnBars=n;persistDraft().catch(e=>notice(e.message));}else if(b)el.value=String(validReturnBars(b.returnBars));return;}
+  if(el.dataset.passageTail){
+    const b=state.admin?.customBreaks?.find(p=>p.id===el.dataset.passageTail);if(!b)return;
+    if(el.value==='true'){b.preserveTail=true;b.returnBars=validReturnBars(b.returnBars);}else{
+      const audio=state.admin.parts?.[b.id];
+      if(audio?.durationSeconds>0){const timing=classifyDuration(audio.durationSeconds,state.admin,false);if(!timing.ok||timing.bars>64){el.value='true';notice('Este WAV tem cauda livre. Para desligar a cauda, use um WAV de compassos completos ou remova o arquivo antes de trocar.');return;}audio.bars=timing.bars;audio.lengthBeats=timing.beats;}
+      delete b.preserveTail;delete b.returnBars;
+    }
+    persistDraft().then(()=>render()).catch(e=>notice(e.message));return;
   }
   if(el.dataset.folderName){
     const f=state.libraryData.folders.find(x=>x.id===el.dataset.folderName);
@@ -2418,7 +2457,7 @@ window.addEventListener('storage', event => {
     stopPlayback();
     currentGeneration++;
     player.cancelPreparation();
-    repo = null;
+    repo = null;preferences=null;
     state.songs = [];
     ownEdits.clear();
     state.offline.clear();
@@ -2452,6 +2491,8 @@ async function boot() {
   await cloud.initialize();
   if (cloud.enabled && !cloud.session()) { render(); return; }
   repo = new Repository(cloud);
+  preferences=cloud.enabled&&!cloud.musician?new PreferenceSync(localStorage,repo.owner):null;
+  if(preferences){preferences.hydrate();refreshControls();}
   render();
   await refreshLocal();
   if (state.view === 'admin' && !state.admin) {

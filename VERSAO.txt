@@ -1,4 +1,4 @@
-Loops Marks Pro V28
-Base: V27 preservada.
-Condução e chimbal aberto no refrão; chimbal fechado nas partes leves. Três volumes individuais no editor e canal Pratos comum. Viradas adaptativas imediatas e Palco sem duplicação de viradas por parte. Backup e MIDI/pedal integrados.
-Validação: 171/171 testes locais. Build Netlify e teste com áudio real pendentes.
+Loops Marks Pro V30
+Base: V29 preservada.
+Passagens: cauda sonora independente do retorno musical; WAV inteiro sem cortar no retorno, configuração de 1 a 64 compassos, armazenamento e backup.
+Validação: 192/192 testes locais. Build Netlify e testes reais pendentes.

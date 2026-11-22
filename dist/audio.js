@@ -1,5 +1,5 @@
 import { MIX_IDS, normalizeMix, effectiveGain, mixChannel } from './mixer.js';
-import { PARTS, DEFAULT_FILLS, FILL_IDS, ENTRY_OF, BASE_OF_ENTRY, fillBase, fillVariantId, firstPlayablePart, playableParts, extraSections, CRASH_STOPS, audioEntries, ATTACK_IDS, extraBreaks, cymbalSettings, containsCymbal, automaticCrashFor, partLabel, LAYER_IDS, layerPartEligible, layerVolume } from './data.js';
+import { PARTS, DEFAULT_FILLS, FILL_IDS, ENTRY_OF, BASE_OF_ENTRY, fillBase, fillVariantId, firstPlayablePart, playableParts, extraSections, CRASH_STOPS, audioEntries, ATTACK_IDS, extraBreaks, cymbalSettings, containsCymbal, automaticCrashFor, partLabel, LAYER_IDS, layerPartEligible, layerVolume, passageTail, breakReturnBars } from './data.js';
 import { demoBuffer } from './demo.js';
 import { meterOf } from './meter.js';
 
@@ -144,8 +144,9 @@ export class Player {
       const decoded = song.demo ? audio : await context.decodeAudioData(await audio.arrayBuffer())
         .catch(() => { throw new Error('Não foi possível ler o WAV de ' + this.label(key) + '.'); });
       if (this.preparation !== version) return false;
-      const beats = partBeats(part, song.beats);
-      if (!ENDINGS.has(key) && !ATTACKS.has(key)) {
+      const tail = passageTail(song,key);
+      const beats = tail ? breakReturnBars(song,key)*song.beats : partBeats(part, song.beats);
+      if (!ENDINGS.has(key) && !ATTACKS.has(key) && !tail) {
         if (!Number.isInteger(beats) || beats < 1) {
           throw new Error(this.label(key) + ': configure a duração em tempos inteiros.');
         }
@@ -162,13 +163,13 @@ export class Player {
             ' s. Para ' + beats + ' pulsos em ' + meterOf(song) + ' deve medir ' + expected.toFixed(2) + ' s. Confira o BPM, o compasso e o corte na DAW.');
         }
       }
-      const target = (ENDINGS.has(key) || ATTACKS.has(key)) ? decoded.duration * ratio : beats * (60 / bpm);
+      const target = (ENDINGS.has(key) || ATTACKS.has(key) || tail) ? decoded.duration * ratio : beats * (60 / bpm);
       const frames = Math.max(1, Math.round(target * context.sampleRate));
       const adjusted = Math.abs(ratio - 1) < 0.00001
         ? decoded : await this.stretch(decoded, frames, decoded.length);
       if (this.preparation !== version) return false;
       const buffer = adjusted.length >= frames ? adjusted : this.copyWithPadding(adjusted, frames);
-      buffers.set(key, { buffer, seconds: (ENDINGS.has(key) || ATTACKS.has(key)) ? buffer.duration : target, beats });
+      buffers.set(key, { buffer, seconds: (ENDINGS.has(key) || ATTACKS.has(key) || tail) ? buffer.duration : target, beats });
     }
     this.initialPart = (song.sequence||[]).map(s=>s.part).find(k=>this.loopKeys.has(k)&&buffers.has(k)) || firstPlayablePart(song);
     this.armedPart = null;
@@ -205,7 +206,7 @@ export class Player {
       worker.postMessage({ channels, target, sampleRate: input.sampleRate, originalFrames }, channels);
     });
   }
-  segment(key, at, { offsetBeats = 0, lengthBeats = null } = {}) {
+  segment(key, at, { offsetBeats = 0, lengthBeats = null, returnBeats = null } = {}) {
     const meta = this.buffers.get(key);
     if (!meta) throw new Error('Áudio não encontrado: ' + this.label(key));
     if (!Number.isFinite(at) || at < 0) throw new Error('Tempo de entrada inválido. Confira a contagem e a introdução.');
@@ -225,9 +226,10 @@ export class Player {
     }
     if (source.loop) source.start(at, 0);
     else source.start(at, offset, seconds);
-    const end = source.loop ? Infinity : at + seconds;
+    const audioEnd = source.loop ? Infinity : at + seconds;
+    const end = returnBeats===null ? audioEnd : at+returnBeats*this.beatSeconds;
     const previous = this.segments.findLast(s=>s.at<=at+EPS&&this.loopKeys.has(this.baseFor(s.key)));
-    const segment = { key, at, source, gate, end, naturalEnd: end, offsetBeats, lengthBeats, originPart:previous?this.baseFor(previous.key):null, originKey:previous?.key };
+    const segment = { key, at, source, gate, end, naturalEnd: end, ...(returnBeats!==null?{tailAudioEnd:audioEnd}:{}), offsetBeats, lengthBeats, originPart:previous?this.baseFor(previous.key):null, originKey:previous?.key };
     source.onended = () => { try { source.disconnect(); gate.disconnect(); } catch {} };
     this.segments.push(segment);
     return segment;
@@ -235,7 +237,7 @@ export class Player {
   autoCrashEnabled() {return this.autoCrashOverride??cymbalSettings(this.song).autoEnabled;}
   scheduleAutoCrash(dest,at,fillKey) {
     const config=cymbalSettings(this.song);
-    if(fillKey && !ENDINGS.has(dest) && this.autoCrashEnabled() && this.loopKeys.has(dest) &&
+    if(!ENDINGS.has(dest) && this.autoCrashEnabled() && this.loopKeys.has(dest) &&
       !this.entryFor(dest) && !containsCymbal(this.song.parts?.[dest],'crash') && !containsCymbal(this.song.parts?.[fillKey],'crash')) {
       const key=automaticCrashFor(this.song,dest,k=>this.buffers.has(k));
       if(key)this.attack(key,at,config.autoVolume,true);
@@ -247,12 +249,12 @@ export class Player {
     if(this.running){
       const now=this.ctx.currentTime;
       if(!this.autoCrashOverride){for(const e of this.overlays.filter(e=>e.automatic&&e.at>now+EPS))this.discard(e);this.overlays=this.overlays.filter(e=>!e.automatic||e.at<=now+EPS);}
-      else if(this.pending?.entry>now+LEAD&&this.isFill(this.pending.fill||'none'))this.scheduleAutoCrash(this.pending.dest,this.pending.entry,this.pending.fill);
+      else if(this.pending?.entry>now+LEAD)this.scheduleAutoCrash(this.pending.dest,this.pending.entry,this.pending.fill);
     }
     this.onState?.();return true;
   }
-  scheduleDestination(dest,at,fillKey=null) {
-    this.scheduleAutoCrash(dest,at,fillKey);
+  scheduleDestination(dest,at,fillKey=null,attackOnEntry=Boolean(fillKey)) {
+    if(attackOnEntry)this.scheduleAutoCrash(dest,at,fillKey);
     if (ENDINGS.has(dest)) return this.segment(dest, at);
     const attack = this.entryFor(dest);
     if (attack) {
@@ -323,7 +325,7 @@ export class Player {
         }
       }
       if (selected && selected !== 'intro') {
-        this.scheduleDestination(selected, openingAt);
+        this.scheduleDestination(selected, openingAt,null,true);
         this.sequenceAuto = false;
       } else if (this.buffers.has('intro')) {
         const intro = this.segment('intro', openingAt);
@@ -350,7 +352,7 @@ export class Player {
         return;
       }
     }
-    this.scheduleDestination(this.initialPart || 'a', intro.naturalEnd,fill);
+    this.scheduleDestination(this.initialPart || 'a', intro.naturalEnd,fill,true);
   }
   current(now = this.ctx.currentTime) {
     return this.segments.findLast(s => s.at <= now && s.end > now) || null;
@@ -408,7 +410,7 @@ export class Player {
     if (this.pending && now >= this.pending.changeAt - .002 && !ENDINGS.has(dest)) {
       if(!manual&&this.pending.entry>now+LEAD&&extraBreaks(this.song).some(p=>p.id===this.pending.fill)&&this.loopKeys.has(dest)){
         const at=this.pending.entry;for(const seg of this.segments.filter(seg=>seg.at>=at-EPS))this.discard(seg);
-        this.segments=this.segments.filter(seg=>seg.at<at-EPS);this.scheduleDestination(dest,at);this.pending.dest=dest;this.syncRide();return true;
+        this.segments=this.segments.filter(seg=>seg.at<at-EPS);for(const effect of this.overlays.filter(e=>e.automatic&&e.at>=at-EPS))this.discard(effect);this.overlays=this.overlays.filter(e=>!e.automatic||e.at<at-EPS);this.scheduleDestination(dest,at,this.pending.fill,true);this.pending.dest=dest;this.syncRide();return true;
       }
       return false;
     }
@@ -442,7 +444,7 @@ export class Player {
     if (fill) this.segment(fill, changeAt, {
       offsetBeats: plan.offsetBeats, lengthBeats: plan.fillBeats,
     });
-    this.scheduleDestination(dest, entry,fill);
+    this.scheduleDestination(dest, entry,fill,true);
     this.syncRide();
     this.pending = { from, dest, fill, family, manual: Boolean(chosenManual), changeAt, entry,
       fillBeats: plan?.fillBeats || 0, offsetBeats: plan?.offsetBeats || 0 };
@@ -563,8 +565,9 @@ export class Player {
     this.clearPlan();const at=nextBoundary(this.epoch,this.bar,now);
     const current=this.current(now);this.silence(current,at);
     if(Number.isFinite(current.naturalEnd)&&current.naturalEnd<at-EPS){const bridge=this.segment(from,current.naturalEnd);this.silence(bridge,at);}
-    const section=this.segment(key,at), entry=section.naturalEnd;
-    this.scheduleDestination(dest,entry);this.pending={from,dest,fill:key,changeAt:at,entry,fillBeats:this.buffers.get(key).beats,offsetBeats:0};
+    const returnBeats=passageTail(this.song,key)?breakReturnBars(this.song,key)*this.song.beats:null;
+    const section=this.segment(key,at,{returnBeats}), entry=section.naturalEnd;
+    this.scheduleDestination(dest,entry,key,true);this.pending={from,dest,fill:key,changeAt:at,entry,fillBeats:returnBeats??this.buffers.get(key).beats,offsetBeats:0};
     this.syncRide();return true;
   }
   fill(key) {
@@ -665,7 +668,8 @@ export class Player {
     this.tickSequence(this.ctx.currentTime);
     const now = this.ctx.currentTime;
     this.segments = this.segments.filter(seg => {
-      if (seg.end > now - 0.08) return true;
+      // A passagem deixa de ser a parte ativa no retorno, mas seu WAV permanece audível.
+      if (Math.max(seg.end,seg.tailAudioEnd??0) > now - 0.08) return true;
       this.discard(seg);
       return false;
     });
@@ -679,7 +683,7 @@ export class Player {
       return { running: false, beat: -1 };
     }
     const beats = Math.max(0, (now - this.epoch) * this.bpm / 60);
-    const activeDuration = this.buffers.get(active?.key)?.seconds || this.bar;
+    const activeDuration = active?.tailAudioEnd!==undefined ? active.naturalEnd-active.at : (this.buffers.get(active?.key)?.seconds || this.bar);
     const activePosition = active && Number.isFinite(active.at) && Number.isFinite(activeDuration) && activeDuration>0
       ? ((Math.max(0, now-active.at) % activeDuration) / activeDuration) : 0;
     return { running: true, beat: Math.floor(beats) % this.song.beats,
