@@ -1,0 +1,171 @@
+/* Loops Marks Pro V36 — NEON BLUE / INDIGO / MAGENTA. UI only. */
+:root {
+  color-scheme:dark;
+  --bg:#080d22;--side:#101632;--card:#151c3b;--inset:#0d1531;
+  --line:#303f71;--line-soft:#28335d;--text:#f3f5ff;--muted:#adbbdb;
+  --green:#a4a2ff;--green-deep:#202556;--gold:#ffd087;--red:#ff9fac;
+}
+body {background:radial-gradient(ellipse 62% 31% at 83% -12%,#323d865e,transparent 78%),var(--bg);}
+button:focus-visible,input:focus-visible,select:focus-visible {outline-color:#a4a2ff;}
+.button.primary {background:#898aff;border-color:#adaaff;color:#101434;}
+.button.primary:hover {background:#b5b3ff;}
+.mark {background:#898aff;color:#141b48;}
+.chip.ready {background:#253262;border-color:#6479db;color:#bec9ff;}
+.chip.active {background:#718dff;border-color:#93a8ff;color:#091532;}
+.nav-link[aria-current="page"] {color:#c1c5ff;background:#252d61;border-color:#6976c0;}
+.stage-shell {background:radial-gradient(ellipse 58% 30% at 60% -8%,#443c8b6b,transparent),#080d22;}
+.stage-topbar {background:#101735f5;border-color:#3e4f85;}
+.stage-deck .frame {background:linear-gradient(155deg,#151f43,#101831);border-color:#35477d;box-shadow:0 5px 22px #04071940;}
+.stage-status {background:linear-gradient(105deg,#293e85,#282452);border-color:#6075cb;}
+.stage-status-label {color:#c5caff;}
+.stage-status-side span {color:#e0e5ff;}
+.stage-status.in-queue {background:linear-gradient(100deg,#483b84,#343667);border-color:#efad69;}
+.stage-topbar .stage-tools .icon-btn {color:#cfdbff;background:#253467;border-color:#5779ba;}
+.stage-topbar .stage-tools .icon-btn:hover,
+.stage-topbar .stage-tools .icon-btn:focus-visible {color:#fff;background:#4055a0;border-color:#b2baff;}
+.stage-deck .wave-box {background:#0a1230;border-color:#394d82;}
+.stage-deck .mode-toggle {color:#dbe3ff;background:#253365;border-color:#6377cd;}
+.stage-deck .mode-toggle[aria-pressed="true"] {color:#e5eaff;background:#3e377f;border-color:#a695ed;}
+.stage-deck .pulse.on {background:#8994ff;border-color:#b4b9ff;color:#12173d;}
+.stage-deck #stop-btn {background:#51273f;border-color:#a95778;color:#fff;}
+.stage-deck .pad.active,.stage-deck .pad.armed {box-shadow:inset 0 0 0 2px #f3f4ff,0 0 0 2px #8493ff;border-color:#fff;filter:brightness(1.18);}
+.stage-deck .pad.queued {box-shadow:inset 0 0 0 2px #ffcf7b;border-color:#ffe3a6;}
+.stage-deck .live-sections .pad[data-action="part"]:not(.final),
+.stage-deck .live-sections .pad[data-action="restart-intro"] {
+  color:#fff;
+  background:linear-gradient(148deg,hsl(var(--v36-hue,218) 72% calc(var(--v36-light,30%) + 7%)),hsl(var(--v36-hue,218) 64% var(--v36-light,30%)));
+  border:1px solid hsl(var(--v36-hue,218) 85% 68%);
+}
+.stage-deck .live-sections .pad[data-part="intro"] {--v36-hue:243;--v36-light:32%;}
+.stage-deck .live-sections .pad[data-part="chorus"]:not(.final) {
+  background:linear-gradient(145deg,#ed3889,#8f1758);
+  border:2px solid #ff99d4;
+  color:#fff;
+  box-shadow:inset 0 0 0 1px #ffd1e9,0 0 15px #e12e7655;
+}
+.stage-deck .live-sections .pad[data-part="chorus"]:not(.final) strong {color:#fff;font-weight:850;}
+.stage-deck .live-sections .pad[data-action="fill"] {background:linear-gradient(140deg,#35265e,#242050);border-color:#6c60bf;}
+.stage-deck .live-sections .pad[data-action="crash"] {background:linear-gradient(140deg,#594022,#3e2841);border-color:#ba805a;}
+.stage-deck .live-sections .pad[data-action$="toggle"] {background:linear-gradient(140deg,#303b77,#282854);border-color:#778dd6;}
+.stage-deck .live-sections .pad.final.finish {background:#7a481b;border-color:#f0ae63;color:#fff4dc;}
+.stage-deck .live-sections .pad.final:not(.finish) {background:#742b4e;border-color:#ed87ba;color:#fff;}
+.stage-deck .pad strong {color:#fff;}
+.stage-deck .pad small {color:#d6defc;}
+.mixer-panel {background:#111a3c;border-color:#6473b6;}
+.mixer-channel {background:#1b2851;border-color:#45568e;}
+.mixer-channel:first-child {background:#30356e;border-color:#8492e1;}
+.mixer-heading>div strong,.mixer-channel output {color:#c7d1ff;}
+.repertoire-drawer {background:#121a38;border-color:#586ba2;}
+
+/* V36: uma tela de palco estável no Safari iOS, sem rolagem do documento.
+   Se houver mais pads do que a área mínima tocável permite, APENAS
+   o painel de pads rola; não reduzir controles abaixo de 44 px. */
+@media(max-width:900px) {
+  html:has(.stage-shell),body:has(.stage-shell) {height:100%;overflow:hidden;overscroll-behavior:none;}
+  .stage-shell {height:100dvh;max-height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden;max-width:100vw;}
+  .stage-topbar {
+    flex:0 0 auto;position:relative;top:auto;z-index:30;
+    display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto;
+    gap:3px 8px;height:auto;max-height:none;min-height:0;
+    padding:calc(5px + env(safe-area-inset-top,0px)) max(9px,env(safe-area-inset-right,0px)) 5px max(9px,env(safe-area-inset-left,0px));
+    box-shadow:0 3px 16px #06091a77;
+  }
+  .stage-topbar .stage-top-left {display:none;}
+  .stage-topbar .stage-brand {grid-column:1/-1;grid-row:1;position:static;transform:none;justify-content:flex-start;gap:5px;min-width:0;margin:0;}
+  .stage-topbar .stage-brand .mark {display:grid;width:24px;height:24px;border-radius:7px;}
+  .stage-topbar .stage-brand .mark svg {width:17px;height:17px;}
+  .stage-topbar .brand strong {font-size:.79rem;white-space:nowrap;}
+  .stage-topbar .brand small {font-size:.57rem;line-height:1;}
+  .stage-topbar .stage-tools {grid-column:1/-1;grid-row:2;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px;margin:0;width:100%;min-width:0;}
+  .stage-topbar .stage-tools .icon-btn {width:100%;min-width:0;height:45px;min-height:44px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:0;padding:3px 0 1px;border-radius:8px;}
+  .stage-topbar .stage-tools .icon-btn svg {width:19px;height:19px;}
+  .stage-topbar .stage-tools .icon-btn::after {font-size:9px;line-height:1.18;font-weight:740;white-space:nowrap;color:inherit;}
+  .stage-topbar [data-action="pedal-setup"]::after {content:'Pedal';}
+  .stage-topbar [data-action="midi-setup"]::after {content:'MIDI';}
+  .stage-topbar [data-action="audio-setup"]::after {content:'Áudio';}
+  .stage-topbar [data-action="mixer-open"]::after {content:'Mixer';}
+  .stage-topbar [data-action="stage-fullscreen"]::after {content:'Tela cheia';}
+  .stage-topbar [data-action="open-library"]::after {content:'Repertório';}
+  .stage-main {flex:1 1 auto;min-height:0;overflow:hidden;margin:0 auto;padding:4px 6px max(5px,env(safe-area-inset-bottom,0px));width:100%;max-width:100%;}
+  .stage-main .live-workspace {height:100%;min-height:0;}
+  .stage-deck {height:100%;min-height:0;display:flex;flex-direction:column;gap:5px;}
+  .stage-deck>.frame:first-child {flex:0 0 auto;min-width:0;padding:7px 8px;border-radius:9px;}
+  .stage-deck .deck-header {margin:0 0 5px;gap:6px;}
+  .stage-deck .deck-header h2 {font-size:.92rem;max-width:100%;line-height:1.15;}
+  .stage-deck .track-meta {font-size:.62rem;max-width:100%;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;}
+  .stage-deck .chip {font-size:.57rem;padding:3px 5px;max-width:43%;overflow:hidden;text-overflow:ellipsis;}
+  .stage-deck .chip svg {height:13px;width:13px;}
+  .stage-deck .stage-status {min-height:39px;max-height:51px;gap:5px;padding:5px 7px;border-radius:7px;}
+  .stage-deck .stage-status-label {font-size:.50rem;letter-spacing:.09em;}
+  .stage-deck .stage-status-main strong {font-size:1rem;}
+  .stage-deck .stage-status-side span,.stage-deck .stage-status-side small {font-size:.59rem;line-height:1.1;}
+  .stage-deck .wave-box {display:none;}
+  .stage-deck .transport {margin-top:5px;gap:5px;grid-template-columns:minmax(70px,1fr) auto minmax(32px,1fr);}
+  .stage-deck .tempo {gap:2px;min-width:0;}
+  .stage-deck .tempo .icon-btn {height:33px;width:31px;min-width:29px;}
+  .stage-deck .bpm-center {min-width:32px;}
+  .stage-deck .bpm-center strong {font-size:1rem;}
+  .stage-deck .transport-actions .button.primary {min-height:39px;padding:5px 9px;font-size:.78rem;}
+  .stage-deck .transport-actions .icon-btn {width:37px;height:39px;}
+  .stage-deck .meter {min-width:0;max-width:100%;overflow-x:auto;scrollbar-width:none;gap:2px;justify-content:flex-end;}
+  .stage-deck .meter::-webkit-scrollbar {display:none;}
+  .stage-deck .pulse {min-width:16px;width:18px;height:22px;font-size:.6rem;}
+  .stage-deck .deck-line {margin-top:4px;min-height:0;}
+  .stage-deck .player-message {font-size:.61rem;line-height:1.16;max-height:2.4em;overflow:hidden;}
+  .stage-deck .queue-tools {display:flex;gap:4px;margin-top:4px;justify-content:space-between;flex-wrap:wrap;}
+  .stage-deck .mode-toggle {min-height:31px;padding:5px 6px;font-size:.59rem;gap:4px;white-space:nowrap;}
+  .stage-deck .mode-toggle svg {width:13px;height:13px;}
+  .stage-deck .live-count-bars {gap:3px;font-size:.58rem;min-height:31px;}
+  .stage-deck .live-count-bars select {min-height:30px;padding:4px;font-size:.64rem;}
+  .stage-deck .pedal-live-feedback:empty {display:none;}
+
+  /* O painel de performance usa uma única matriz: partes, viradas, crashes,
+     chimbais, contratempos, passagens e finais, mantendo seus atributos e ações. */
+  .stage-deck .live-sections {flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
+    display:grid;grid-template-columns:repeat(var(--v36-columns,4),minmax(0,1fr));grid-auto-flow:row;
+    align-content:start;gap:5px;padding:7px;border-radius:10px;scrollbar-width:thin;scrollbar-color:#6675b3 #101934;}
+  .stage-deck .live-sections .pads,
+  .stage-deck .live-sections .live-break-group,
+  .stage-deck .live-sections #live-ride,
+  .stage-deck .live-sections #live-crashes,
+  .stage-deck .live-sections #live-auto-crash {display:contents;}
+  .stage-deck .live-sections .section-head,
+  .stage-deck .live-sections .v19-opening-hint,
+  .stage-deck .live-sections .note {display:none;}
+  .stage-deck .live-sections .pad {height:var(--v36-pad-height,52px);min-height:48px;max-height:64px;min-width:0;
+    padding:5px 4px;gap:1px;border-radius:8px;justify-content:center;align-items:center;text-align:center;touch-action:manipulation;}
+  .stage-deck .live-sections .pad svg {display:none;}
+  .stage-deck .live-sections .pad strong {width:100%;font-size:clamp(.61rem,2.2vw,.76rem);font-weight:780;line-height:1.12;
+    display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;}
+  .stage-deck .live-sections .pad small {display:none;}
+  .stage-deck .live-sections #auto-crash-toggle {min-width:0;min-height:var(--v36-pad-height,52px);height:var(--v36-pad-height,52px);white-space:normal;
+    justify-content:center;text-align:center;padding:3px;font-size:.60rem;line-height:1.1;}
+  .stage-deck .live-sections #auto-crash-toggle svg {display:none;}
+  .stage-deck .live-sections .live-map-toolbar {grid-column:1/-1;min-width:0;min-height:40px;margin:2px 0;}
+  .stage-deck .live-sections .live-map-toolbar .button {min-height:33px;}
+  .stage-shell ~ .mixer-panel {top:calc(85px + env(safe-area-inset-top,0px));max-height:calc(100dvh - 91px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));}
+}
+@media(max-width:359px) {
+  .stage-topbar .stage-tools {gap:3px;}
+  .stage-topbar .stage-tools .icon-btn::after {font-size:8px;}
+  .stage-deck .deck-header h2 {font-size:.82rem;}
+  .stage-deck .stage-status-side {max-width:42%;}
+  .stage-deck .mode-toggle {font-size:.55rem;}
+}
+@media(max-height:620px) and (max-width:900px) {
+  .stage-topbar {gap:2px;padding-top:calc(2px + env(safe-area-inset-top,0px));padding-bottom:3px;}
+  .stage-topbar .stage-tools .icon-btn {height:44px;}
+  .stage-deck .deck-line {display:none;}
+  .stage-deck .stage-status-label {display:none;}
+  .stage-deck .stage-status {min-height:32px;}
+  .stage-deck .live-sections {padding:4px;gap:4px;}
+}
+@media(min-width:901px) {
+  .stage-deck .live-sections .pad {transition:filter .12s,border-color .12s;}
+}
+@media(prefers-reduced-motion:reduce) {.stage-deck .live-sections .pad {transition:none;}}
+/* Retorno à Central continua acessível em computadores/tablets administrativos. */
+@media(max-width:900px) {
+  .stage-topbar [data-stage-back] {position:absolute;top:calc(4px + env(safe-area-inset-top,0px));left:max(9px,env(safe-area-inset-left,0px));z-index:3;width:34px;height:29px;min-height:29px;}
+  .stage-topbar:has([data-stage-back]) .stage-brand {padding-left:41px;}
+}

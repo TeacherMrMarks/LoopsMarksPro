@@ -1,6 +1,27 @@
-# Loops Marks Pro — V34
+# Loops Marks Pro — V36
 
-Base: V33. Preservação dos identificadores WAV, dados, mapeamentos MIDI/pedal e chaves anteriores de armazenamento.
+Base: V35 preservada (motor Web Audio V34, serviços Netlify, armazenamento, WAVs, MIDI, pedal, mixer e backup).
+
+## Novidades V36 — Palco compacto e identidade azul/índigo
+
+- **Nova identidade visual:** fundo azul-noturno/índigo, botões azuis, violetas, âmbar e vinho, sem a paleta verde anterior. Ícone e PWA atualizados; funções permanecem iguais.
+- **Partes com cores próprias:** cada parte recebe um tom por ordem de exibição, com destaque magenta fixo para o Refrão, sem mudar os IDs musicais.
+- **Cabeçalho visível no iPhone:** seis atalhos com rótulos (Pedal, MIDI, Áudio, Mixer, Tela cheia, Repertório), sempre no topo do palco. Área segura iOS considerada.
+- **Palco em uma tela:** o documento não rola no celular. O player ocupa a faixa superior, e os botões aparecem em matriz responsiva de até 6 colunas. Altura mínima de 48 px. Para mais itens do que cabe com toque seguro, a rolagem acontece somente dentro do painel de botões, mantendo os atalhos e o transport sempre visíveis.
+- **Tela horizontal:** 6 colunas quando a largura comporta; menor altura pode exigir rolagem interna do painel, nunca reduzir o botão abaixo de 48 px.
+- **Preservação:** `audio.js`, `audio-output.js`, `data.js`, `backup.js`, `preferences.js`, `midi.js`, `mixer.js` e funções Netlify estão byte a byte iguais aos do ZIP V35. Layout adaptativo isolado em `dist/stage-fit.js`; estilo V36 em `dist/v36-ui.css`.
+- **Testes:** 233/233 testes automatizados Node aprovados; renderização visual com Chromium em 320, 375, 393, 414 e 844 px. Sem validação em iPhone físico ou no Netlify antes de publicar.
+
+## Histórico V35
+
+Base: V34. Preservação dos identificadores WAV, dados, mapeamentos MIDI/pedal e chaves anteriores de armazenamento.
+
+## Novidades V35 — Palco mobile
+
+- Cabeçalho do Palco em duas linhas até 900 px, com seis atalhos disponíveis: pedal, MIDI, áudio, mixer, tela cheia e repertório. Área segura do iOS respeitada; cabeçalho permanece acessível durante a rolagem. O acesso administrativo continua restrito conforme a V34.
+- A contagem mantém o título principal, sem repetir a descrição lateral; uma próxima parte agendada continua visível. As descrições laterais longas passam a quebrar linha.
+- Painel do mixer adaptado à altura do cabeçalho mobile. Motor, saída de áudio iOS, dados, sincronização, backup e permissões preservados.
+- Validação: 228/228 testes Node. Verificação de layout em Chromium com HTML de teste (320, 375, 393, 844 e 1280 px, com/sem acesso administrativo), incluindo cabeçalho durante rolagem e painel do mixer. A navegação do aplicativo completo foi bloqueada pelo ambiente. Build local não executado por falta de esbuild; Safari/iPhone e Netlify ainda precisam ser validados.
 
 ## Novidades V34 — Recuperação de áudio no iPhone
 

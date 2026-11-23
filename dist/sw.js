@@ -1,6 +1,6 @@
-const VERSION = 'loops-marks-v34-ios-recovery-20261122';
+const VERSION = 'loops-marks-b64da250bb52';
 const SHELL = [
-  './', './index.html', './styles.css', './app.js', './netlify-client.js', './backup.js', './data.js', './library-model.js',
+  './', './index.html', './styles.css', './v36-ui.css', './stage-fit.js', './app.js', './netlify-client.js', './backup.js', './data.js', './library-model.js',
   './access-mode.js', './audio-output.js', './audio-test.wav', './preferences.js', './midi.js', './mixer.js', './audio.js', './meter.js', './stretch.js', './demo.js', './importer.js', './manifest.webmanifest',
   './icon.svg', './icon-192.png', './icon-512.png',
 ];

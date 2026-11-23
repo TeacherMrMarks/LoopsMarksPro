@@ -24,6 +24,6 @@ test('V17: repertório cria entrada com nome de música e BPM independente do ri
   assert.match(app,/selectLive\(repertoireSong\(entry,rep\.id\),tempo\)/);
 });
 test('V17: versão e publicador permanecem configurados',()=>{
-  assert.match(app,/const APP_VERSION = 'V34'/);
+  assert.match(app,/const APP_VERSION = 'V36'/);
   assert.match(readFileSync(new URL('../netlify.toml',import.meta.url),'utf8'),/publish = "dist"/);
 });

@@ -11,8 +11,9 @@ import { emptyLibrary, cleanLibrary, songKind, inFolder, repertoireEntries, repe
 
 import { PreferenceSync, PEDAL_KEY } from './preferences.js';
 import { MIDI_KEY, MidiController, loadMidiSettings, saveMidiSettings } from './midi.js';
+import { mountStageFit } from './stage-fit.js';
 
-const APP_VERSION = 'V34';
+const APP_VERSION = 'V36';
 // O link do músico carrega exclusivamente o Modo Palco Pro.
 const musicianLink = musicianRoute(new URL(location.href).search);
 const phoneOnly = phoneDevice(navigator);
@@ -289,6 +290,14 @@ function toggleLibrary(open) {
   if(open)drawer.querySelector('#search')?.focus();else trigger?.focus();
 }
 
+// V36: identidade visual de cada parte; sem alterar IDs, destinos, WAVs ou MIDI.
+const stagePartHues = [216, 266, 24, 342, 41, 289, 198, 246, 313, 12, 231, 325, 255, 34, 278, 205];
+function stagePartTheme(part, index) {
+  if (part.id === 'chorus') return ' style="--v36-hue:316;--v36-light:36%"';
+  const hue = stagePartHues[index % stagePartHues.length];
+  const light = 27 + (Math.floor(index / stagePartHues.length) % 5) * 3;
+  return ' style="--v36-hue:' + hue + ';--v36-light:' + light + '%"';
+}
 function deck() {
   const song = state.selected;
   if (!song) return '<div class="frame blank"><h2>Seu repertório começa aqui</h2><p>' +
@@ -339,8 +348,8 @@ function deck() {
     '<label class="live-count-bars" for="live-count-bars" title="Compassos da contagem inicial">Compassos <select id="live-count-bars" aria-label="Compassos da contagem inicial" '+(!countPresent?'disabled':'')+'><option value="1" '+(state.liveCountBars===1?'selected':'')+'>1 comp.</option><option value="2" '+(state.liveCountBars===2?'selected':'')+'>2 comp.</option></select></label>'+
     '<span id="pedal-status-live" class="pedal-live-feedback" aria-live="polite"></span></div></section>' +
     '<section class="frame live-sections"><div class="section-head"><h2>Partes da música</h2><span>Entrada no tempo 1</span></div>' +
-    '<div class="pads">' + (hasAudioPart(song,'intro')?'<button class="pad" type="button" data-action="restart-intro" data-part="intro" disabled>'+icon('spark')+'<strong>'+escape(partLabel(song,'intro'))+'</strong><small>Iniciar pela abertura</small></button>':'') + parts.map(part => '<button type="button" class="pad" data-action="part" data-part="' + part.id +
-    '" disabled>' + icon(part.icon) + '<strong>' + escape(part.label) + '</strong><small>' + (song.parts?.[part.id + 'Entry'] ? 'Entrada + contínuo' : 'Loop contínuo') + '</small></button>').join('') +
+    '<div class="pads">' + (hasAudioPart(song,'intro')?'<button class="pad" type="button" data-action="restart-intro" data-part="intro" disabled>'+icon('spark')+'<strong>'+escape(partLabel(song,'intro'))+'</strong><small>Iniciar pela abertura</small></button>':'') + parts.map((part, index) => '<button type="button" class="pad" data-action="part" data-part="' + part.id +
+    '"' + stagePartTheme(part, index) + ' disabled>' + icon(part.icon) + '<strong>' + escape(part.label) + '</strong><small>' + (song.parts?.[part.id + 'Entry'] ? 'Entrada + contínuo' : 'Loop contínuo') + '</small></button>').join('') +
     '</div><p class="v19-opening-hint" id="opening-path">'+icon('music')+' <strong>Abertura:</strong> '+escape(openingLabel)+'</p>' + (song.kind!=='rhythm'&&(song.sequence||[]).length ? '<div class="live-map-toolbar"><span id="live-map-status">Mapa musical · '+escape(song.sequenceMode==='automatic'?'Automático':'Assistido')+'</span>'+iconButton('map-previous','Etapa anterior','arrowup')+button('map-next','Próxima parte','arrowdown','ghost')+'</div>':'') + (manual.length ? '<div class="section-head live-subsection"><h2>Viradas disponíveis</h2><span>Retorna ao loop</span></div>' +
     '<div class="pads manual-pads">' + manual.map(part => '<button type="button" class="pad fill-pad" data-action="fill" data-part="' +
     part.id + '" disabled>' + icon(part.icon) + '<strong>' + escape(part.label) + '</strong><small>Virada avulsa</small></button>').join('') +
@@ -708,8 +717,12 @@ function render() {
   if(mixerOpen&&mixerSong())showMixer();
   setupEditorTabs();
   updateLibrary();
-  if (state.view === 'live') updatePlayback(true);
-  else updateSaveLabel();
+  if (state.view === 'live') {
+    updatePlayback(true);
+    mountStageFit(app.querySelector('.stage-shell'));
+    // A posição de rolagem da V35 não pode deixar o cabeçalho atrás da barra do iOS.
+    window.scrollTo?.(0, 0);
+  } else { mountStageFit(null); updateSaveLabel(); }
 }
 
 function normalized(value) {
@@ -1437,12 +1450,17 @@ function updatePlayback(force = false) {
       (player.ready ? player.label(playing.armed || player.initialPart || 'a') : 'Aguardando');
     const mode = !playing.running ? (player.ready ? (playing.armed?'Parte selecionada · Pronto para iniciar':'Pronto para iniciar') : 'Preparando áudio') :
       extraBreaks(state.selected).some(p=>p.id===playing.active)?'Trecho em execução · retorno automático':isFill ? 'Virada em execução' : playing.entryAttack ? 'Entrada com crash' :
-      playing.active === 'finish' ? 'Acabamento · crash final e cauda' : playing.active === 'outro' ? 'Final personalizado' : playing.active === 'countIntro' ? 'Contagem de baquetas' : playing.active === 'intro' ? 'Introdução musical' : 'Loop contínuo';
+      playing.active === 'finish' ? 'Acabamento · crash final e cauda' : playing.active === 'outro' ? 'Final personalizado' : playing.active === 'countIntro' ? '' : playing.active === 'intro' ? 'Introdução musical' : 'Loop contínuo';
     const next = playing.next ? 'PRÓXIMO · ' + player.label(playing.next) : (playing.sequenceTotal ? 'MAPA · '+(playing.sequenceIndex+1)+'/'+playing.sequenceTotal : '');
     const mapStatus=get('#live-map-status');if(mapStatus&&playing.sequenceTotal)mapStatus.textContent='Mapa '+(playing.sequenceAuto?'automático':'assistido')+' · '+(playing.sequenceIndex+1)+'/'+playing.sequenceTotal;
     if (get('#stage-active').textContent !== name) get('#stage-active').textContent = name;
-    if (get('#stage-mode').textContent !== mode) get('#stage-mode').textContent = mode;
-    if (get('#stage-next').textContent !== next) get('#stage-next').textContent = next;
+    const modeNode=get('#stage-mode'), nextNode=get('#stage-next');
+    if (modeNode.textContent !== mode) modeNode.textContent = mode;
+    if (nextNode.textContent !== next) nextNode.textContent = next;
+    // V35: a contagem já tem nome no título; não repeti-lo ao lado. A fila continua visível.
+    modeNode.hidden=!mode;
+    nextNode.hidden=!next;
+    get('.stage-status-side').hidden=!mode&&!next;
     get('.stage-status')?.classList.toggle('in-queue', Boolean(playing.next));
   }
   if (previous.running && !playing.running) {

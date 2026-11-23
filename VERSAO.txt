@@ -1,4 +1,7 @@
-Loops Marks Pro V34
-Base: V33 preservada.
-Inicialização direta iOS; saída padrão; teste nativo independente; solicitação MIDI direta.
-Validação: 225/225 testes locais. Build Netlify e hardware real pendentes.
+Loops Marks Pro V36
+Base: V35 íntegra; motor de áudio V34, backups, sincronização, MIDI, pedal e Netlify sem alterações.
+Visual azul-noturno/índigo com Refrão magenta. Seis atalhos rotulados e fixos no topo no iPhone.
+Matriz responsiva de 2 a 6 colunas; mínimo 48 px por botão; sem rolagem da página no palco mobile.
+Se houver mais botões do que o espaço físico comporta, a rolagem é só no painel de pads.
+Testes locais: 233/233 Node; verificação visual Chromium (não equivale ao Safari/iPhone real).
+Pendente: npm run build no Netlify, teste real iPhone/Safari, backup/restauração de teste, MIDI/pedal e sincronização.

@@ -1,9 +1,9 @@
-Loops Marks Pro V34 — Recuperação de áudio iOS
+Loops Marks Pro V36 — Nova identidade e Modo Palco em tela única
 
-1. Faça backup completo na versão atual e guarde o ZIP V31 original.
-2. Extraia a V34 na raiz do MESMO repositório GitHub conectado ao MESMO site Netlify. Não apague dados, Blobs ou usuários.
+1. Faça backup completo na V35 e guarde o ZIP V35 original, além do backup exportado.
+2. Extraia a V36 na raiz do MESMO repositório GitHub conectado ao MESMO site Netlify. Não apague dados, Blobs, links, WAVs ou usuários.
 3. Mantenha build: npm run build; publish: dist; functions: netlify/functions; Node 22.
-4. Confira a compilação do Netlify e abra o Permalink HTTPS. Confirme V34 no cabeçalho. Não publique dist isolado.
+4. Confira a compilação do Netlify e abra o Permalink HTTPS. Confirme V36 no cabeçalho. Não publique dist isolado.
 5. Abra o mixer na Central e no Palco. Teste os oito faders, MUTE e SOLO enquanto o loop toca. O fader Pratos controla todos os WAVs separados de pratos. Confira a tela cheia, a seleção das partes, a gravação das mixagens e o fader MIDI CC. Após parar, sincronize e confira o perfil no outro aparelho.
 6. Crie um ritmo de teste com A, B e Refrão, viradas sem prato, três pratos automáticos e WAV de condução. A → prato 1; B → prato 2; Refrão → prato 3. Teste as transições e se o crash ocorre apenas no tempo 1 após a virada.
 7. Use um WAV com “prato” ou “crash” no nome; confira se o ataque automático não duplica o prato. Teste também “sem prato” e a correção manual do metadado.
@@ -32,3 +32,9 @@ V32: cadastre/abra um Acabamento de um compasso (com ou sem bumbo no tempo 1 seg
 V33: faça backup da V32. No Permalink V33, confirme o cabeçalho. Abra a conta administrativa no iPhone inclusive com ?modo=central: deve aparecer somente Palco. Abra o link individual de músico em janela anônima, valide sem login Identity e confirme ausência do botão Central. Em desktop confirme a Central disponível. Caso a música esteja silenciosa, abra o ícone de fones e teste o tom; confira a saída do sistema, o volume da aba e Master/Loops/MUTE/SOLO. Se necessário, pare e Reinicie motor. No MIDI, teste Reconectar, Buscar dispositivos e Conexão compatível no Chrome/Chromebook, observe o diagnóstico e o monitor. Mapeamentos e dados originais não são apagados. A validação local é simulada: 220/220, build e hardware real pendentes.
 
 V34: faça backup da V33. Abra o novo Permalink direto no Safari do iPhone, confirme V34, toque Iniciar. Se não houver som, pare e abra o ícone de fones: Testar áudio nativo e Testar motor Web Audio. Informe qual dos dois soa e o estado do motor. Teste também no Chrome/Chromebook, confira MIDI e a abertura exclusiva do palco no celular. Não limpe cache ou biblioteca antes do backup. Build e hardware real pendentes.
+
+V35: abra o Permalink no iPhone, confirme os seis atalhos no cabeçalho (inclusive ao rolar), abra mixer/repertório/pedal/MIDI/áudio, e teste a contagem: o título permanece sem descrição lateral repetida. Confira o áudio como na V34.
+
+V36: testar no iPhone com Safari, em modo normal e instalado na tela inicial: confirmar seis atalhos e rótulos visíveis (também após trocar de música), status e botões sem rolar a página. Partes A/B devem ser de cores diferentes, Refrão magenta. Testar 3/4, 6/8 e 4/4; adicionar muitas partes e conferir que só o painel interno rola, nunca o cabeçalho. Testar girando celular, botão Iniciar e STOP, áudio após entrada/saída do app, passagem com cauda, crash na queda, contagem, viradas, acionar mixer e repertório. Confirmar MIDI/pedal quando o navegador/dispositivo permitir.
+Confirme backup e restauração SOMENTE em ambiente de teste. Faça backup antes de mudar deploy, não limpe a biblioteca local nem altere a base de dados.
+Validação local V36: 233/233 testes Node; layout simulado em Chromium 320/375/393/414/844 px, não testado em iPhone físico. Build npm run build depende das dependências instaladas pelo Netlify.

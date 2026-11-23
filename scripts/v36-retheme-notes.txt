@@ -1,0 +1,4 @@
+V36: atualização exclusivamente visual na folha dist/styles.css.
+Cores anteriormente verdes/turquesas foram retonalizadas para azul/índigo,
+sem alterar nomes de classes, regras de layout, backend ou armazenamento.
+Ajustes de Modo Palco ficam isolados na folha dist/v36-ui.css.
