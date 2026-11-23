@@ -1,0 +1,13 @@
+LOOPS MARKS PRO V37 — PUBLICAÇÃO SEGURA
+
+1) Antes de publicar, faça o backup completo pelo aplicativo na V36, guarde o ZIP da V36 e verifique o arquivo de backup.
+2) Extraia TODOS os arquivos do ZIP V37 para a RAIZ do MESMO repositório GitHub conectado ao site Netlify. O ZIP já contém dist/, netlify/, testes, package.json e netlify.toml. Não publicar apenas dist/ no repositório.
+3) Não exclua Netlify Blobs, contas, músicas, links de músico, arquivos WAV ou dados da central. A versão só altera aparência.
+4) No Netlify: build command npm run build; publish dist; functions netlify/functions; versão Node 22. Aguarde deploy "Published" no Permalink e confirme V37 no cabeçalho.
+5) Se houver cache antigo, feche e reabra o PWA ou abra um Permalink novo. O service worker está versionado para ativar a nova paleta sem apagar arquivos do usuário.
+6) Verifique no iPhone Safari e modo PWA: seis ícones superiores, botões A/B/Refrão, cores, legibilidade, toque, acessibilidade, scroll restrito ao painel dos botões, mixer e repertório.
+7) Verifique áudio reproduzindo com seus WAVs após um toque no botão Iniciar, STOP, transições, caudas, 3/4, 4/4, 6/8, viradas, condução, crash, contagem, pedal e MIDI compatível.
+8) Abra Central em computador/Chromebook: cadastro, edição, importação WAV, bibliotecas, repertórios, backup, sincronização; abra os painéis e observe a nova paleta.
+9) Só considere validado depois do build Netlify e teste real em dispositivos. Testes locais não reproduzem dispositivos MIDI ou saída de áudio do iPhone.
+
+NÃO REMOVER A V36 ANTES DE CONFERIR A V37.

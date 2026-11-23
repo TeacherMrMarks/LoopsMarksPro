@@ -144,3 +144,11 @@ Chrome de Chromebook/Windows/macOS e navegador Android compatível: conectar dis
 
 - Testes locais: 183/183 aprovados, incluindo funções simuladas do Netlify, migração, recuperação, conflitos, restauração exclusiva dos controles (codec ZIP simulado) e ataques na entrada. Sintaxe verificada.
 - Build de produção não executado: esbuild indisponível. Validação no Netlify e com hardware/WAVs reais pendente.
+
+## V37 — identidade clara (apenas interface)
+
+- Base: V36, preservando engine musical, áudio V34, ajustes de palco V36, MIDI, pedal, repertório, backups e funções de servidor.
+- Paleta de fundo branco-azulado e painéis brancos com bordas suaves. Cabeçalho em gradiente azul; botão Iniciar verde, Stop vermelho e Refrão magenta.
+- Partes musicais com cores distintas; onda de áudio roxa/azul; Central Administrativa, mixer e repertório com estilo claro coerente.
+- Em telas móveis, os seis atalhos da V36 e a matriz compacta continuam iguais no funcionamento, sem alterar comandos/tamanho mínimo de toque.
+- Validação no Safari/iPhone e deploy Netlify continua necessária.

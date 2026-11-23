@@ -13,7 +13,7 @@ import { PreferenceSync, PEDAL_KEY } from './preferences.js';
 import { MIDI_KEY, MidiController, loadMidiSettings, saveMidiSettings } from './midi.js';
 import { mountStageFit } from './stage-fit.js';
 
-const APP_VERSION = 'V36';
+const APP_VERSION = 'V37';
 // O link do músico carrega exclusivamente o Modo Palco Pro.
 const musicianLink = musicianRoute(new URL(location.href).search);
 const phoneOnly = phoneDevice(navigator);
@@ -291,11 +291,11 @@ function toggleLibrary(open) {
 }
 
 // V36: identidade visual de cada parte; sem alterar IDs, destinos, WAVs ou MIDI.
-const stagePartHues = [216, 266, 24, 342, 41, 289, 198, 246, 313, 12, 231, 325, 255, 34, 278, 205];
+const stagePartHues = [216, 271, 25, 176, 43, 334, 196, 12, 244, 302, 34, 188, 256, 18, 286, 205];
 function stagePartTheme(part, index) {
   if (part.id === 'chorus') return ' style="--v36-hue:316;--v36-light:36%"';
   const hue = stagePartHues[index % stagePartHues.length];
-  const light = 27 + (Math.floor(index / stagePartHues.length) % 5) * 3;
+  const light = 33 + (Math.floor(index / stagePartHues.length) % 4) * 3;
   return ' style="--v36-hue:' + hue + ';--v36-light:' + light + '%"';
 }
 function deck() {
@@ -1407,22 +1407,22 @@ function drawWave(progress) {
   context.clearRect(0, 0, width, height);
   for (let beat = 0; beat <= (state.selected?.beats || 4); beat++) {
     const x = beat * width / (state.selected?.beats || 4);
-    context.fillStyle = '#253b32';
+    context.fillStyle = '#bed1ec';
     context.fillRect(x, 2, 1, height - 4);
   }
   if (!wavePeaks.length) {
-    context.fillStyle = '#324c3e';
+    context.fillStyle = '#9db7e4';
     context.fillRect(0, height / 2, width, 1);
     return;
   }
   const step = width / wavePeaks.length;
   for (const [i, amp] of wavePeaks.entries()) {
     const size = Math.max(2, amp * (height - 6));
-    context.fillStyle = i / wavePeaks.length <= progress ? '#c8f59e' : i % 4 === 0 ? '#91b48f' : '#587963';
+    context.fillStyle = i / wavePeaks.length <= progress ? '#6127d3' : i % 4 === 0 ? '#5946d0' : '#4c78d9';
     context.fillRect(i * step + 0.5, (height - size) / 2, Math.max(1, step - 1.2), size);
   }
   if (progress >= 0) {
-    context.fillStyle = '#e3ffb7';
+    context.fillStyle = '#1655be';
     context.fillRect(Math.min(width - 1, progress * width), 0, 1, height);
   }
 }

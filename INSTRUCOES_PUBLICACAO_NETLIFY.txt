@@ -1,3 +1,15 @@
+LOOPS MARKS PRO V37 — IDENTIDADE CLARA / STUDIO MARKS
+
+Esta versão altera apenas a identidade visual da V36 (palco e central), sem alterar dados ou módulos musicais.
+Leia também INSTRUCOES_V37.txt (passo a passo resumido).
+
+IMPORTANTE: antes da publicação exporte backup completo na V36; publique no MESMO repositório e no MESMO site Netlify.
+Comandos: build npm run build; publish dist; functions netlify/functions; Node 22.
+Confirme V37, os seis atalhos, áudio no iPhone, repertório, mixer, pedal/MIDI e sincronização.
+O build e o teste real em hardware devem ser realizados após a publicação, não estão validados aqui.
+
+---------------- HISTÓRICO DE PUBLICAÇÃO V36 ----------------
+
 Loops Marks Pro V36 — Nova identidade e Modo Palco em tela única
 
 1. Faça backup completo na V35 e guarde o ZIP V35 original, além do backup exportado.
