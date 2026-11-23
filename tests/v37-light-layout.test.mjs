@@ -7,7 +7,7 @@ const dist = name => readFileSync(new URL('../dist/'+name, import.meta.url),'utf
 test('V37 serve a paleta clara depois das regras V36 sem alterar estrutura do HTML',()=>{
   const html = dist('index.html'),css = dist('v37-light.css');
   assert.ok(html.indexOf('v36-ui.css') >= 0 && html.indexOf('v37-light.css') > html.indexOf('v36-ui.css'));
-  assert.match(html,/<title>Loops Marks Pro · V37<\/title>/);
+  assert.match(html,/<title>Loops Marks Pro · V38<\/title>/);
   assert.match(css,/color-scheme:light/);
   assert.match(css,/--bg:#f3f7ff/);
   assert.match(css,/--card:#ffffff/);
@@ -17,7 +17,7 @@ test('V37 serve a paleta clara depois das regras V36 sem alterar estrutura do HT
 
 test('V37 diferencia as partes sem substituir os data-actions, nem a estrutura dos pads',()=>{
   const app = dist('app.js'),css=dist('v37-light.css');
-  assert.match(app,/const APP_VERSION = 'V37'/);
+  assert.match(app,/const APP_VERSION = 'V38'/);
   assert.match(app,/const stagePartHues = \[216, 271, 25, 176, 43/);
   assert.match(app,/stagePartTheme\(part, index\)/);
   assert.match(css,/data-part="chorus"/);
@@ -41,9 +41,9 @@ test('V37 mantém ferramentas, adaptação a toque, mixer e gaveta mobile da V36
 test('V37 worker pré-cache inclui estilo novo e manifest da identidade clara',()=>{
   const sw=dist('sw.js'),manifest=JSON.parse(dist('manifest.webmanifest'));
   assert.match(sw,/v36-ui\.css', '\.\/v37-light\.css/);
-  assert.match(sw,/loops-marks-v37-light-studio/);
-  assert.equal(manifest.background_color,'#f3f7ff');
-  assert.equal(manifest.theme_color,'#1359c9');
+  assert.match(sw,/loops-marks-v38-warm-graphite/);
+  assert.equal(manifest.background_color,'#d7c9c2');
+  assert.equal(manifest.theme_color,'#3e344c');
   assert.match(sw,/url\.pathname === new URL\('\.\/audio-test\.wav'/);
 });
 

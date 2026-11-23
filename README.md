@@ -1,4 +1,34 @@
-# Loops Marks Pro — V36
+# Loops Marks Pro — V38 | Warm Graphite (correção de legibilidade)
+
+**Base:** V37 original, mantida como referência para rollback. Esta atualização é exclusivamente de identidade visual, com mudança de número de versão e cache offline para distribuir o tema.
+
+## O que mudou na V38
+
+- Tema **Warm Graphite** escolhido pela legibilidade: fundo areia/taupe quente, cartões marfim, letras quase pretas nos painéis e navegação em grafite com letras claras. Não há fundo branco puro ocupando a tela nem fundo azul/preto dominante na área de trabalho.
+- Corrigida a mistura V37 de estilos antigos de fundo escuro com texto escuro: Central, editor, abas, formulários, grupos expansíveis, bibliotecas, repertórios, configurações, menus, mixer e gaveta têm regras explícitas para cor de **texto e fundo**.
+- Botões musicais permanecem distintos e com contraste calculado. Refrão destacado em rosa escuro; Iniciar verde escuro e STOP vermelho. Seis atalhos e layout compacto da V36 mantidos.
+- Mantidos todos os nomes de classes, IDs, data-actions, programação de toques e ordens; a única alteração em `dist/app.js` é `APP_VERSION = 'V38'`.
+- **Nenhuma alteração** em `audio.js`, `audio-output.js`, `backup.js`, `data.js`, `midi.js`, `preferences.js`, `mixer.js`, `stage-fit.js`, `netlify-client.js` e `netlify/functions/*`. Sem alteração do esquema de dados, armazenamento, WAVs, links ou permissões.
+- Tema aplicado em `dist/v38-warm-graphite.css` **depois** dos estilos antigos; versões V36 e V37 continuam presentes para preservar compatibilidade.
+- Service worker versionado, com novo CSS no pré-cache; manifesto e cor da barra do navegador ajustados. Publicar no MESMO projeto Netlify.
+
+## Validação
+
+- 243 testes Node aprovados (238 testes do histórico, com as expectativas de versão atualizadas, e 5 novos sobre o tema, regressões, pré-cache e contraste).
+- Verificações de contraste de texto em pares críticos de cores: limiar WCAG AA 4,5:1 para texto normal. Isso verifica **cores definidas**, não todos os estados de uma aplicação real.
+- Prévia headless Chromium não concluiu nesta sessão; não foi possível validar visualmente todos os fluxos reais. Build local `npm run build` requer as dependências `node_modules` (incluindo esbuild), não instaladas aqui. Deploy e teste físico no iPhone não realizados.
+- O APK/PWA não foi alterado além de CSS/versão/cores de tema; mesmo assim, confira o deploy e a reprodução nos dispositivos antes do uso em apresentação.
+
+## Como publicar
+
+1. Na V37, salve um **backup completo** de dados e WAVs e guarde o ZIP V37 para rollback.
+2. Extraia o ZIP V38 na raiz do **mesmo repositório** conectado ao **mesmo site Netlify**; não apague Blobs, contas, storage ou arquivos de mídia do projeto.
+3. Build `npm run build` · publish `dist` · functions `netlify/functions` · Node 22. Confirme `V38` no aplicativo e o deploy Published.
+4. Teste Central e Modo Palco (inclusive no iPhone), menus, textos, volume, áudio, MIDI/pedal, repertório, backup e sincronização. Para backup/restauração, use ambiente de teste.
+
+---
+
+## Histórico anterior (V37 e anteriores)
 
 Base: V35 preservada (motor Web Audio V34, serviços Netlify, armazenamento, WAVs, MIDI, pedal, mixer e backup).
 

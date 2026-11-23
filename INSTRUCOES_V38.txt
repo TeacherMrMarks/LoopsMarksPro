@@ -1,0 +1,14 @@
+LOOPS MARKS PRO — V38 | Guia rápido de publicação e verificação
+
+1. Faça backup completo e guarde também o ZIP V37 antes de substituir arquivos.
+2. Extraia todos os arquivos na raiz do repositório GitHub atual, preservando o mesmo Netlify e as mesmas contas e Blobs. Não envie apenas dist/ ao repositório.
+3. Netlify: npm run build | publish dist | functions netlify/functions | Node 22. Confira deploy Published e V38 no cabeçalho.
+4. Central Administrativa (desktop/Chromebook): confira legibilidade no menu lateral, Editor de Loops, abas, Identificação, Comportamento musical, seleção de ritmo/pasta e campos; teste cadastros, WAVs, repertórios, configurações, MIDI/pedal e mixer.
+5. Modo Palco (iPhone e computador): confirme seis ícones, visual correto, botões coloridos, Refrão, Iniciar e Stop, painel compacto e toque seguro.
+6. Teste reprodução de WAV real, contagem, introdução, 3/4 e 6/8, viradas, crash, condução/chimbal, contratempo, passagem com cauda, acabamento/final. Teste MIDI e pedal somente onde o navegador/dispositivo permitir.
+7. Verifique sincronização em outro dispositivo/Permalink e backup/recuperação apenas em ambiente de teste. Não limpe cache ou dados locais antes de ter um backup verificável.
+8. Confirme que a atualização visual não encobriu textos em nenhum painel, inclusive modais.
+9. Se algum problema surgir, restaure a publicação V37 (sem apagar dados do servidor) e relate a tela e o fluxo.
+
+Validação feita no pacote: testes Node e verificações de sintaxe, integridade de arquivos e contraste definido no CSS.
+Não foi validado com iPhone físico, MIDI real ou publicação Netlify neste ambiente.

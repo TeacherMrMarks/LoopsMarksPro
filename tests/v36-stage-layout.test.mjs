@@ -10,7 +10,7 @@ test('V36 theme is blue/indigo, retains color-coded parts and a magenta chorus',
   assert.ok((css+read('index.html')).includes(token),token);
  }
  assert.match(read('app.js'),/stagePartTheme\(part, index\)/);
- assert.match(read('app.js'),/const APP_VERSION = 'V37'/);
+ assert.match(read('app.js'),/const APP_VERSION = 'V38'/);
 });
 test('V36 six labeled shortcuts remain visible in single fixed stage viewport with safe area',()=>{
  const css=read('v36-ui.css');

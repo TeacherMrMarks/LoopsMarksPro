@@ -1,11 +1,1 @@
-Loops Marks Pro V37 — STUDIO MARKS LIGHT
-Base funcional: V36 íntegra; áudio da V34; layout adaptativo V36.
-Novidade: fundo branco/azulado, cards brancos com bordas finas, cabeçalho azul degradê,
-botões de partes coloridos (Refrão magenta), iniciar verde, parar vermelho,
-onda em roxo/azul. Repertório, mixer, MIDI e painéis administrativos visualmente claros.
-Nenhuma alteração no motor de áudio, arquivos de WAV, backup, sincronização,
-controle MIDI, pedal, armazenamento ou funções Netlify.
-Mantidas as seis ações do cabeçalho e o ajuste de 2–6 colunas no iPhone.
-Se muitos botões, somente a matriz interna do palco rola, sem diminuir toque abaixo de 48px.
-Verificações locais: 238/238 testes Node aprovados, sintaxe JavaScript e CSS conferidas.
-Build local não executado (dependência esbuild indisponível); teste real Netlify/iPhone pendente.
+V38 — Warm Graphite • Identidade visual com alto contraste • Base V37 preservada

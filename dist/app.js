@@ -13,7 +13,7 @@ import { PreferenceSync, PEDAL_KEY } from './preferences.js';
 import { MIDI_KEY, MidiController, loadMidiSettings, saveMidiSettings } from './midi.js';
 import { mountStageFit } from './stage-fit.js';
 
-const APP_VERSION = 'V37';
+const APP_VERSION = 'V38';
 // O link do músico carrega exclusivamente o Modo Palco Pro.
 const musicianLink = musicianRoute(new URL(location.href).search);
 const phoneOnly = phoneDevice(navigator);
